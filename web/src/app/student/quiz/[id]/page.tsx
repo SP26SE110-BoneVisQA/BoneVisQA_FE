@@ -1433,11 +1433,11 @@ export default function QuizSessionPage({
                   </p>
                 </div> */}
 
-                {(quizResult?.ungradedEssayCount ?? 0) > 0 && (
+                {/* {(quizResult?.ungradedEssayCount ?? 0) > 0 && (
                   <p className="mt-2 text-center text-xs text-amber-600 dark:text-amber-400">
                     * {quizResult?.ungradedEssayCount} essay(s) pending grading. Score will update after grading.
                   </p>
-                )}
+                )} */}
 
                 <div className="flex flex-wrap justify-center gap-3">
                   {quizInfo?.answersReleased && !showFeedback && (
