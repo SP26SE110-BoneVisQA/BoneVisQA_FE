@@ -671,8 +671,8 @@ export interface CreateQuizQuestionRequest {
   optionC?: string;
   optionD?: string;
   correctAnswer?: string;
-  correctAnswers?: string;
-  acceptedAnswers?: string;
+  correctAnswers?: string | string[];
+  acceptedAnswers?: string | string[];
   essayAnswer?: string;
   imageUrl?: string;
   caseId?: string;

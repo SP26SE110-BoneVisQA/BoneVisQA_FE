@@ -45,9 +45,9 @@ interface QuizModeQuestion {
   caseId?: string | null;
   caseTitle?: string | null;
   imageUrl?: string | null;
-  explanation?: string;
-  correctAnswer?: string;
-  essayAnswer?: string;
+  explanation?: string | null;
+  correctAnswer?: string | null;
+  essayAnswer?: string | null;
   hint?: string | null;
   hintAvailable?: boolean;
   correctAnswers?: string | null;

@@ -672,7 +672,7 @@ function normalizeStudentSessionQuestion(row: unknown): StudentSessionQuestion {
     hint: pickStrAny(q, 'hint', 'Hint'),
     hintAvailable: (() => {
       const v = pickStrAny(q, 'hintAvailable', 'hint_available', 'HintAvailable');
-      return v === 'true' || v === 'True' || v === '1' || v === true;
+      return v === 'true' || v === 'True' || v === '1';
     })(),
     correctAnswers: pickStrAny(q, 'correctAnswers', 'CorrectAnswers', 'correct_answers'),
     acceptedAnswers: pickStrAny(q, 'acceptedAnswers', 'AcceptedAnswers', 'accepted_answers'),
@@ -1496,8 +1496,8 @@ export async function fetchStudentQuizHistory(): Promise<StudentQuizAttemptSumma
       score: item.score != null ? Number(item.score) : item.Score != null ? Number(item.Score) : null,
       passingScore: item.passingScore != null ? Number(item.passingScore) : item.PassingScore != null ? Number(item.PassingScore) : null,
       passed: Boolean(item.passed ?? item.Passed ?? false),
-      totalQuestions: Number(item.totalQuestions ?? item.TotalQuestions ?? 0),
-      correctAnswers: Number(item.correctAnswers ?? item.CorrectAnswers ?? 0),
+      totalQuestions: Number(item.totalQuestions ?? item.TotalQuestions ?? item.questionCount ?? item.QuestionCount ?? 0),
+      correctAnswers: Number(item.correctAnswers ?? item.CorrectAnswers ?? item.correctCount ?? item.CorrectCount ?? 0),
       isAiGenerated: Boolean(item.isAiGenerated ?? item.IsAiGenerated ?? false),
     }));
   } catch (e) {

@@ -63,6 +63,19 @@ function scoreColor(score?: number | null): string {
   return 'text-[#ba1a1a]';
 }
 
+/**
+ * Normalize score to percentage (0-100).
+ * Handles cases where backend might return score as decimal (0.85) or percentage (85).
+ */
+function normalizeScoreToPercentage(score: number | null | undefined): number | null {
+  if (score == null) return null;
+  // If score > 100, assume it's already a percentage
+  // If score is between 0-1, assume it's a decimal that needs to be converted to percentage
+  if (score > 100) return score;
+  if (score <= 1 && score >= 0) return Math.round(score * 100);
+  return score;
+}
+
 function QuizHistoryPanel() {
   const toast = useToast();
   const [attempts, setAttempts] = useState<StudentQuizAttemptSummary[]>([]);
@@ -96,7 +109,9 @@ function QuizHistoryPanel() {
   const stats = useMemo(() => {
     const completed = attempts.filter((a) => a.completedAt);
     const aiAttempts = attempts.filter((a) => a.isAiGenerated);
-    const scores = completed.map((a) => a.score ?? 0).filter((s) => s > 0);
+    // Include all scores > 0 or scores === 0 (0 is a valid score)
+    // Only exclude null/undefined values
+    const scores = completed.map((a) => normalizeScoreToPercentage(a.score)).filter((s) => s !== null);
     const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
     return { total: attempts.length, completed: completed.length, ai: aiAttempts.length, avgScore: avg };
   }, [attempts]);
@@ -194,7 +209,7 @@ function QuizHistoryPanel() {
                       {attempt.topic && <span>{attempt.topic}</span>}
                       {attempt.difficulty && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">{attempt.difficulty}</span>}
                       <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatDate(attempt.startedAt)}</span>
-                      <span className="flex items-center gap-1"><BarChart3 className="h-3 w-3" />{attempt.totalQuestions} Qs</span>
+                      <span className="flex items-center gap-1"><BarChart3 className="h-3 w-3" />{attempt.totalQuestions > 0 ? `${attempt.totalQuestions} Qs` : '—'}</span>
                     </div>
                   </div>
                 </div>
@@ -203,8 +218,10 @@ function QuizHistoryPanel() {
                     <div className="text-right">
                       {attempt.score != null ? (
                         <>
-                          <p className={`text-lg font-black ${scoreColor(attempt.score)}`}>{Math.round(attempt.score)}%</p>
-                          <p className="text-[10px] text-muted-foreground">{attempt.correctAnswers}/{attempt.totalQuestions}</p>
+                          <p className={`text-lg font-black ${scoreColor(normalizeScoreToPercentage(attempt.score))}`}>{normalizeScoreToPercentage(attempt.score)}%</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {attempt.totalQuestions > 0 ? `${attempt.correctAnswers}/${attempt.totalQuestions}` : `${attempt.correctAnswers} correct`}
+                          </p>
                         </>
                       ) : (
                         <p className="text-xs text-muted-foreground">Submitted</p>
@@ -235,7 +252,7 @@ function QuizHistoryPanel() {
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-muted-foreground">Passing</p>
-                      <p className="mt-1 text-xs font-semibold">{attempt.passingScore != null ? `${attempt.passingScore}%` : '—'}</p>
+                      <p className="mt-1 text-xs font-semibold">{attempt.passingScore != null ? `${attempt.passingScore}%` : '70%'}</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-muted-foreground">Result</p>

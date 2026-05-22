@@ -281,13 +281,15 @@ export async function importFlashcards(
     const item = data as Record<string, unknown>;
     const cardsRaw = item.importedCards ?? item.ImportedCards ?? [];
     const cardsList = Array.isArray(cardsRaw) ? cardsRaw : [];
+    const errorsArray = item.errors ?? item.Errors;
+    const errors: string[] = Array.isArray(errorsArray)
+      ? (errorsArray as unknown[]).map(String)
+      : [];
     return {
       success: Boolean(item.success ?? item.Success ?? false),
       importedCount: Number(item.importedCount ?? item.ImportedCount ?? 0),
       failedCount: Number(item.failedCount ?? item.FailedCount ?? 0),
-      errors: Array.isArray(item.errors ?? item.Errors) 
-        ? (item.errors ?? item.Errors).map(String) 
-        : [],
+      errors,
       importedCards: cardsList.map(mapCard),
     };
   } catch (e) {
