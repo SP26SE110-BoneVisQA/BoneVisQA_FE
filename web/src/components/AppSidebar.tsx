@@ -91,7 +91,7 @@ const navByRole: Record<RoleKey, NavItem[]> = {
     { label: 'AI Q&A', href: '/student/qa', icon: BotMessageSquare },
     { label: 'Quizzes', href: '/student/quizzes', icon: HelpCircle },
     { label: 'Flashcards', href: '/student/review', icon: Eye },
-    { label: 'AI Assistant', href: '/student/ai-assistant', icon: Sparkles },
+//    { label: 'AI Assistant', href: '/student/ai-assistant', icon: Sparkles },
     { label: 'Analytics', href: '/student/analytics', icon: BarChart3 },
     { label: 'Class', href: '/student/classes', icon: Users },
     { label: 'Profile', href: '/student/profile', icon: UserCircle },

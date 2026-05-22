@@ -16,7 +16,10 @@ import {
   generateAIPracticeQuizFromCases,
   type BoneSpecialtyOption,
   type PathologyCategoryOption,
-  type AvailableCaseForQuiz
+  type AvailableCaseForQuiz,
+  createFlashcardDeck,
+  importFlashcards,
+  type ImportFlashcardItem
 } from '@/lib/api/student';
 import { resolveApiAssetUrl } from '@/lib/api/client';
 import type { StudentPracticeQuiz, StudentQuizSubmissionResult } from '@/lib/api/types';
@@ -44,6 +47,8 @@ import {
   Stethoscope,
   FolderOpen,
   Check,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react';
 
 // Organized topic structure with categories
@@ -159,6 +164,11 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
   const [loadingCases, setLoadingCases] = useState(false);
   const [caseSearchTerm, setCaseSearchTerm] = useState('');
   const [generatingFromCases, setGeneratingFromCases] = useState(false);
+
+  // Bookmark state for AI questions
+  const [bookmarkedQuestions, setBookmarkedQuestions] = useState<Set<string>>(new Set());
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [savingToFlashcard, setSavingToFlashcard] = useState(false);
 
   // Load classification options
   useEffect(() => {
@@ -344,7 +354,95 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
     setResult(null);
     setPage(1);
     setSelectedCases(new Set());
+    setBookmarkedQuestions(new Set());
     clearQuizDraft();
+  };
+
+  // Toggle bookmark for a question
+  const toggleBookmark = (questionId: string) => {
+    setBookmarkedQuestions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(questionId)) {
+        newSet.delete(questionId);
+      } else {
+        newSet.add(questionId);
+      }
+      return newSet;
+    });
+  };
+
+  // Save bookmarked questions to flashcards
+  const handleSaveBookmarkedToFlashcards = async () => {
+    if (bookmarkedQuestions.size === 0) {
+      toast.error('Please bookmark at least one question first.');
+      return;
+    }
+
+    setSavingToFlashcard(true);
+    try {
+      // Create a new deck for bookmarked questions
+      const deck = await createFlashcardDeck(
+        `Practice Quiz - ${topic}`,
+        `Bookmarked questions from AI Practice Quiz: ${topic}`
+      );
+
+      // Prepare cards for import
+      const cards: ImportFlashcardItem[] = [];
+      for (const qId of bookmarkedQuestions) {
+        const index = parseInt(qId.replace('ai-', ''));
+        const question = aiQuestions[index];
+        if (question) {
+          cards.push({
+            frontContent: question.questionText,
+            backContent: `${question.correctAnswer}. ${question[`option${question.correctAnswer}` as keyof typeof question] || ''}`
+          });
+        }
+      }
+
+      // Import all cards at once
+      await importFlashcards(deck.id, cards);
+
+      toast.success(`Đã lưu ${cards.length} câu hỏi vào bộ "${deck.deckName}"!`);
+      setBookmarkedQuestions(new Set());
+      setShowSaveDialog(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save flashcards.');
+    } finally {
+      setSavingToFlashcard(false);
+    }
+  };
+
+  // Save all AI questions to flashcards
+  const handleSaveAllToFlashcards = async () => {
+    if (aiQuestions.length === 0) {
+      toast.error('No questions to save.');
+      return;
+    }
+
+    setSavingToFlashcard(true);
+    try {
+      // Create a new deck
+      const deck = await createFlashcardDeck(
+        `Practice Quiz - ${topic}`,
+        `All questions from AI Practice Quiz: ${topic}`
+      );
+
+      // Prepare cards for import
+      const cards: ImportFlashcardItem[] = aiQuestions.map(question => ({
+        frontContent: question.questionText,
+        backContent: `${question.correctAnswer}. ${question[`option${question.correctAnswer}` as keyof typeof question] || ''}`
+      }));
+
+      // Import all cards at once
+      await importFlashcards(deck.id, cards);
+
+      toast.success(`Đã lưu ${aiQuestions.length} câu hỏi vào bộ "${deck.deckName}"!`);
+      setShowSaveDialog(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save flashcards.');
+    } finally {
+      setSavingToFlashcard(false);
+    }
   };
 
   // Load available cases for quiz generation
@@ -460,37 +558,108 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
           subtitle="Practice with live backend quizzes or generate AI-assisted question sets by topic."
         />
       ) : null}
-      <div className="mx-auto max-w-7xl space-y-8 px-4 pb-16 pt-6 sm:px-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
-          <div className="relative w-full md:w-72">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search topics..."
-              className="rounded-full pl-10 pr-4"
-            />
+      <div className={embedded ? 'space-y-4' : 'mx-auto max-w-7xl space-y-8 px-4 pb-16 pt-6 sm:px-6'}>
+        {/* Embedded compact bar: topic selector + AI config in one row */}
+        {embedded && (
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/60 bg-card/80 p-3 backdrop-blur-sm">
+            <select
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              className="h-9 appearance-none rounded-lg border border-gray-200 bg-white px-3 pr-8 text-sm font-medium text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {allTopics.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <select
+              value={questionCount}
+              onChange={(e) => setQuestionCount(parseInt(e.target.value))}
+              className="h-9 appearance-none rounded-lg border border-gray-200 bg-white px-3 pr-8 text-sm text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {[3, 5, 10, 15].map((n) => (
+                <option key={n} value={n}>{n} Qs</option>
+              ))}
+            </select>
+            <select
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value)}
+              className="h-9 appearance-none rounded-lg border border-gray-200 bg-white px-3 pr-8 text-sm text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {difficultyOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleAIGenerateQuiz}
+              isLoading={aiGenerating}
+              className="gap-1.5 bg-gradient-to-r from-purple-600 to-purple-500 text-white hover:from-purple-700 hover:to-purple-600"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              AI Quiz
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setShowCaseSelector(true);
+                void handleLoadCases();
+              }}
+              className="gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-50"
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              From Cases
+            </Button>
+            <div className="ml-auto">
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleLoadQuiz}
+                isLoading={loading}
+                className="gap-1.5"
+              >
+                <Play className="h-3.5 w-3.5" />
+                Practice
+              </Button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
-              showAdvancedFilters || selectedBoneSpecialty || selectedPathologyCategory
-                ? 'border-primary text-primary'
-                : 'border-border text-muted-foreground hover:border-primary hover:text-primary'
-            }`}
-          >
-            <Layers className="h-4 w-4" />
-            Deep Classification
-            <ChevronDown className={`h-4 w-4 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
-          </button>
-          <select className="h-10 appearance-none rounded-lg border border-border bg-background px-4 pr-10 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-            <option>Sort by: Recent</option>
-            <option>Sort by: Name</option>
-            <option>Sort by: Difficulty</option>
-          </select>
-        </div>
+        )}
+
+        {/* Non-embedded search + filter bar */}
+        {!embedded && (
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search topics..."
+                className="rounded-full pl-10 pr-4"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                showAdvancedFilters || selectedBoneSpecialty || selectedPathologyCategory
+                  ? 'border-primary text-primary'
+                  : 'border-border text-muted-foreground hover:border-primary hover:text-primary'
+              }`}
+            >
+              <Layers className="h-4 w-4" />
+              Deep Classification
+              <ChevronDown className={`h-4 w-4 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+            </button>
+            <select className="h-10 appearance-none rounded-lg border border-border bg-background px-4 pr-10 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+              <option>Sort by: Recent</option>
+              <option>Sort by: Name</option>
+              <option>Sort by: Difficulty</option>
+            </select>
+          </div>
+        )}
 
         {/* Advanced Classification Filters */}
         {showAdvancedFilters && (
@@ -774,582 +943,333 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
           </div>
         )}
 
-      {/* Bento Grid */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* Active Quiz Card */}
-        <div className="col-span-12 flex flex-col justify-between overflow-hidden rounded-3xl bg-[#1a2332] p-8 lg:col-span-8" style={{ minHeight: '280px' }}>
-          <div className="relative z-10">
-            <div className="mb-4 flex items-center gap-2 text-secondary">
-              <Zap className="h-4 w-4" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Active session</span>
-            </div>
-            {quiz ? (
-              <>
-                <h3 className="max-w-md text-3xl font-bold text-white">{quiz.title}</h3>
-                <p className="mt-3 max-w-sm text-sm text-slate-400">
-                  {quiz.topic} - {quiz.questions.length} question{quiz.questions.length !== 1 ? 's' : ''}
+      {/* ─── MAIN PRACTICE SECTION ─── */}
+      {/* When a quiz or AI questions are loaded → show the Practice Quiz Builder */}
+      {(quiz || aiQuestions.length > 0) ? (
+        <div className="overflow-hidden rounded-3xl border border-border/40 bg-card shadow-sm">
+          {/* Section header */}
+          <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${aiQuestions.length > 0 ? 'bg-purple-100' : 'bg-primary/10'}`}>
+                {aiQuestions.length > 0 ? <Sparkles className="h-5 w-5 text-purple-600" /> : <BarChart3 className="h-5 w-5 text-primary" />}
+              </div>
+              <div>
+                <h3 className="font-['Manrope',sans-serif] text-xl font-bold text-card-foreground">
+                  {quiz ? 'Practice Quiz' : `AI Quiz — ${topic}`}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {quiz ? `${quiz.questions.length} questions · ${quiz.topic}` : `${aiQuestions.length} AI-generated questions`}
                 </p>
-                {/* Progress bar */}
-                <div className="mt-5 max-w-sm">
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-400">Progress</span>
-                    <span className="text-xs font-bold text-white">{completion}%</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {quiz && (
+                <div className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm text-muted-foreground">
+                  <BookOpen className="h-4 w-4" />{quiz.questions.length} questions — {completion}% done
+                </div>
+              )}
+              {aiQuestions.length > 0 && !quiz && !result && (
+                <Button type="button" onClick={handleSubmitAIQuiz} isLoading={submitting}
+                  className="rounded-full bg-gradient-to-r from-purple-600 to-purple-500 px-6 py-2 text-sm font-bold text-white">
+                  Submit AI Quiz
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Quiz content */}
+          <div className="p-6">
+            {loading ? (
+              <div className="flex min-h-[200px] items-center justify-center">
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  {aiGenerating ? 'Generating AI quiz…' : 'Fetching practice quiz…'}
+                </div>
+              </div>
+            ) : quiz ? (
+              <div className="space-y-4">
+                {quiz.questions.map((question, index) => {
+                  const isTrueFalse = question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
+                  return (
+                    <div key={question.questionId} className="rounded-2xl border border-border bg-background p-6 shadow-sm">
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">{index + 1}</span>
+                          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Question</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {question.type && <span className="rounded-full border border-secondary px-3 py-1 text-xs font-medium text-secondary">{question.type}</span>}
+                          {question.imageUrl && (
+                            <button type="button" onClick={() => window.open(resolveApiAssetUrl(question.imageUrl), '_blank')}
+                              className="rounded-full bg-primary/10 p-2 text-primary hover:bg-primary/20" title="View image">
+                              <ImageIcon className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <h2 className="mb-4 font-['Manrope',sans-serif] text-base font-semibold text-card-foreground">{question.questionText}</h2>
+                      {question.imageUrl && (
+                        <div className="mb-4 overflow-hidden rounded-xl border border-border">
+                          <img src={resolveApiAssetUrl(question.imageUrl)} alt={`Q${index + 1}`} className="max-h-64 w-full object-contain" />
+                        </div>
+                      )}
+                      {isTrueFalse ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          {(['True', 'False'] as const).map((opt) => {
+                            const isSelected = answers[question.questionId] === opt;
+                            return (
+                              <button key={opt} type="button" onClick={() => setAnswers(prev => ({ ...prev, [question.questionId]: opt }))}
+                                className={`rounded-xl border px-4 py-4 text-center text-base font-semibold transition-all ${isSelected ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30' : 'border-border bg-background/70 text-muted-foreground hover:bg-muted'}`}>
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {[{ key: 'A', value: question.optionA }, { key: 'B', value: question.optionB }, { key: 'C', value: question.optionC }, { key: 'D', value: question.optionD }].map((option) => {
+                            const isSelected = answers[question.questionId] === option.key;
+                            return (
+                              <button key={option.key} type="button" onClick={() => setAnswers(prev => ({ ...prev, [question.questionId]: option.key }))}
+                                className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${isSelected ? 'border-primary bg-primary/10 text-card-foreground ring-1 ring-primary/30' : 'border-border bg-background/70 text-muted-foreground hover:bg-muted'}`}>
+                                <span className="mr-2 font-bold text-primary">{option.key}.</span>{option.value}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : aiQuestions.length > 0 ? (
+              <div className="space-y-4">
+                <div className="mb-2 flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-3">
+                  <Sparkles className="h-4 w-4 text-purple-600" />
+                  <span className="text-sm font-semibold text-purple-700">AI Generated — {topic}</span>
+                  <span className="ml-auto rounded-full bg-purple-200 px-2 py-0.5 text-xs font-bold text-purple-800">{aiQuestions.length} Qs</span>
+                </div>
+                {aiQuestions.map((question, index) => {
+                  const isTrueFalse = question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
+                  const questionId = `ai-${index}`;
+                  return (
+                    <div key={questionId} className="rounded-2xl border border-purple-200 bg-background p-6 shadow-sm">
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-100 text-xs font-bold text-purple-600">{index + 1}</span>
+                          <span className="text-xs font-semibold uppercase tracking-widest text-purple-600">Question</span>
+                        </div>
+                        {question.caseTitle && <span className="rounded-full border border-secondary px-3 py-1 text-xs font-medium text-secondary">Case: {question.caseTitle}</span>}
+                      </div>
+                      <h2 className="mb-4 font-['Manrope',sans-serif] text-base font-semibold text-card-foreground">{question.questionText}</h2>
+                      {isTrueFalse ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          {(['True', 'False'] as const).map((opt) => {
+                            const isSelected = answers[questionId] === opt;
+                            return (
+                              <button key={opt} type="button" onClick={() => setAnswers(prev => ({ ...prev, [questionId]: opt }))}
+                                className={`rounded-xl border px-4 py-4 text-center text-base font-semibold transition-all ${isSelected ? 'border-purple-500 bg-purple-100 text-purple-700 ring-1 ring-purple-500/30' : 'border-border bg-background/70 text-muted-foreground hover:bg-muted'}`}>
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {[{ key: 'A', value: question.optionA }, { key: 'B', value: question.optionB }, { key: 'C', value: question.optionC }, { key: 'D', value: question.optionD }].map((option) => {
+                            const isSelected = answers[questionId] === option.key;
+                            return (
+                              <button key={option.key} type="button" onClick={() => setAnswers(prev => ({ ...prev, [questionId]: option.key }))}
+                                className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${isSelected ? 'border-purple-500 bg-purple-100 text-purple-700 ring-1 ring-purple-500/30' : 'border-border bg-background/70 text-muted-foreground hover:bg-muted'}`}>
+                                <span className="mr-2 font-bold text-purple-600">{option.key}.</span>{option.value}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Actions */}
+          {(quiz || aiQuestions.length > 0) && !result && (
+            <div className="border-t border-border p-6">
+              <div className="flex flex-wrap items-center gap-3">
+                {quiz && (
+                  <>
+                    <Button type="button" onClick={handleSubmit} isLoading={submitting} disabled={submitting}
+                      className="rounded-xl bg-gradient-to-r from-primary to-[#007BFF] px-6 py-3 text-sm font-bold text-white shadow-lg transition-all active:scale-95">
+                      {!submitting && <CheckCircle className="mr-2 h-4 w-4" />}Submit quiz
+                    </Button>
+                    <Button type="button" variant="outline" onClick={handleReset} className="rounded-xl px-6 py-3 text-sm font-medium">
+                      <RotateCcw className="mr-2 h-4 w-4" />Reset
+                    </Button>
+                  </>
+                )}
+                {aiQuestions.length > 0 && (
+                  <>
+                    <Button type="button" onClick={handleSubmitAIQuiz} isLoading={submitting} disabled={submitting}
+                      className="rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition-all active:scale-95">
+                      {!submitting && <CheckCircle className="mr-2 h-4 w-4" />}Submit AI Quiz
+                    </Button>
+                    <Button type="button" variant="outline" onClick={handleReset} className="rounded-xl px-6 py-3 text-sm font-medium">
+                      <RotateCcw className="mr-2 h-4 w-4" />Reset
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ─── IDLE STATE: Topic selection + Hero + Topics Grid ─── */
+        <div className="space-y-6">
+          {/* Hero Action Card - Light theme */}
+          <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-white via-blue-50/50 to-purple-50/30 p-8 shadow-lg">
+            {/* Background decorations */}
+            <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
+            <div aria-hidden className="pointer-events-none absolute -bottom-8 -left-8 h-48 w-48 rounded-full bg-purple-200/30 blur-3xl" />
+
+            <div className="relative z-10 grid gap-8 lg:grid-cols-2 lg:items-center">
+              {/* Left: Info */}
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-primary">
+                  <Zap className="h-3.5 w-3.5" />Practice Mode
+                </div>
+                <h2 className="font-['Manrope',sans-serif] text-3xl font-black text-gray-900">
+                  Master Radiology,<br />
+                  <span className="bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">One Question at a Time</span>
+                </h2>
+                <p className="mt-3 max-w-sm text-sm leading-relaxed text-gray-500">
+                  Select a topic and dive into curated quizzes or let AI generate personalized question sets tailored to your level.
+                </p>
+
+                {/* Quick stats */}
+                <div className="mt-6 flex items-center gap-6">
+                  <div className="text-center">
+                    <p className="text-2xl font-black text-primary">{allTopics.length}</p>
+                    <p className="text-xs font-medium uppercase tracking-widest text-gray-400">Topics</p>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-white/10">
-                    <div
-                      className="h-2 rounded-full bg-gradient-to-r from-[#007BFF] to-[#00d4c8] transition-all duration-300"
-                      style={{ width: `${completion}%` }}
-                    />
+                  <div className="h-8 w-px bg-gray-200" />
+                  <div className="text-center">
+                    <p className="text-2xl font-black text-gray-700">{Object.keys(topicCategories).length}</p>
+                    <p className="text-xs font-medium uppercase tracking-widest text-gray-400">Categories</p>
+                  </div>
+                  <div className="h-8 w-px bg-gray-200" />
+                  <div className="text-center">
+                    <p className="text-2xl font-black bg-gradient-to-r from-purple-600 to-purple-400 bg-clip-text text-transparent">AI</p>
+                    <p className="text-xs font-medium uppercase tracking-widest text-gray-400">Powered</p>
                   </div>
                 </div>
-              </>
-            ) : (
-              <>
-                <h3 className="max-w-md text-3xl font-bold text-white">
-                  No active quiz session
-                </h3>
-                <p className="mt-4 max-w-sm text-sm text-slate-400">
-                  Select a topic below and start a new practice session to track your progress.
-                </p>
-              </>
-            )}
-          </div>
-          <div className="relative z-10 mt-8 space-y-3">
-            {quiz ? (
-              <>
-                <Button
-                  type="button"
-                  onClick={() => router.push(`/student/quiz/${quiz.attemptId}`)}
-                  className="w-full rounded-full bg-gradient-to-r from-primary to-[#007BFF]/90 px-6 py-3 text-sm font-bold text-white shadow-xl transition-all active:scale-95 sm:w-auto"
-                >
-                  Continue quiz
-                  <ChevronRight className="ml-1 h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={handleReset}
-                  className="w-full rounded-full bg-white/10 px-6 py-3 text-sm font-bold text-white backdrop-blur-md transition-all hover:bg-white/20 sm:w-auto"
-                >
-                  Reset session
-                </Button>
-              </>
-            ) : (
-              <Button
-                type="button"
-                onClick={handleLoadQuiz}
-                isLoading={loading}
-                className="rounded-full bg-gradient-to-r from-primary to-[#007BFF]/90 px-6 py-3 text-sm font-bold text-white shadow-xl transition-all active:scale-95"
-              >
-                {!loading && <Play className="mr-2 h-4 w-4" />}
-                Start practice
-              </Button>
-            )}
-          </div>
-          {/* Decorative background */}
-          <div aria-hidden className="pointer-events-none absolute right-0 top-0 h-full w-1/2 opacity-10">
-            <div className="h-full w-full bg-gradient-to-l from-[#007BFF]/30 to-transparent" />
-          </div>
-        </div>
-
-        {/* Quiz Generator Card */}
-        <div className="col-span-12 flex flex-col justify-between rounded-3xl border border-border bg-card p-8 shadow-sm lg:col-span-4">
-          <div>
-            <div className="mb-6 flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted shadow-sm">
-                <BarChart3 className="h-6 w-6 text-primary" />
               </div>
-              <span className="rounded-full bg-secondary/15 px-2 py-1 text-[10px] font-bold text-secondary">
-                AI READY
-              </span>
-            </div>
-            <h4 className="mb-2 font-['Manrope',sans-serif] text-xl font-bold text-card-foreground">
-              Topic selector
-            </h4>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Choose a clinical topic to generate a personalized practice quiz instantly.
-            </p>
-          </div>
-          
-          {/* Quick topic buttons */}
-          <div className="mt-4 space-y-2">
-            {allTopics.slice(0, 4).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTopic(t)}
-                className={`w-full rounded-xl px-4 py-2.5 text-left text-sm font-medium transition-colors ${
-                  topic === t
-                    ? 'bg-primary text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/70'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setShowAdvancedFilters(true)}
-              className="w-full rounded-xl border border-dashed border-border px-4 py-2.5 text-left text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary"
-            >
-              + More topics...
-            </button>
-          </div>
 
-          {/* AI Generate Section */}
-          <div className="mt-6 rounded-xl border-2 border-purple-200 bg-purple-50 p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-purple-600" />
-              <span className="text-sm font-bold text-purple-700">
-                AI Quiz Generator
-              </span>
-            </div>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Generate an AI practice quiz based on the selected topic.
-            </p>
+              {/* Right: Quick config */}
+              <div className="rounded-2xl border border-primary/15 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Target className="h-4 w-4 text-primary" />
+                  </div>
+                  <span className="text-sm font-bold text-gray-800">Quick Setup</span>
+                </div>
 
-            <div className="mb-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-muted-foreground">Number of questions:</label>
-                <select
-                  value={questionCount}
-                  onChange={(e) => setQuestionCount(parseInt(e.target.value))}
-                  className="rounded-md border border-border bg-card px-2 py-1 text-xs"
-                >
-                  <option value={3}>3 questions</option>
-                  <option value={5}>5 questions</option>
-                  <option value={10}>10 questions</option>
-                  <option value={15}>15 questions</option>
-                </select>
+                <div className="space-y-3">
+                  {/* Topic */}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Topic</label>
+                    <select value={topic} onChange={(e) => setTopic(e.target.value)}
+                      className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                      {allTopics.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Row: Qs + Difficulty */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Questions</label>
+                      <select value={questionCount} onChange={(e) => setQuestionCount(parseInt(e.target.value))}
+                        className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                        {[3, 5, 10, 15].map((n) => <option key={n} value={n}>{n} questions</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Difficulty</label>
+                      <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}
+                        className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                        {difficultyOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Button type="button" onClick={handleLoadQuiz} isLoading={loading}
+                      className="rounded-xl bg-gradient-to-r from-primary to-[#007BFF] py-2.5 text-sm font-bold text-white shadow-md transition-all active:scale-95 hover:shadow-lg">
+                      {!loading && <Play className="mr-1.5 inline h-3.5 w-3.5" />}Practice
+                    </Button>
+                    <Button type="button" onClick={handleAIGenerateQuiz} isLoading={aiGenerating}
+                      className="rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 py-2.5 text-sm font-bold text-white shadow-md transition-all active:scale-95 hover:shadow-lg">
+                      <Sparkles className="mr-1.5 inline h-3.5 w-3.5" />AI Quiz
+                    </Button>
+                  </div>
+                  <Button type="button" variant="outline" onClick={() => { setShowCaseSelector(true); void handleLoadCases(); }}
+                    className="w-full rounded-xl border-purple-300 py-2.5 text-sm font-medium text-purple-700 hover:bg-purple-50">
+                    <FolderOpen className="mr-1.5 inline h-3.5 w-3.5" />Generate from Case Library
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-muted-foreground">Difficulty:</label>
-                <select
-                  value={difficulty}
-                  onChange={(e) => setDifficulty(e.target.value)}
-                  className="rounded-md border border-border bg-card px-2 py-1 text-xs"
-                >
-                  {difficultyOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
+            </div>
+          </div>
+
+          {/* Topics Browser */}
+          <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+            <div className="border-b border-border bg-muted/30 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-['Manrope',sans-serif] text-xl font-bold text-card-foreground">Browse Topics</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">Click any topic to start practicing immediately</p>
+                </div>
+                {/* Difficulty filter chips */}
+                <div className="hidden flex-wrap gap-2 sm:flex">
+                  {difficultyOptions.slice(1).map((opt) => (
+                    <button key={opt.value} type="button" onClick={() => setDifficulty(difficulty === opt.value ? '' : opt.value)}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${difficulty === opt.value ? 'bg-primary text-white' : 'border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary'}`}>
                       {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              onClick={handleAIGenerateQuiz}
-              isLoading={aiGenerating}
-              className="w-full bg-gradient-to-r from-purple-600 to-purple-500 text-white hover:from-purple-700 hover:to-purple-600"
-            >
-              {!aiGenerating && <Sparkles className="mr-2 h-4 w-4" />}
-              Generate AI Quiz
-            </Button>
-            <div className="mt-2 border-t border-purple-200 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowCaseSelector(true);
-                  void handleLoadCases();
-                }}
-                className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
-              >
-                <FolderOpen className="mr-2 h-4 w-4" />
-                Generate from Case Library
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Topic Browser Section */}
-      {!quiz && aiQuestions.length === 0 && (
-        <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
-          <div className="border-b border-border bg-muted/30 p-6">
-            <h3 className="font-['Manrope',sans-serif] text-xl font-bold text-card-foreground">
-              Browse Topics by Category
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Select a topic to start your practice session
-            </p>
-          </div>
-          <div className="p-6">
-            {Object.entries(filteredTopicCategories).map(([category, topics]) => (
-              <div key={category} className="mb-6 last:mb-0">
-                <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-                  <Layers className="h-4 w-4" />
-                  {category}
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {topics.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => {
-                        setTopic(t);
-                        handleLoadQuiz();
-                      }}
-                      disabled={loading}
-                      className={`rounded-lg border px-3 py-1.5 text-sm transition-all ${
-                        topic === t
-                          ? 'border-primary bg-primary text-white'
-                          : 'border-border bg-background text-muted-foreground hover:border-primary hover:text-primary'
-                      }`}
-                    >
-                      {t}
                     </button>
                   ))}
                 </div>
               </div>
-            ))}
+            </div>
+            <div className="p-6">
+              {Object.entries(topicCategories).map(([category, topics]) => (
+                <div key={category} className="mb-6 last:mb-0">
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className={`h-1.5 w-1.5 rounded-full ${category === 'Fractures' ? 'bg-red-400' : category === 'Lesions & Diseases' ? 'bg-amber-400' : category === 'Anatomical Regions' ? 'bg-blue-400' : 'bg-green-400'}`} />
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-widest">{category}</h4>
+                    <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{topics.length}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {topics.map((t) => (
+                      <button key={t} type="button"
+                        onClick={() => { setTopic(t); handleLoadQuiz(); }}
+                        disabled={loading}
+                        className={`group relative rounded-xl border px-4 py-2.5 text-sm font-medium transition-all hover:shadow-md ${
+                          topic === t
+                            ? 'border-primary bg-primary text-white shadow-md'
+                            : 'border-border bg-background text-muted-foreground hover:border-primary hover:text-primary hover:shadow-sm'
+                        }`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
-
-      {/* Practice Quiz Builder / Results */}
-      <div className="overflow-hidden rounded-3xl border border-border/40 bg-card shadow-sm">
-        {/* Section header */}
-        <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-6 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="font-['Manrope',sans-serif] text-xl font-bold text-card-foreground">
-            {quiz ? 'Quiz questions' : aiQuestions.length > 0 ? 'AI Generated Questions' : 'Select a topic to begin'}
-          </h3>
-          {quiz && (
-            <div className="flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm text-muted-foreground">
-              <BookOpen className="h-4 w-4" />
-              {quiz.questions.length} questions - {completion}% done
-            </div>
-          )}
-          {aiQuestions.length > 0 && !quiz && !result && (
-            <Button
-              type="button"
-              onClick={handleSubmitAIQuiz}
-              isLoading={submitting}
-              className="rounded-full bg-gradient-to-r from-purple-600 to-purple-500 px-6 py-2 text-sm font-bold text-white"
-            >
-              Submit AI Quiz
-            </Button>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="p-6">
-          {loading ? (
-            <div className="flex min-h-[200px] items-center justify-center">
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                {aiGenerating ? 'Generating AI quiz...' : 'Fetching practice quiz…'}
-              </div>
-            </div>
-          ) : !quiz && aiQuestions.length === 0 ? (
-            <div className="flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border text-center">
-              <Trophy className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h2 className="mt-4 font-['Manrope',sans-serif] text-lg font-semibold text-card-foreground">
-                Ready to practice?
-              </h2>
-              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                Select a topic from the card on the left or browse the categories below, then click &quot;Start practice&quot; to load a quiz,
-                or use AI Quiz Generator for instant questions.
-              </p>
-            </div>
-          ) : quiz ? (
-            <div className="space-y-4">
-              {quiz.questions.map((question, index) => {
-                const isTrueFalse =
-                  question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
-
-                return (
-                  <div
-                    key={question.questionId}
-                    className="rounded-2xl border border-border bg-background p-6 shadow-sm"
-                  >
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-                          Question {index + 1}
-                        </p>
-                        <h2 className="mt-2 font-['Manrope',sans-serif] text-base font-semibold text-card-foreground">
-                          {question.questionText}
-                        </h2>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {question.type && (
-                          <span className="rounded-full border border-secondary px-3 py-1 text-xs font-medium text-secondary">
-                            {question.type}
-                          </span>
-                        )}
-                        {question.imageUrl && (
-                          <button
-                            type="button"
-                            onClick={() => window.open(resolveApiAssetUrl(question.imageUrl), '_blank')}
-                            className="rounded-full bg-primary/10 p-2 text-primary hover:bg-primary/20"
-                            title="View image"
-                          >
-                            <ImageIcon className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {question.imageUrl && (
-                      <div className="mb-4 overflow-hidden rounded-xl border border-border">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={resolveApiAssetUrl(question.imageUrl)}
-                          alt={`Image for question ${index + 1}`}
-                          className="max-h-64 w-full object-contain"
-                        />
-                      </div>
-                    )}
-                    {isTrueFalse ? (
-                      // True/False options
-                      <div className="grid grid-cols-2 gap-3">
-                        {(['True', 'False'] as const).map((opt) => {
-                          const isSelected = answers[question.questionId] === opt;
-                          return (
-                            <button
-                              key={opt}
-                              type="button"
-                              onClick={() =>
-                                setAnswers((prev) => ({
-                                  ...prev,
-                                  [question.questionId]: opt,
-                                }))
-                              }
-                              className={`rounded-xl border px-4 py-4 text-center text-base transition-all ${
-                                isSelected
-                                  ? 'border-primary bg-primary/10 text-card-foreground ring-1 ring-primary/30 font-semibold'
-                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
-                              }`}
-                            >
-                              <span className={`mr-2 font-bold ${isSelected ? 'text-primary' : ''}`}>
-                                {opt === 'True' ? 'T' : 'F'}
-                              </span>
-                              {opt}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      // Standard ABCD options
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {[
-                          { key: 'A', value: question.optionA },
-                          { key: 'B', value: question.optionB },
-                          { key: 'C', value: question.optionC },
-                          { key: 'D', value: question.optionD },
-                        ].map((option) => {
-                          const isSelected = answers[question.questionId] === option.key;
-                          return (
-                            <button
-                              key={option.key}
-                              type="button"
-                              onClick={() =>
-                                setAnswers((prev) => ({
-                                  ...prev,
-                                  [question.questionId]: option.key,
-                                }))
-                              }
-                              className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                                isSelected
-                                  ? 'border-primary bg-primary/10 text-card-foreground ring-1 ring-primary/30'
-                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
-                              }`}
-                            >
-                              <span className="mr-2 font-semibold text-primary">{option.key}.</span>
-                              {option.value}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : aiQuestions.length > 0 ? (
-            <div className="space-y-4">
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-purple-100 px-4 py-2">
-                <Sparkles className="h-4 w-4 text-purple-600" />
-                <span className="text-sm font-medium text-purple-700">
-                  AI Generated Quiz - {topic} ({aiQuestions.length} questions)
-                </span>
-              </div>
-              {aiQuestions.map((question, index) => {
-                const isTrueFalse =
-                  question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
-                const questionId = `ai-${index}`;
-
-                return (
-                  <div
-                    key={questionId}
-                    className="rounded-2xl border border-purple-200 bg-background p-6 shadow-sm"
-                  >
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-purple-600">
-                          Question {index + 1}
-                        </p>
-                        <h2 className="mt-2 font-['Manrope',sans-serif] text-base font-semibold text-card-foreground">
-                          {question.questionText}
-                        </h2>
-                      </div>
-                      {question.caseTitle && (
-                        <span className="rounded-full border border-secondary px-3 py-1 text-xs font-medium text-secondary">
-                          Case: {question.caseTitle}
-                        </span>
-                      )}
-                    </div>
-                    {isTrueFalse ? (
-                      // True/False options for AI quiz
-                      <div className="grid grid-cols-2 gap-3">
-                        {(['True', 'False'] as const).map((opt) => {
-                          const isSelected = answers[questionId] === opt;
-                          return (
-                            <button
-                              key={opt}
-                              type="button"
-                              onClick={() =>
-                                setAnswers((prev) => ({
-                                  ...prev,
-                                  [questionId]: opt,
-                                }))
-                              }
-                              className={`rounded-xl border px-4 py-4 text-center text-base transition-all ${
-                                isSelected
-                                  ? 'border-purple-500 bg-purple-100 text-card-foreground ring-1 ring-purple-500/30 font-semibold'
-                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
-                              }`}
-                            >
-                              <span className={`mr-2 font-bold ${isSelected ? 'text-purple-600' : ''}`}>
-                                {opt === 'True' ? 'T' : 'F'}
-                              </span>
-                              {opt}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      // Standard ABCD options for AI quiz
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {[
-                          { key: 'A', value: question.optionA },
-                          { key: 'B', value: question.optionB },
-                          { key: 'C', value: question.optionC },
-                          { key: 'D', value: question.optionD },
-                        ].map((option) => {
-                          const isSelected = answers[questionId] === option.key;
-                          return (
-                            <button
-                              key={option.key}
-                              type="button"
-                              onClick={() =>
-                                setAnswers((prev) => ({
-                                  ...prev,
-                                  [questionId]: option.key,
-                                }))
-                              }
-                              className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                                isSelected
-                                  ? 'border-purple-500 bg-purple-100 text-card-foreground ring-1 ring-purple-500/30'
-                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
-                              }`}
-                            >
-                              <span className="mr-2 font-semibold text-purple-600">{option.key}.</span>
-                              {option.value}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-
-        {/* Actions */}
-        {(quiz || aiQuestions.length > 0) && !result && (
-          <div className="border-t border-border p-6">
-            <div className="flex flex-wrap items-center gap-3">
-              {quiz && (
-                <>
-                  <Button
-                    type="button"
-                    onClick={handleSubmit}
-                    isLoading={submitting}
-                    disabled={submitting}
-                    className="rounded-xl bg-gradient-to-r from-primary to-[#007BFF] px-6 py-3 text-sm font-bold text-white shadow-lg transition-all active:scale-95"
-                  >
-                    {!submitting && <CheckCircle className="mr-2 h-4 w-4" />}
-                    Submit quiz
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleReset}
-                    className="rounded-xl px-6 py-3 text-sm font-medium"
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Reset session
-                  </Button>
-
-                  {/* Pagination */}
-                  {quiz.questions.length > 1 && (
-                    <div className="ml-auto flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        disabled={page === 1}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted disabled:opacity-40"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </button>
-                      <span className="px-2 text-sm text-muted-foreground">
-                        Page {page}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setPage((p) => p + 1)}
-                        disabled={page >= quiz.questions.length}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted disabled:opacity-40"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {aiQuestions.length > 0 && (
-                <>
-                  <Button
-                    type="button"
-                    onClick={handleSubmitAIQuiz}
-                    isLoading={submitting}
-                    disabled={submitting}
-                    className="rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition-all active:scale-95"
-                  >
-                    {!submitting && <CheckCircle className="mr-2 h-4 w-4" />}
-                    Submit AI Quiz
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleReset}
-                    className="rounded-xl px-6 py-3 text-sm font-medium"
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Reset
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* Results Section - AI Quiz with Answer Review */}
       {result && (
@@ -1443,7 +1363,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                     >
                       {/* Question header */}
                       <div className="mb-4 flex items-start justify-between gap-3">
-                        <div>
+                        <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white ${
                               isCorrect ? 'bg-emerald-500' : 'bg-red-400'
@@ -1453,11 +1373,36 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                             <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                               Question {index + 1}
                             </span>
+                            {/* Bookmark indicator for review section */}
+                            {(() => {
+                              const reviewQuestionId = `ai-${index}`;
+                              const isBookmarked = bookmarkedQuestions.has(reviewQuestionId);
+                              return isBookmarked ? (
+                                <BookmarkCheck className="h-4 w-4 text-amber-500" />
+                              ) : null;
+                            })()}
                           </div>
                           <h3 className="mt-2 font-semibold text-card-foreground">
                             {question.questionText}
                           </h3>
                         </div>
+                        {/* Bookmark button for review section */}
+                        <button
+                          type="button"
+                          onClick={() => toggleBookmark(`ai-${index}`)}
+                          className={`rounded-full p-2 transition-all ${
+                            bookmarkedQuestions.has(`ai-${index}`)
+                              ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
+                              : 'bg-red-50 text-red-400 hover:bg-red-100'
+                          }`}
+                          title={bookmarkedQuestions.has(`ai-${index}`) ? 'Remove bookmark' : 'Bookmark this question'}
+                        >
+                          {bookmarkedQuestions.has(`ai-${index}`) ? (
+                            <BookmarkCheck className="h-4 w-4" />
+                          ) : (
+                            <Bookmark className="h-4 w-4" />
+                          )}
+                        </button>
                       </div>
 
                       {/* Options */}
@@ -1589,6 +1534,15 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
               <Button
                 type="button"
                 variant="outline"
+                onClick={() => setShowSaveDialog(true)}
+                className="rounded-xl border-emerald-300 bg-emerald-50 px-6 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+              >
+                <Layers className="mr-2 h-4 w-4" />
+                Lưu vào Flashcard
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
                 asChild
                 className="rounded-xl px-6 py-2 text-sm font-medium"
               >
@@ -1607,42 +1561,112 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
         </div>
       )}
 
-      {/* Stats Footer */}
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h4 className="font-['Manrope',sans-serif] text-lg font-bold text-card-foreground">
-            Knowledge integrity guarantee
-          </h4>
-          <p className="mt-1 text-sm text-muted-foreground">
-            All quizzes are aligned with current Board of Radiology standards (v2.0-2024).
-          </p>
-        </div>
-        <div className="flex items-center gap-6">
-          <div className="text-right">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Avg accuracy</p>
-            <p className="text-2xl font-black text-primary">88.4%</p>
-          </div>
-          <div className="h-10 w-px bg-border" />
-          <div className="text-right">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Topics covered</p>
-            <p className="text-2xl font-black text-secondary">{allTopics.length}</p>
-          </div>
-        </div>
-      </div>
+      {/* Save to Flashcards Dialog */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100">
+                  <Layers className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-card-foreground">Lưu vào Flashcard</h3>
+                  <p className="text-sm text-muted-foreground">Tạo bộ thẻ học từ câu hỏi</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !savingToFlashcard && setShowSaveDialog(false)}
+                disabled={savingToFlashcard}
+                className="rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
-      {/* FAB */}
-      <button
-        type="button"
-        onClick={handleLoadQuiz}
-        disabled={loading}
-        className="fixed bottom-8 right-8 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#007BFF] text-white shadow-2xl hover:scale-110 active:scale-95 transition-all z-50 disabled:opacity-50"
-      >
-        {loading ? (
-          <Loader2 className="h-6 w-6 animate-spin" />
-        ) : (
-          <Plus className="h-6 w-6" />
-        )}
-      </button>
+            <div className="mb-6 space-y-4">
+              {/* Save All option */}
+              <button
+                type="button"
+                onClick={() => !savingToFlashcard && handleSaveAllToFlashcards()}
+                disabled={savingToFlashcard || aiQuestions.length === 0}
+                className="flex w-full items-center gap-4 rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-left transition-all hover:border-emerald-300 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-200">
+                  <Layers className="h-6 w-6 text-emerald-700" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-card-foreground">Lưu tất cả ({aiQuestions.length} câu)</p>
+                  <p className="text-sm text-muted-foreground">Tạo bộ flashcard từ tất cả câu hỏi</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-emerald-500" />
+              </button>
+
+              {/* Save Bookmarked option */}
+              {bookmarkedQuestions.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => !savingToFlashcard && handleSaveBookmarkedToFlashcards()}
+                  disabled={savingToFlashcard || bookmarkedQuestions.size === 0}
+                  className="flex w-full items-center gap-4 rounded-xl border-2 border-amber-200 bg-amber-50 p-4 text-left transition-all hover:border-amber-300 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-200">
+                    <BookmarkCheck className="h-6 w-6 text-amber-700" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-card-foreground">Lưu đã bookmark ({bookmarkedQuestions.size} câu)</p>
+                    <p className="text-sm text-muted-foreground">Chỉ lưu các câu đã đánh dấu</p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-amber-500" />
+                </button>
+              )}
+
+              {savingToFlashcard && (
+                <div className="flex items-center justify-center gap-2 py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">Đang lưu...</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => !savingToFlashcard && setShowSaveDialog(false)}
+              disabled={savingToFlashcard}
+              className="w-full rounded-xl border border-border py-3 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              Hủy
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Footer - only show in standalone mode */}
+      {!embedded && (
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h4 className="font-['Manrope',sans-serif] text-lg font-bold text-card-foreground">
+              Knowledge integrity guarantee
+            </h4>
+            <p className="mt-1 text-sm text-muted-foreground">
+              All quizzes are aligned with current Board of Radiology standards (v2.0-2024).
+            </p>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Avg accuracy</p>
+              <p className="text-2xl font-black text-primary">88.4%</p>
+            </div>
+            <div className="h-10 w-px bg-border" />
+            <div className="text-right">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Topics covered</p>
+              <p className="text-2xl font-black text-secondary">{allTopics.length}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       </div>
     </div>
   );

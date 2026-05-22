@@ -25,7 +25,7 @@ const studentMenuItems = [
   { icon: BotMessageSquare, label: 'AI Q&A', href: '/student/qa' },
   { icon: Trophy, label: 'Quizzes', href: '/student/quizzes' },
   { icon: Eye, label: 'Flashcards', href: '/student/review' },
-  { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
+//   { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
   { icon: UserCircle, label: 'Profile', href: '/student/profile' },
   { icon: Settings, label: 'Settings', href: '/student/settings' },
 ];

@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { StudentAppChrome } from '@/components/student/StudentAppChrome';
 import { AIQuizContent } from '@/components/student/AIQuizContent';
-import { TopicChatContent } from '@/components/student/TopicChatContent';
-import { Sparkles, Bot, FileText } from 'lucide-react';
+import { Sparkles, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type TabType = 'quiz' | 'topic';
@@ -18,7 +17,6 @@ export default function AIAssistantPage() {
       label: 'AI Quiz',
       icon: Sparkles,
       description: 'Tạo quiz trắc nghiệm với AI',
-      gradient: 'from-violet-600 to-purple-600',
       activeGradient: 'bg-gradient-to-r from-violet-600 to-purple-600',
     },
     {
@@ -26,7 +24,6 @@ export default function AIAssistantPage() {
       label: 'AI Topic',
       icon: Bot,
       description: 'Chat với AI về chủ đề y khoa',
-      gradient: 'from-teal-600 to-emerald-600',
       activeGradient: 'bg-gradient-to-r from-teal-600 to-emerald-600',
     },
   ];
@@ -74,8 +71,16 @@ export default function AIAssistantPage() {
             </div>
           )}
           {activeTab === 'topic' && (
-            <div className="flex flex-1 flex-col overflow-hidden">
-              <TopicChatContent embedded />
+            <div className="flex flex-1 items-center justify-center p-8 text-center">
+              <div className="max-w-md">
+                <div className="mb-4 flex h-16 w-16 mx-auto items-center justify-center rounded-full bg-teal-100">
+                  <Bot className="h-8 w-8 text-teal-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">AI Topic Chat</h3>
+                <p className="text-sm text-muted-foreground">
+                  Tính năng chat với AI về chủ đề y khoa đang được phát triển. Vui lòng quay lại sau!
+                </p>
+              </div>
             </div>
           )}
         </div>
