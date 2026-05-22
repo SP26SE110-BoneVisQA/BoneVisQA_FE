@@ -417,10 +417,13 @@ export default function StudentQuizHistoryPage() {
                     </div>
                   )}
                 </>
-              )}
-      </div>
-
-      <StudentDashboardFab />
+                )
+                }
+                </>
+                )
+                }
+              </div>
+      )
     </div>
   );
 }

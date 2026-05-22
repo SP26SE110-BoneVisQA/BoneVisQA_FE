@@ -189,13 +189,13 @@ export default function AIQuizPage() {
         return {
           questionId: q.questionId,
           questionText: q.questionText,
-          type: q.type,
-          optionA: q.optionA,
-          optionB: q.optionB,
-          optionC: q.optionC,
-          optionD: q.optionD,
+          type: q.type || null,
+          optionA: q.optionA || null,
+          optionB: q.optionB || null,
+          optionC: q.optionC || null,
+          optionD: q.optionD || null,
           correctAnswer,
-          explanation: q.explanation,
+          explanation: q.explanation || null,
           studentAnswer,
           isCorrect,
         };
@@ -949,8 +949,17 @@ export default function AIQuizPage() {
                     <Sparkles className="h-4 w-4" />
                     Quiz Mới
                   </Button>
+                  <Button
+                    onClick={() => void handleSaveToFlashcards()}
+                    disabled={savingFlashcards}
+                    isLoading={savingFlashcards}
+                    className="flex-1 gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 font-bold text-white"
+                  >
+                    <BookmarkPlus className="h-4 w-4" />
+                    Lưu Flashcards
+                  </Button>
                   <Button variant="outline" asChild className="flex-1 gap-2">
-                    <Link href="/student/review">
+                    <Link href="/student/flashcards">
                       <Play className="h-4 w-4" />
                       Xem Flashcards
                     </Link>

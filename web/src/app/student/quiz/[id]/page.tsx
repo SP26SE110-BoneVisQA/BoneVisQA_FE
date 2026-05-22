@@ -25,12 +25,11 @@ import {
   Hand,
   ChevronRight,
   Eye,
-  BookmarkPlus,
+  Lightbulb,
   Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getAssignedQuizzes, startQuizSession, submitQuizSession, requestRetake, fetchQuizAttemptReview } from '@/lib/api/student';
-import { saveQuizToFlashcards } from '@/lib/api/student';
 import { resolveApiAssetUrl, getApiErrorMessage } from '@/lib/api/client';
 import type { StudentQuizResultDto } from '@/lib/api/types';
 import type { AssignedQuizItem, QuizSessionDto, StudentSubmitQuestionDto } from '@/lib/api/types';
@@ -46,9 +45,13 @@ interface QuizModeQuestion {
   caseId?: string | null;
   caseTitle?: string | null;
   imageUrl?: string | null;
-  explanation?: string;
-  correctAnswer?: string;
-  essayAnswer?: string; // Model answer for essay questions
+  explanation?: string | null;
+  correctAnswer?: string | null;
+  essayAnswer?: string | null;
+  hint?: string | null;
+  hintAvailable?: boolean;
+  correctAnswers?: string | null;
+  acceptedAnswers?: string | null;
 }
 
 type AnswerState = 'unanswered' | 'correct' | 'incorrect';
@@ -104,6 +107,9 @@ export default function QuizSessionPage({
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [multiSelectAnswers, setMultiSelectAnswers] = useState<Record<string, string[]>>({});
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
+  const [shownHints, setShownHints] = useState<Record<string, boolean>>({});
   const [answerStates, setAnswerStates] = useState<Record<string, AnswerState>>({});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -112,12 +118,6 @@ export default function QuizSessionPage({
   const [startError, setStartError] = useState<string | null>(null);
   const [requestingRetake, setRequestingRetake] = useState(false);
   const [retakeSent, setRetakeSent] = useState(false);
-
-  // Save to flashcards modal state
-  const [showSaveFlashcardModal, setShowSaveFlashcardModal] = useState(false);
-  const [savingToFlashcards, setSavingToFlashcards] = useState(false);
-  const [savedFlashcardInfo, setSavedFlashcardInfo] = useState<{ deckId: string; deckName: string; cardCount: number } | null>(null);
-  const [customDeckName, setCustomDeckName] = useState('');
 
   // Review pagination (5 questions per page)
   const [reviewPage, setReviewPage] = useState(1);
@@ -214,12 +214,44 @@ export default function QuizSessionPage({
     caseId: q.caseId ?? null,
     caseTitle: q.caseTitle ?? null,
     imageUrl: q.imageUrl ?? null,
-    correctAnswer: q.correctAnswer ?? undefined,
-    explanation: q.explanation ?? undefined,
+    explanation: (q as any).explanation ?? null,
+    correctAnswer: q.correctAnswer ?? null,
+    essayAnswer: q.essayAnswer ?? null,
+    hint: (q as any).hint ?? null,
+    hintAvailable: (q as any).hintAvailable ?? false,
+    correctAnswers: (q as any).correctAnswers ?? null,
+    acceptedAnswers: (q as any).acceptedAnswers ?? null,
   }));
   const currentQ = questions[currentIndex];
   const totalQ = questions.length;
-  const answeredCount = Object.keys(answers).length;
+  // ================================================================
+  // ĐẾM SỐ CÂU HỎI ĐÃ TRẢ LỜI
+  // ================================================================
+  // Logic đếm khác nhau theo loại câu hỏi:
+  // - Multi-select: đếm nếu có ít nhất 1 đáp án được chọn
+  // - Essay: KHÔNG đếm trong answeredCount (cần lecturer chấm)
+  // - Các loại khác (MCQ, True/False, Fill-in-blank): đếm nếu có đáp án
+  //
+  // LƯU Ý: answeredCount dùng để:
+  // 1. Hiển thị tiến độ "X/Y answered"
+  // 2. Kiểm tra canSubmit (phải trả lời ít nhất 1 câu)
+  // 3. KHÔNG ảnh hưởng đến tính điểm (điểm do backend tính)
+  // ================================================================
+  const answeredCount = (() => {
+    let count = 0;
+    for (const q of session?.questions ?? []) {
+      const qType = q.type?.toLowerCase();
+      if (qType === 'multiselect' || qType === 'multi-select') {
+        // Multi-select: count question as answered if at least 1 option selected
+        const selected = multiSelectAnswers[q.questionId];
+        if (selected && selected.length > 0) count++;
+      } else if (qType !== 'essay') {
+        // Other types: count if answer exists
+        if (answers[q.questionId]) count++;
+      }
+    }
+    return count;
+  })();
   const positionPct = totalQ > 0 ? Math.round(((currentIndex + 1) / totalQ) * 100) : 0;
   const moduleLabel = session?.topic ?? quizInfo?.className ?? 'Clinical module';
 
@@ -285,6 +317,19 @@ export default function QuizSessionPage({
     setIsPanning(false);
   }, [currentIndex]);
 
+  // ================================================================
+  // HÀM SUBMIT QUIZ - XỬ LÝ NỘP BÀI VÀ NHẬN KẾT QUẢ
+  // ================================================================
+  // 1. Build payload: chuẩn bị data từng câu hỏi và đáp án student
+  // 2. Gọi API submitQuizSession()
+  // 3. Nhận về quizResult chứa:
+  //    - score: điểm phần trăm (0-100)
+  //    - passed: true/false
+  //    - correctAnswers: số câu đúng
+  //    - totalQuestions: tổng câu hỏi
+  //    - passingScore: ngưỡng pass
+  //    - ungradedEssayCount: số essay chưa chấm
+  // ================================================================
   const handleSubmit = useCallback(async () => {
     if (!session) return;
     setSubmitting(true);
@@ -293,10 +338,12 @@ export default function QuizSessionPage({
       const payload: StudentSubmitQuestionDto[] = session.questions.map((q) => {
         const answer = answers[q.questionId] || '';
         const isEssay = q.type?.toLowerCase() === 'essay';
+        const isMultiSelect = q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select';
         return {
           questionId: q.questionId,
           studentAnswer: isEssay ? '' : answer,
           essayAnswer: isEssay ? answer : undefined,
+          selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : undefined,
         };
       });
       const result = await submitQuizSession(session.attemptId, payload);
@@ -308,7 +355,7 @@ export default function QuizSessionPage({
     } finally {
       setSubmitting(false);
     }
-  }, [session, answers, toast]);
+  }, [session, answers, multiSelectAnswers, toast]);
 
   const handleStart = async () => {
     setLoadingSession(true);
@@ -524,112 +571,101 @@ export default function QuizSessionPage({
             </div>
           </div>
 
-          {/* Quiz đã hoàn thành - hiển thị thông báo và nút Back */}
+          {/* ================================================================
+              MÀN HÌNH PRE-START: HIỂN THỊ ĐIỂM SỐ CỦA QUIZ ĐÃ HOÀN THÀNH
+              ================================================================
+              Khi quiz đã được nộp (isCompleted = true):
+              - Lấy điểm từ quizInfo.score (đã được tính ở backend)
+              - Format: hiển thị dạng phần trăm với 1 chữ số thập phân
+              - Nếu score = null (chưa có điểm): hiển thị '—'
+              
+              LƯU Ý QUAN TRỌNG VỀ CÁCH TÍNH ĐIỂM:
+              - Backend tính điểm: total quiz score = 100
+              - Chia đều cho tất cả câu hỏi
+              - Ví dụ: 4 câu hỏi, mỗi câu = 25 điểm
+              - Điểm hiển thị ở đây là PERCENTAGE (0-100%)
+              ================================================================ */}
           {quizInfo?.isCompleted ? (
-            <>
-              {/*
-              <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3">
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                  This quiz has already been completed
-                </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Score: {quizInfo.score != null
-                    ? `${quizInfo.score.toFixed(1)}%`
-                    : 'N/A'}
-                </p>
-              </div>
-              */}
-              {/* Nếu đáp án đã được công bố - cho phép xem lại đáp án */}
-              {quizInfo?.answersReleased && (
-                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-4 py-3">
-                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300 mb-2">
-                    Answers have been released by your lecturer.
+            <div className="space-y-4">
+              {/* Score Badge - Hiển thị điểm phần trăm */}
+              <div className="flex items-center justify-center gap-3 rounded-xl bg-primary/5 border border-primary/20 px-6 py-4">
+                <div className="text-center">
+                  {/* 
+                    quizInfo.score: số thập phân từ 0-100
+                    Ví dụ: 85.5 nghĩa là 85.5%
+                    toFixed(1): làm tròn 1 chữ số thập phân
+                  */}
+                  <p className="text-4xl font-black text-primary">
+                    {quizInfo.score != null ? quizInfo.score.toFixed(1) : '—'}%
                   </p>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (quizInfo?.attemptId) {
-                        try {
-                          const review = await fetchQuizAttemptReview(quizInfo.attemptId);
-                          review.questions.forEach((q) => {
-                            const selected = answers[q.questionId];
-                            setAnswerStates((prev) => ({
-                              ...prev,
-                              [q.questionId]: selected === q.correctAnswer ? 'correct' : 'incorrect',
-                            }));
-                            setSession((prev) => {
-                              if (!prev) return prev;
-                              return {
-                                ...prev,
-                                questions: prev.questions.map((sq) =>
-                                  sq.questionId === q.questionId
-                                    ? { ...sq, correctAnswer: q.correctAnswer ?? undefined }
-                                    : sq
-                                ),
-                              };
-                            });
-                          });
-                          setShowFeedback(true);
-                        } catch {
-                          toast.error('Failed to load answers. Please try again.');
-                        }
-                      }
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 text-sm font-bold transition-colors"
+                  <p className="text-xs font-semibold text-muted-foreground">Your Score</p>
+                </div>
+              </div>
+              {/* Nếu đáp án đã được công bố - cho phép xem lại đáp án */}
+              {/* Action Buttons Row - Chỉ hiện khi lecturer đã release đáp án */}
+              {quizInfo?.answersReleased && (
+                <div className="space-y-2">
+                  {/* Link đến trang review chi tiết */}
+                  <Link
+                    href={`/student/quiz/${quizId}/review`}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-[#007BFF] hover:opacity-95 text-white px-4 py-3 text-sm font-bold transition-colors shadow-lg shadow-primary/20"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    View Detailed Review
+                  </Link>
+                  {/* Nút Reveal Answers - Chuyển đến trang review */}
+                  <Link
+                    href={`/student/quiz/${quizId}/review`}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-4 py-2.5 text-sm font-semibold transition-colors"
                   >
                     <Eye className="h-4 w-4" />
                     Reveal Answers
-                  </button>
+                  </Link>
                 </div>
               )}
 
-              <div className="flex flex-col gap-3">
-                {!retakeSent ? (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (retakeRequestedRef.current) return;
-                      retakeRequestedRef.current = true;
-                      setRequestingRetake(true);
-                      try {
-                        await requestRetake(quizId);
-                        setRetakeSent(true);
-                        toast.success('Retake request sent to your lecturer.');
-                      } catch (e) {
-                        toast.error(getApiErrorMessage(e));
-                        retakeRequestedRef.current = false;
-                        setRequestingRetake(false);
-                      }
-                    }}
-                    disabled={requestingRetake}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    {requestingRetake ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Mail className="h-4 w-4" />
-                    )}
-                    {requestingRetake ? 'Sending…' : 'Request retake'}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2 rounded-xl bg-success/10 px-4 py-3">
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
-                    <div className="text-left">
-                      <p className="text-sm font-semibold text-success">Request sent!</p>
-                      <p className="text-xs text-on-surface-variant">
-                        Your lecturer has been notified. You can retake the quiz once retake is enabled.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Request Retake */}
+              {retakeSent ? (
+                <div className="flex items-center gap-2 rounded-xl bg-success/10 px-4 py-3">
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
+                  <p className="text-sm font-semibold text-success">Retake request sent!</p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (retakeRequestedRef.current) return;
+                    retakeRequestedRef.current = true;
+                    setRequestingRetake(true);
+                    try {
+                      await requestRetake(quizId);
+                      setRetakeSent(true);
+                      toast.success('Retake request sent to your lecturer.');
+                    } catch (e) {
+                      toast.error(getApiErrorMessage(e));
+                      retakeRequestedRef.current = false;
+                      setRequestingRetake(false);
+                    }
+                  }}
+                  disabled={requestingRetake}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-low hover:bg-surface-container-high px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {requestingRetake ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}
+                  {requestingRetake ? 'Sending…' : 'Request Retake'}
+                </button>
+              )}
+
               <Link href="/student/quizzes">
-                <Button variant="outline" className="h-12 w-full rounded-xl border-outline-variant/30 font-bold">
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to quizzes
+                <Button variant="outline" className="h-10 w-full rounded-xl font-medium">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Quizzes
                 </Button>
               </Link>
-            </>
+            </div>
           ) : (
             <>
               <p className="text-sm leading-relaxed text-on-surface-variant">
@@ -638,11 +674,20 @@ export default function QuizSessionPage({
               <div className="flex flex-col gap-3">
                 <Button
                   onClick={() => void handleStart()}
-                  isLoading={loadingSession}
+                  disabled={loadingSession}
                   className="h-12 rounded-xl bg-gradient-to-br from-primary to-primary-container text-base font-bold text-white shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  {!loadingSession && <PlayCircle className="h-5 w-5" />}
-                  {loadingSession ? 'Preparing…' : 'Begin assessment'}
+                  {loadingSession ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Preparing…
+                    </>
+                  ) : (
+                    <>
+                      <PlayCircle className="h-5 w-5" />
+                      Begin assessment
+                    </>
+                  )}
                 </Button>
                 <Link href="/student/quizzes">
                   <Button variant="outline" className="h-12 w-full rounded-xl border-outline-variant/30 font-bold">
@@ -980,7 +1025,45 @@ export default function QuizSessionPage({
                     {currentQ.type}
                   </span>
                 )}
+                {currentQ.type?.toLowerCase() === 'truefalse' && (
+                  <span className="inline-flex items-center rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900">
+                    True/False
+                  </span>
+                )}
+                {currentQ.type?.toLowerCase() === 'multiselect' && (
+                  <span className="inline-flex items-center rounded-xl bg-blue-100 px-4 py-2 text-xs font-bold text-blue-900">
+                    Multi-Select
+                  </span>
+                )}
+                {currentQ.type?.toLowerCase() === 'fillinblank' && (
+                  <span className="inline-flex items-center rounded-xl bg-green-100 px-4 py-2 text-xs font-bold text-green-900">
+                    Fill in Blank
+                  </span>
+                )}
               </div>
+
+              {/* Hint Button */}
+              {!submitted && currentQ.hintAvailable && currentQ.hint && !shownHints[currentQ.questionId] && (
+                <button
+                  type="button"
+                  onClick={() => setShownHints(prev => ({ ...prev, [currentQ.questionId]: true }))}
+                  className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 hover:bg-amber-100"
+                >
+                  <Lightbulb className="h-5 w-5" />
+                  Show Hint
+                </button>
+              )}
+
+              {/* Hint Display */}
+              {!submitted && currentQ.hintAvailable && currentQ.hint && shownHints[currentQ.questionId] && (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                  <div>
+                    <span className="mb-1 block font-bold">Hint:</span>
+                    {currentQ.hint}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <h4 className="mb-4 flex items-center gap-2 font-headline text-base font-bold text-on-surface">
@@ -1023,60 +1106,127 @@ export default function QuizSessionPage({
               </p>
             </div>
 
-            <div className="space-y-4">
-              {isTrueFalse ? (
-                // True/False answer options
-                <div className="flex gap-4">
-                  {(['True', 'False'] as const).map((opt) => {
-                    const isSelected = currentAnswer === opt;
-                    const isCorrect = currentQ.correctAnswer?.toLowerCase() === opt.toLowerCase();
+            {/* True/False Options */}
+            {(currentQ.type?.toLowerCase() === 'truefalse' || currentQ.type?.toLowerCase() === 'true/false') && (
+              <div className="flex gap-4">
+                {(['True', 'False'] as const).map((opt) => {
+                  const isSelected = currentAnswer === opt;
+                  const isCorrect = currentQ.correctAnswer?.toLowerCase() === opt.toLowerCase();
+                  let row = 'border-outline-variant/15 bg-surface-container-lowest hover:border-primary/30 hover:bg-primary/5';
+                  if (currentState !== 'unanswered' && isCorrect) {
+                    row = 'border-2 border-success/50 bg-success/10';
+                  } else if (currentState === 'incorrect' && isSelected) {
+                    row = 'border-2 border-destructive/50 bg-destructive/10';
+                  } else if (isSelected && currentState === 'unanswered') {
+                    row = 'border-2 border-primary bg-primary/10';
+                  }
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      disabled={submitted}
+                      onClick={() => handleSelect(opt)}
+                      className={`flex flex-1 items-center justify-center rounded-xl border-2 p-6 text-base font-bold transition-all disabled:cursor-not-allowed disabled:opacity-60 ${row}`}
+                    >
+                      {opt}
+                      {currentState !== 'unanswered' && isCorrect && (
+                        <CheckCircle2 className="ml-2 h-6 w-6 text-success" />
+                      )}
+                      {currentState === 'incorrect' && isSelected && (
+                        <XCircle className="ml-2 h-6 w-6 text-destructive" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-                    let row = 'border-outline-variant/15 bg-surface-container-lowest hover:border-primary/30 hover:bg-primary/5';
-                    let letter = 'bg-surface-container text-on-surface-variant';
+            {/* Multi-Select Options */}
+            {(currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select') && (
+              <div className="space-y-3">
+                <p className="text-sm text-on-surface-variant">Select all that apply:</p>
+                {(['A', 'B', 'C', 'D'] as const).map((key) => {
+                  const optionValue = currentQ[`option${key}` as keyof typeof currentQ] as string | null;
+                  if (!optionValue) return null;
+                  const selectedAnswers = multiSelectAnswers[currentQ.questionId] || [];
+                  const isSelected = selectedAnswers.includes(key);
+                  // Parse correctAnswers from JSON string (stored as ["A","C"])
+                  const correctAnswersArray: string[] = currentQ.correctAnswers ? JSON.parse(currentQ.correctAnswers) : [];
+                  let row = 'border-outline-variant/15 bg-surface-container-lowest hover:border-primary/30 hover:bg-primary/5';
+                  if (currentState !== 'unanswered' && correctAnswersArray.includes(key)) {
+                    row = 'border-2 border-success/50 bg-success/10';
+                  } else if (currentState !== 'unanswered' && isSelected && !correctAnswersArray.includes(key)) {
+                    row = 'border-2 border-destructive/50 bg-destructive/10';
+                  } else if (isSelected && currentState === 'unanswered') {
+                    row = 'border-2 border-primary bg-primary/10';
+                  }
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      disabled={submitted}
+                      onClick={() => {
+                        setMultiSelectAnswers(prev => {
+                          const current = prev[currentQ.questionId] || [];
+                          const newAnswers = isSelected
+                            ? current.filter(k => k !== key)
+                            : [...current, key];
+                          return { ...prev, [currentQ.questionId]: newAnswers };
+                        });
+                        // Also update answers for counting
+                        setAnswers(prev => ({ ...prev, [currentQ.questionId]: isSelected ? '' : key }));
+                      }}
+                      className={`group flex w-full items-center gap-3 rounded-xl border-2 p-5 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${row}`}
+                    >
+                      <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 ${
+                        isSelected ? 'border-primary bg-primary' : 'border-outline-variant/30'
+                      }`}>
+                        {isSelected && (
+                          <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container text-sm font-bold text-on-surface-variant group-hover:bg-primary group-hover:text-white">
+                        {key}
+                      </span>
+                      <span className="flex-1 font-semibold text-on-surface">{optionValue}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-                    if (currentState !== 'unanswered' && isCorrect) {
-                      row = 'border-2 border-success/50 bg-success/10';
-                      letter = 'bg-success text-white';
-                    } else if (currentState === 'incorrect' && isSelected) {
-                      row = 'border-2 border-destructive/50 bg-destructive/10';
-                      letter = 'bg-destructive text-white';
-                    } else if (isSelected && currentState === 'unanswered') {
-                      row = 'border-2 border-primary bg-primary/10';
-                      letter = 'bg-primary text-white';
-                    }
+            {/* Fill-in-Blank Input */}
+            {(currentQ.type?.toLowerCase() === 'fillinblank' || currentQ.type?.toLowerCase() === 'fill-in-blank') && (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-on-surface">Type your answer:</label>
+                <input
+                  type="text"
+                  value={textAnswers[currentQ.questionId] || ''}
+                  onChange={(e) => {
+                    setTextAnswers(prev => ({ ...prev, [currentQ.questionId]: e.target.value }));
+                    setAnswers(prev => ({ ...prev, [currentQ.questionId]: e.target.value }));
+                  }}
+                  disabled={submitted}
+                  className="w-full rounded-xl border-2 border-outline-variant/20 bg-surface-container-lowest px-4 py-4 text-sm outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Enter your answer..."
+                />
+                {currentState !== 'unanswered' && (
+                  <div className="mt-2">
+                    <p className="text-sm font-semibold text-on-surface">Accepted answers:</p>
+                    <p className="text-sm text-on-surface-variant">
+                      {currentQ.acceptedAnswers ? JSON.parse(currentQ.acceptedAnswers).join(', ') : 'N/A'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
-                    return (
-                      <button
-                        key={opt}
-                        type="button"
-                        disabled={submitted}
-                        onClick={() => handleSelect(opt)}
-                        className={`group flex flex-1 items-center justify-center rounded-xl border-2 p-5 text-center transition-all disabled:cursor-not-allowed disabled:opacity-60 ${row}`}
-                      >
-                        <span
-                          className={`mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors ${letter}`}
-                        >
-                          {opt === 'True' ? 'T' : 'F'}
-                        </span>
-                        <span className="flex-1 font-semibold text-on-surface text-lg">
-                          {opt}
-                        </span>
-                        {currentState === 'unanswered' && isSelected && (
-                          <CheckCircle2 className="ml-2 h-6 w-6 shrink-0 text-primary" />
-                        )}
-                        {currentState !== 'unanswered' && isCorrect && (
-                          <CheckCircle2 className="ml-2 h-6 w-6 shrink-0 text-success" />
-                        )}
-                        {currentState === 'incorrect' && isSelected && !isCorrect && (
-                          <XCircle className="ml-2 h-6 w-6 shrink-0 text-destructive" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                // Standard ABCD answer options
-                <>{(
+            {/* Default Multiple Choice Options */}
+            {!['truefalse', 'true/false', 'multiselect', 'multi-select', 'fillinblank', 'fill-in-blank', 'essay'].includes(currentQ.type?.toLowerCase() || '') && (
+              <div className="space-y-4">
+                {(
                   [
                     { key: 'A' as const, text: currentQ.optionA },
                     { key: 'B' as const, text: currentQ.optionB },
@@ -1087,19 +1237,18 @@ export default function QuizSessionPage({
                   if (!text) return null;
 
                   const isSelected = currentAnswer === key;
-                  const state = currentState;
                   const isCorrect = currentQ.correctAnswer === key;
 
                   let row = 'border-outline-variant/15 bg-surface-container-lowest hover:border-primary/30 hover:bg-primary/5';
                   let letter = 'bg-surface-container text-on-surface-variant group-hover:bg-primary group-hover:text-white';
 
-                  if (state !== 'unanswered' && isCorrect) {
+                  if (currentState !== 'unanswered' && isCorrect) {
                     row = 'border-2 border-success/50 bg-success/10';
                     letter = 'bg-success text-white';
-                  } else if (state === 'incorrect' && isSelected) {
+                  } else if (currentState === 'incorrect' && isSelected) {
                     row = 'border-2 border-destructive/50 bg-destructive/10';
                     letter = 'bg-destructive text-white';
-                  } else if (isSelected && state === 'unanswered') {
+                  } else if (isSelected && currentState === 'unanswered') {
                     row = 'border-2 border-primary bg-primary/10';
                     letter = 'bg-primary text-white';
                   }
@@ -1120,23 +1269,23 @@ export default function QuizSessionPage({
                       <span className="flex-1 font-semibold text-on-surface">
                         {text}
                       </span>
-                      {state === 'unanswered' && isSelected && (
+                      {currentState === 'unanswered' && isSelected && (
                         <CheckCircle2 className="ml-2 h-6 w-6 shrink-0 text-primary" />
                       )}
-                      {state !== 'unanswered' && isCorrect && (
+                      {currentState !== 'unanswered' && isCorrect && (
                         <CheckCircle2 className="ml-2 h-6 w-6 shrink-0 text-success" />
                       )}
-                      {state === 'incorrect' && isSelected && !isCorrect && (
+                      {currentState === 'incorrect' && isSelected && !isCorrect && (
                         <XCircle className="ml-2 h-6 w-6 shrink-0 text-destructive" />
                       )}
                     </button>
                   );
-                })}</>
-              )}
-            </div>
+                })}
+              </div>
+            )}
 
             {/* Essay Answer Textarea - shown only for Essay type questions */}
-            {currentQ.type === 'Essay' && (
+            {currentQ.type?.toLowerCase() === 'essay' && (
               <div className="space-y-3 rounded-2xl border border-outline-variant/15 bg-surface-container-low p-6">
                 <label className="block text-xs font-bold uppercase tracking-widest text-primary">
                   Your Essay Response
@@ -1214,48 +1363,13 @@ export default function QuizSessionPage({
               </div>
             )}
 
-            {submitted && quizResult && (
+            {/* ================================================================
+                KẾT QUẢ SAU KHI SUBMIT - HIỂN THỊ THÀNH CÔNG
+                ================================================================
+                Hiển thị thông báo nộp bài thành công cho student
+                ================================================================ */}
+            {submitted && (
               <div className="space-y-6 rounded-2xl border border-primary/25 bg-primary/5 p-8">
-                {/* ⚠️ Warning nếu có essay chưa chấm */}
-                {(quizResult.ungradedEssayCount ?? 0) > 0 && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-                      <div>
-                        <p className="font-bold">
-                          Essay awaiting instructor grading
-                        </p>
-                        <p className="mt-1 text-sm">
-                          Your submission has {quizResult.ungradedEssayCount} essay question(s) not yet graded.
-                          Current score does not include the essay portion. The instructor will grade and update later.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Hiển thị điểm - thang điểm 100 */}
-                {/*
-                <div className="flex flex-col items-center justify-center rounded-xl bg-surface p-6">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Your Score</p>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className={`text-5xl font-black ${quizResult.passed ? 'text-success' : 'text-destructive'}`}>
-                      {quizResult.score != null ? quizResult.score.toFixed(1) : '—'}
-                    </span>
-                    <span className="text-2xl font-bold text-on-surface-variant">/100</span>
-                  </div>
-                  <p className={`mt-2 rounded-full px-4 py-1 text-sm font-bold ${quizResult.passed ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                    {quizResult.passed ? '✓ PASSED' : '✗ NEEDS IMPROVEMENT'}
-                  </p>
-                  {quizResult.passingScore != null && (
-                    <p className="mt-2 text-sm text-on-surface-variant">
-                      Passing: {quizResult.passingScore}%
-                    </p>
-                  )}
-                </div>
-                */}
-
-                {/* Success Message */}
                 <div className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/50 p-8 text-center">
                   <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-lg shadow-emerald-500/30">
                     <CheckCircle2 className="h-10 w-10 text-white" />
@@ -1266,56 +1380,20 @@ export default function QuizSessionPage({
                   <p className="text-sm text-emerald-600/80 dark:text-emerald-400/70">
                     Bài quiz của bạn đã được gửi thành công. Điểm sẽ được cập nhật sau khi giảng viên chấm điểm.
                   </p>
+                  <p className="mt-2 text-xs text-emerald-600/70 dark:text-emerald-400/60">
+                    {answeredCount}/{totalQ} câu hỏi đã trả lời
+                  </p>
+                  {quizResult?.ungradedEssayCount != null && quizResult.ungradedEssayCount > 0 && (
+                    <div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>{quizResult.ungradedEssayCount} câu essay đang chờ giảng viên chấm điểm</span>
+                    </div>
+                  )}
                 </div>
 
-                {(quizResult.ungradedEssayCount ?? 0) > 0 && (
-                  <p className="mt-2 text-center text-xs text-amber-600 dark:text-amber-400">
-                    * {quizResult.ungradedEssayCount} essay(s) pending grading. Score will update after grading.
-                  </p>
-                )}
-
                 <div className="flex flex-wrap justify-center gap-3">
-                  {quizInfo?.answersReleased && !showFeedback && (
-                    <Button
-                      onClick={async () => {
-                        if (quizInfo?.attemptId) {
-                          try {
-                            const review = await fetchQuizAttemptReview(quizInfo.attemptId);
-                            review.questions.forEach((q) => {
-                              const selected = answers[q.questionId];
-                              setAnswerStates((prev) => ({
-                                ...prev,
-                                [q.questionId]: selected === q.correctAnswer ? 'correct' : 'incorrect',
-                              }));
-                              setSession((prev) => {
-                                if (!prev) return prev;
-                                return {
-                                  ...prev,
-                                  questions: prev.questions.map((sq) =>
-                                    sq.questionId === q.questionId
-                                      ? { ...sq, correctAnswer: q.correctAnswer ?? undefined }
-                                      : sq
-                                  ),
-                                };
-                              });
-                            });
-                            setShowFeedback(true);
-                          } catch (err) {
-                            toast.error('Failed to load answers. Please try again.');
-                          }
-                        }
-                      }}
-                      className="rounded-xl font-bold bg-emerald-500 hover:bg-emerald-600 text-white"
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      Reveal Answers
-                    </Button>
-                  )}
-
                   <Link href="/student/quizzes">
-                    <Button variant="outline" className="rounded-xl font-bold">
-                      Back to quizzes
-                    </Button>
+                    <Button variant="outline" className="rounded-xl font-bold">Back to quizzes</Button>
                   </Link>
                 </div>
               </div>
@@ -1450,109 +1528,6 @@ export default function QuizSessionPage({
 
         </div>
       </div>
-
-      {/* Save to Flashcards Modal */}
-      {showSaveFlashcardModal && session?.attemptId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-violet-200 dark:border-violet-800 bg-surface p-6 shadow-2xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg">
-                <Sparkles className="h-6 w-6" />
-              </div>
-              <div>
-                <h3 className="font-headline text-lg font-bold text-on-surface">
-                  Save Quiz to Flashcards
-                </h3>
-                <p className="text-sm text-on-surface-variant">
-                  Create flashcards from this quiz to study later
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-on-surface mb-2">
-                  Deck Name (optional)
-                </label>
-                <input
-                  type="text"
-                  value={customDeckName}
-                  onChange={(e) => setCustomDeckName(e.target.value)}
-                  placeholder={`Quiz: ${quizInfo?.quizName ?? session.title}`}
-                  className="w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                />
-                <p className="mt-1.5 text-xs text-on-surface-variant">
-                  Leave empty to use the default deck name based on quiz title.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-violet-100 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20 p-4">
-                <h4 className="font-semibold text-sm text-on-surface mb-2">What will be saved:</h4>
-                <ul className="text-xs text-on-surface-variant space-y-1.5">
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-violet-500 mt-0.5 shrink-0" />
-                    <span>{session.questions.length} flashcards from quiz questions</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-violet-500 mt-0.5 shrink-0" />
-                    <span>Each card includes correct answer + explanation</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-violet-500 mt-0.5 shrink-0" />
-                    <span>Spaced repetition enabled for efficient learning</span>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowSaveFlashcardModal(false);
-                    setCustomDeckName('');
-                  }}
-                  disabled={savingToFlashcards}
-                  className="flex-1 rounded-xl font-bold"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={async () => {
-                    if (!session?.attemptId) return;
-                    setSavingToFlashcards(true);
-                    try {
-                      const result = await saveQuizToFlashcards(session.attemptId, {
-                        deckName: customDeckName || undefined,
-                      });
-                      if (result.success) {
-                        setSavedFlashcardInfo({
-                          deckId: result.deckId,
-                          deckName: result.deckName,
-                          cardCount: result.cardCount,
-                        });
-                        toast.success(result.message || 'Quiz saved to flashcards!');
-                        setShowSaveFlashcardModal(false);
-                        setCustomDeckName('');
-                      } else {
-                        toast.error(result.message || 'Failed to save quiz to flashcards.');
-                      }
-                    } catch (e) {
-                      toast.error(getApiErrorMessage(e));
-                    } finally {
-                      setSavingToFlashcards(false);
-                    }
-                  }}
-                  isLoading={savingToFlashcards}
-                  className="flex-1 rounded-xl font-bold bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-lg shadow-purple-500/25"
-                >
-                  {!savingToFlashcards && <BookmarkPlus className="h-4 w-4 mr-2" />}
-                  Save Deck
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <footer className="mt-auto border-t border-outline-variant/10 px-6 py-8 text-center">
         <p className="mx-auto max-w-2xl text-xs font-medium text-on-surface-variant">

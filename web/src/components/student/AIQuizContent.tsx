@@ -6,6 +6,15 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
   Loader2,
   CheckCircle2,
   XCircle,
@@ -28,12 +37,16 @@ import {
   AlertTriangle,
   HeartPulse,
   Brain,
+  Save,
 } from 'lucide-react';
 import {
   generateAndSaveAIPracticeQuiz,
   submitAIPracticeQuiz,
   fetchQuizHint,
   saveQuizToFlashcards,
+  saveBookmarkedToFlashcards,
+  fetchFlashcardDecks,
+  type FlashcardDeckDto,
 } from '@/lib/api/student';
 import type { StudentGeneratedQuizSession } from '@/lib/api/student';
 import { getApiErrorMessage } from '@/lib/api/client';
@@ -155,6 +168,12 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
 
   const [savingFlashcards, setSavingFlashcards] = useState(false);
   const [bookmarkedQuestions, setBookmarkedQuestions] = useState<Set<string>>(new Set());
+  const [showBookmarkDialog, setShowBookmarkDialog] = useState(false);
+  const [savingToExistingDeck, setSavingToExistingDeck] = useState(false);
+  const [savingToNewDeck, setSavingToNewDeck] = useState(false);
+  const [availableDecks, setAvailableDecks] = useState<FlashcardDeckDto[]>([]);
+  const [selectedDeckId, setSelectedDeckId] = useState<string>('');
+  const [newDeckName, setNewDeckName] = useState('');
 
   const [hintLevel, setHintLevel] = useState(1);
   const [currentHint, setCurrentHint] = useState<string | null>(null);
@@ -260,13 +279,13 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
         return {
           questionId: q.questionId,
           questionText: q.questionText,
-          type: q.type,
-          optionA: q.optionA,
-          optionB: q.optionB,
-          optionC: q.optionC,
-          optionD: q.optionD,
+          type: q.type || null,
+          optionA: q.optionA || null,
+          optionB: q.optionB || null,
+          optionC: q.optionC || null,
+          optionD: q.optionD || null,
           correctAnswer,
-          explanation: q.explanation,
+          explanation: q.explanation || null,
           studentAnswer,
           isCorrect,
         };
@@ -300,6 +319,45 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
       toast.error(getApiErrorMessage(e));
     } finally {
       setSavingFlashcards(false);
+    }
+  };
+
+  const handleSaveBookmarkedToFlashcards = async () => {
+    if (!session) return;
+    
+    setSavingToExistingDeck(true);
+    try {
+      const result = await saveBookmarkedToFlashcards(session.attemptId, {
+        deckId: selectedDeckId || undefined,
+        deckName: selectedDeckId ? undefined : (newDeckName || `Đánh dấu từ ${session.title}`),
+        description: `Câu hỏi đánh dấu từ quiz AI - ${selectedTopic}`,
+        questionIds: Array.from(bookmarkedQuestions),
+      });
+      
+      if (result.success) {
+        toast.success(
+          `Đã lưu ${result.cardCount} flashcards đánh dấu vào bộ "${result.deckName}"!`,
+        );
+        setShowBookmarkDialog(false);
+        setSelectedDeckId('');
+        setNewDeckName('');
+      } else {
+        toast.error(result.message || 'Không thể lưu flashcards đánh dấu.');
+      }
+    } catch (e) {
+      toast.error(getApiErrorMessage(e));
+    } finally {
+      setSavingToExistingDeck(false);
+    }
+  };
+
+  const handleOpenBookmarkDialog = async () => {
+    setShowBookmarkDialog(true);
+    try {
+      const decks = await fetchFlashcardDecks();
+      setAvailableDecks(decks);
+    } catch (e) {
+      console.error('Error fetching decks:', e);
     }
   };
 
@@ -1000,6 +1058,97 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
                   </Link>
                 </Button>
               </div>
+
+              {/* Save Bookmarked Button */}
+              {bookmarkedQuestions.size > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={handleOpenBookmarkDialog}
+                  className="w-full gap-2 border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400"
+                >
+                  <Bookmark className="h-4 w-4" fill="currentColor" />
+                  Lưu {bookmarkedQuestions.size} Câu Đánh Dấu Vào Flashcards
+                </Button>
+              )}
+
+              {/* Save Bookmarked Dialog */}
+              <Dialog open={showBookmarkDialog} onOpenChange={setShowBookmarkDialog}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Lưu Câu Hỏi Đánh Dấu</DialogTitle>
+                    <DialogDescription>
+                      Chọn bộ flashcard có sẵn hoặc tạo bộ mới để lưu {bookmarkedQuestions.size} câu hỏi đánh dấu.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    {availableDecks.length > 0 && (
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Chọn bộ có sẵn</label>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors">
+                            <input
+                              type="radio"
+                              name="deck"
+                              value=""
+                              checked={selectedDeckId === ''}
+                              onChange={() => setSelectedDeckId('')}
+                              className="text-primary"
+                            />
+                            <span className="text-sm font-medium">Tạo bộ mới</span>
+                          </label>
+                          {availableDecks.map((deck) => (
+                            <label key={deck.id} className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-slate-50 transition-colors">
+                              <input
+                                type="radio"
+                                name="deck"
+                                value={deck.id}
+                                checked={selectedDeckId === deck.id}
+                                onChange={() => setSelectedDeckId(deck.id)}
+                                className="text-primary"
+                              />
+                              <div>
+                                <p className="text-sm font-medium">{deck.deckName}</p>
+                                <p className="text-xs text-slate-500">{deck.cardCount} thẻ</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {!selectedDeckId && (
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Tên bộ mới</label>
+                        <input
+                          type="text"
+                          value={newDeckName}
+                          onChange={(e) => setNewDeckName(e.target.value)}
+                          placeholder={`Đánh dấu từ ${session?.title || 'Quiz'}`}
+                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button variant="outline" onClick={() => setShowBookmarkDialog(false)}>
+                        Hủy
+                      </Button>
+                      <Button
+                        onClick={handleSaveBookmarkedToFlashcards}
+                        disabled={savingToExistingDeck || (!selectedDeckId && !newDeckName.trim())}
+                        className="gap-2"
+                      >
+                        {savingToExistingDeck ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                        Lưu {bookmarkedQuestions.size} Câu
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           ) : (
             <Button
