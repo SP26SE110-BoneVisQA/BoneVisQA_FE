@@ -117,7 +117,6 @@ function pickRecentCaseThumbnailUrl(item: Record<string, unknown>): string | nul
   return null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function mapRecentCase(row: unknown): ExpertRecentCase | null {
   if (!row || typeof row !== 'object') return null;
   const item = row as Record<string, unknown>;

@@ -10,7 +10,6 @@ import QuickStatsCard from '@/components/expert/QuickStatsCard';
 import ReviewCard from '@/components/expert/ReviewCard';
 import CaseManagementCard from '@/components/expert/CaseManagementCard';
 import ExpertActivityPanel from '@/components/expert/dashboard/ExpertActivityPanel';
-import ExpertTeachingObjectives from '@/components/expert/ExpertTeachingObjectives';
 import {
   FolderOpen,
   CheckCircle,
@@ -410,10 +409,6 @@ export default function ExpertDashboardPage() {
               </div>
             </div>
 
-            {/* Teaching Objectives Section */}
-            <div className="mt-6">
-              <ExpertTeachingObjectives onError={(error) => toast.error(error)} />
-            </div>
           </>
         )}
       </div>
