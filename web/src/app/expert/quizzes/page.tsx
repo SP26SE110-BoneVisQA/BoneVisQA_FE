@@ -213,11 +213,6 @@ function QuizLibrarySection() {
                         <p className="line-clamp-2 break-words text-sm font-bold leading-snug text-card-foreground">
                           {quiz.title || 'Untitled quiz'}
                         </p>
-                        {quiz.isAiGenerated && (
-                          <span className="mt-1 inline-block rounded-full bg-purple-100 px-2 py-0.5 text-[9px] font-bold uppercase text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
-                            AI Generated
-                          </span>
-                        )}
                       </div>
                     </div>
                   </td>
