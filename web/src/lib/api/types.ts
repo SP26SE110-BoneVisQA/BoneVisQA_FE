@@ -553,6 +553,14 @@ export interface StudentQuizQuestion {
   optionB: string;
   optionC: string;
   optionD: string;
+  /** Hint - only shown in practice mode */
+  hint?: string | null;
+  /** Whether hints are allowed (based on quiz mode) */
+  hintAvailable?: boolean;
+  /** Correct answers for MultiSelect - JSON array like ["A", "C"] */
+  correctAnswers?: string | null;
+  /** Accepted answers for FillInBlank - JSON array */
+  acceptedAnswers?: string | null;
 }
 
 export interface StudentPracticeQuiz {
@@ -600,6 +608,8 @@ export interface AssignedQuizItem {
   createdAt?: string | null;
   /** True nếu quiz đã đóng HOẶC lecturer đã release đáp án. Sinh viên chỉ xem được đáp án khi field này = true */
   answersReleased?: boolean;
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number | null;
 }
 
 export interface QuizSessionDto {
@@ -607,9 +617,13 @@ export interface QuizSessionDto {
   quizId: string;
   title: string;
   topic: string | null;
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number | null;
   timeLimit?: number | null;
   /** Quiz closing time (ISO string) - used for auto-submit when time is up */
   closeTime?: string | null;
+  /** Whether hints are available for this quiz session */
+  allowHints?: boolean;
   questions: StudentSessionQuestion[];
 }
 
@@ -626,12 +640,24 @@ export interface StudentSessionQuestion {
   imageUrl?: string | null;
   essayAnswer?: string | null; // Model answer for essay questions (from backend)
   correctAnswer?: string | null; // Correct answer (only available after review/reveal)
+  /** Hint - only shown in practice mode */
+  hint?: string | null;
+  /** Whether hints are allowed (based on quiz mode) */
+  hintAvailable?: boolean;
+  /** Correct answers for MultiSelect - JSON array like ["A", "C"] */
+  correctAnswers?: string | null;
+  /** Accepted answers for FillInBlank - JSON array */
+  acceptedAnswers?: string | null;
 }
 
 export interface StudentSubmitQuestionDto {
   questionId: string;
   studentAnswer: string;
   essayAnswer?: string; // For essay-type questions
+  /** For MultiSelect - JSON array of selected answers like ["A", "C"] */
+  selectedAnswers?: string;
+  /** For FillInBlank - text answer */
+  textAnswer?: string;
 }
 
 export interface StudentQuizResultDto {
@@ -644,6 +670,73 @@ export interface StudentQuizResultDto {
   correctAnswers: number;
   /** Number of ungraded essay questions by the instructor. If > 0, the score may change. */
   ungradedEssayCount?: number | null;
+}
+
+/**
+ * ================================================================
+ * CẤU TRÚC DỮ LIỆU KẾT QUẢ QUIZ - StudentQuizResultDto
+ * ================================================================
+ * 
+ * DÙNG ĐỂ HIỂN THỊ ĐIỂM SAU KHI STUDENT NỘP BÀI
+ * 
+ * CÁC TRƯỜNG QUAN TRỌNG:
+ * 
+ * @score - Điểm phần trăm (0-100)
+ *   - Là điểm trên thang 100 (ví dụ: 85.5 nghĩa là 85.5%)
+ *   - Backend tính: tổng điểm = 100, chia đều cho các câu hỏi
+ *   - null = chưa có điểm (ví dụ: đang chờ lecturer chấm essay)
+ * 
+ * @passingScore - Ngưỡng để pass (ví dụ: 80 nghĩa là 80%)
+ *   - Điểm tối thiểu để được coi là PASSED
+ * 
+ * @passed - Kết quả pass/fail
+ *   - true = score >= passingScore
+ *   - false = score < passingScore
+ * 
+ * @correctAnswers - Số câu đúng
+ *   - Dùng để hiển thị "X/Y correct"
+ *   - CHỈ tính câu hỏi MCQ/TrueFalse/MultiSelect (không tính Essay)
+ * 
+ * @totalQuestions - Tổng số câu hỏi
+ *   - Bao gồm cả Essay
+ * 
+ * @ungradedEssayCount - Số câu Essay chưa được chấm
+ *   - Nếu > 0: điểm hiện tại CHƯA bao gồm điểm essay
+ *   - Điểm sẽ được cập nhật sau khi lecturer chấm xong
+ * 
+ * VÍ DỤ HIỂN THỊ:
+ *   Score: 85.0 /100 (màu xanh)
+ *   ✓ PASSED
+ *   Passing: 80%
+ *   3/4 MCQ correct
+ *   PASSED
+ */
+
+/** Question review item - for showing after quiz submission */
+export interface QuizReviewItem {
+  questionId: string;
+  questionText: string;
+  type?: string | null;
+  optionA?: string | null;
+  optionB?: string | null;
+  optionC?: string | null;
+  optionD?: string | null;
+  studentAnswer?: string | null;
+  essayAnswer?: string | null;
+  studentSelectedAnswers?: string | null; // MultiSelect
+  studentTextAnswer?: string | null; // FillInBlank
+  correctAnswer?: string | null;
+  correctAnswers?: string | null; // MultiSelect
+  acceptedAnswers?: string | null; // FillInBlank
+  isCorrect: boolean;
+  imageUrl?: string | null;
+  caseId?: string | null;
+  scoreAwarded?: number | null;
+  lecturerFeedback?: string | null;
+  isGraded: boolean;
+  maxScore: number;
+  explanation?: string | null;
+  hint?: string | null;
 }
 
 /** Distinguishes expert library case work vs student-upload Visual QA in history UI. */
@@ -861,6 +954,8 @@ export interface QuizDto {
   /** Deep classification - Pathology Category */
   pathologyCategoryId?: string | null;
   pathologyCategoryName?: string | null;
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number | null;
   /** Present when API returns aggregate question count. */
   questionCount?: number | null;
   quizName?: string | null;
@@ -931,6 +1026,8 @@ export interface CreateQuizRequest {
   classId: string;
   boneSpecialtyId?: string;
   pathologyCategoryId?: string;
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number;
 }
 
 export interface QuizQuestionDto {
@@ -947,6 +1044,11 @@ export interface QuizQuestionDto {
   optionD: string | null;
   correctAnswer: string | null;
   imageUrl?: string | null;
+  hint?: string | null;
+  explanation?: string | null;
+  correctAnswers?: string | null;
+  acceptedAnswers?: string | null;
+  maxScore?: number;
 }
 
 export interface ExpertQuizQuestion {
@@ -963,6 +1065,10 @@ export interface ExpertQuizQuestion {
   optionD: string | null;
   correctAnswer: string | null;
   imageUrl?: string | null;
+  hint?: string | null;
+  explanation?: string | null;
+  correctAnswers?: string | null;
+  acceptedAnswers?: string | null;
 }
 
 export interface CreateQuizQuestionRequest {
@@ -977,6 +1083,11 @@ export interface CreateQuizQuestionRequest {
   correctAnswer?: string;
   essayAnswer?: string;
   imageUrl?: string;
+  hint?: string;
+  explanation?: string;
+  correctAnswers?: string | string[];
+  acceptedAnswers?: string | string[];
+  maxScore?: number;
 }
 
 export interface UpdateQuizQuestionRequest {
@@ -989,6 +1100,11 @@ export interface UpdateQuizQuestionRequest {
   optionC?: string;
   optionD?: string;
   imageUrl?: string;
+  hint?: string;
+  explanation?: string;
+  correctAnswers?: string | string[];
+  acceptedAnswers?: string | string[];
+  maxScore?: number;
 }
 
 // ========== AI Quiz Types ==========

@@ -1,15 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   X,
   ZoomIn,
-  Pencil,
-  Layers,
   Trash2,
   Upload,
-  Image as ImageIcon,
-  CheckCircle2,
   Loader2,
   Info,
   PlusCircle,
@@ -32,15 +28,28 @@ interface QuestionEditorDialogProps {
   onSuccess?: () => void;
   draftMode?: boolean;
   onDraftSave?: (payload: CreateQuizQuestionRequest) => void;
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive. Used to show mode info in form. */
+  quizMode?: number | null;
 }
 
-const TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'MultipleChoice', label: 'Multiple Choice' },
-  { value: 'Annotation', label: 'Identification (Point)' },
-  { value: 'Essay', label: 'Essay' },
+const TYPE_OPTIONS: { value: string; label: string; description: string }[] = [
+  { value: 'MultipleChoice', label: 'Multiple Choice', description: 'Chọn 1 đáp án đúng (A, B, C, D)' },
+  { value: 'TrueFalse', label: 'True / False', description: 'Đúng hoặc Sai' },
+  { value: 'MultiSelect', label: 'Multi-Select', description: 'Chọn nhiều đáp án đúng' },
+  { value: 'FillInBlank', label: 'Fill in Blank', description: 'Điền vào chỗ trống' },
+  { value: 'Essay', label: 'Essay', description: 'Tự luận - Giảng viên chấm tay' },
 ];
 
-type OptionKey = 'A' | 'B' | 'C' | 'D';
+const QUIZ_MODE_LABELS: Record<number, { label: string; color: string; bg: string; border: string }> = {
+  1: { label: 'Exam Mode', color: 'text-red-700', bg: 'bg-red-100', border: 'border-red-300' },
+  2: { label: 'Practice Mode', color: 'text-green-700', bg: 'bg-green-100', border: 'border-green-300' },
+  3: { label: 'Adaptive Mode', color: 'text-purple-700', bg: 'bg-purple-100', border: 'border-purple-300' },
+};
+
+function getQuizModeDisplay(mode: number | null | undefined) {
+  if (mode == null) return null;
+  return QUIZ_MODE_LABELS[mode] ?? null;
+}
 
 export default function QuestionEditorDialog({
   open,
@@ -50,6 +59,7 @@ export default function QuestionEditorDialog({
   onSuccess,
   draftMode = false,
   onDraftSave,
+  quizMode,
 }: QuestionEditorDialogProps) {
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -68,6 +78,10 @@ export default function QuestionEditorDialog({
     optionD: string;
     correctAnswer: string;
     essayAnswer?: string;
+    hint?: string;
+    explanation?: string;
+    correctAnswers?: string;
+    acceptedAnswers?: string;
   }>({
     questionText: '',
     type: 'MultipleChoice',
@@ -77,26 +91,11 @@ export default function QuestionEditorDialog({
     optionD: '',
     correctAnswer: '',
     essayAnswer: '',
+    hint: '',
+    explanation: '',
+    correctAnswers: '',
+    acceptedAnswers: '',
   });
-
-  const [optionPoints, setOptionPoints] = useState<Record<OptionKey, number>>({
-    A: 10,
-    B: 0,
-    C: 0,
-    D: 0,
-  });
-
-  const syncPointsFromCorrect = useCallback((correct: string) => {
-    const c = (correct || 'A').toUpperCase().charAt(0) as OptionKey;
-    const keys: OptionKey[] = ['A', 'B', 'C', 'D'];
-    setOptionPoints((prev) => {
-      const next = { ...prev };
-      keys.forEach((k) => {
-        next[k] = k === c ? 10 : 0;
-      });
-      return next;
-    });
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -110,12 +109,15 @@ export default function QuestionEditorDialog({
         optionD: question.optionD || '',
         correctAnswer: (question.correctAnswer || 'A').toUpperCase().slice(0, 1),
         essayAnswer: (question as any).essayAnswer || (question as any).EssayAnswer || '',
+        hint: (question as any).hint || '',
+        explanation: (question as any).explanation || '',
+        correctAnswers: (question as any).correctAnswers || '',
+        acceptedAnswers: (question as any).acceptedAnswers || '',
       });
       const filled = [question.optionA, question.optionB, question.optionC, question.optionD].filter(
         (t) => (t || '').trim().length > 0,
       ).length;
       setVisibleMcCount(Math.min(4, Math.max(3, filled || 3)));
-      syncPointsFromCorrect(question.correctAnswer || 'A');
     } else {
       setFormData({
         questionText: '',
@@ -126,9 +128,12 @@ export default function QuestionEditorDialog({
         optionD: '',
         correctAnswer: 'A',
         essayAnswer: '',
+        hint: '',
+        explanation: '',
+        correctAnswers: '',
+        acceptedAnswers: '',
       });
       setVisibleMcCount(3);
-      setOptionPoints({ A: 10, B: 0, C: 0, D: 0 });
     }
     const qImg =
       question?.imageUrl ??
@@ -137,7 +142,7 @@ export default function QuestionEditorDialog({
     setImageUrl(qImg);
     setDifficulty('Medium');
     setError(null);
-  }, [question, open, syncPointsFromCorrect]);
+  }, [question, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -154,43 +159,59 @@ export default function QuestionEditorDialog({
     setError(null);
 
     try {
-      const basePayload = {
+      const isTrueFalse = formData.type === 'TrueFalse';
+      const isMultiSelect = formData.type === 'MultiSelect';
+      const isFillInBlank = formData.type === 'FillInBlank';
+
+      const parseMultiValue = (value: string | undefined | null): string | undefined => {
+        if (!value || !value.trim()) return undefined;
+        const arr = value.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+        return JSON.stringify(arr);
+      };
+
+      const basePayload: CreateQuizQuestionRequest = {
         quizId: quizId === 'temp' ? '' : quizId,
         questionText: formData.questionText,
         type: formData.type,
-        optionA: formData.optionA,
-        optionB: formData.optionB,
-        optionC: formData.type === 'MultipleChoice' ? formData.optionC : undefined,
-        optionD: formData.type === 'MultipleChoice' ? formData.optionD : undefined,
-        correctAnswer: formData.type === 'Essay' ? undefined : formData.correctAnswer,
+        optionA: isTrueFalse ? 'True' : formData.optionA,
+        optionB: isTrueFalse ? 'False' : formData.optionB,
+        optionC: isTrueFalse || isFillInBlank ? undefined : formData.optionC,
+        optionD: isTrueFalse || isFillInBlank ? undefined : formData.optionD,
+        correctAnswer: formData.type === 'Essay' || isMultiSelect || isFillInBlank ? undefined : formData.correctAnswer,
+        correctAnswers: isMultiSelect ? parseMultiValue(formData.correctAnswers) : undefined,
+        acceptedAnswers: isFillInBlank ? parseMultiValue(formData.acceptedAnswers) : undefined,
         essayAnswer: formData.type === 'Essay' ? formData.essayAnswer : undefined,
         imageUrl: imageUrl || undefined,
+        hint: formData.hint || undefined,
+        explanation: formData.explanation || undefined,
       };
 
       if (draftMode) {
-        const payload: CreateQuizQuestionRequest = basePayload;
-        onDraftSave?.(payload);
+        onDraftSave?.(basePayload);
         onSuccess?.();
         onClose();
         return;
       }
 
       if (question) {
-        const payload: UpdateQuizQuestionRequest = {
+        const updatePayload: UpdateQuizQuestionRequest = {
           questionText: formData.questionText,
           type: formData.type,
-          correctAnswer: formData.type === 'Essay' ? undefined : formData.correctAnswer,
-          optionA: formData.optionA,
-          optionB: formData.optionB,
-          optionC: formData.type === 'MultipleChoice' ? formData.optionC : undefined,
-          optionD: formData.type === 'MultipleChoice' ? formData.optionD : undefined,
+          correctAnswer: formData.type === 'Essay' || isMultiSelect || isFillInBlank ? undefined : formData.correctAnswer,
+          correctAnswers: isMultiSelect ? parseMultiValue(formData.correctAnswers) : undefined,
+          acceptedAnswers: isFillInBlank ? parseMultiValue(formData.acceptedAnswers) : undefined,
+          optionA: isTrueFalse ? 'True' : formData.optionA,
+          optionB: isTrueFalse ? 'False' : formData.optionB,
+          optionC: isTrueFalse || isFillInBlank ? undefined : formData.optionC,
+          optionD: isTrueFalse || isFillInBlank ? undefined : formData.optionD,
           essayAnswer: formData.type === 'Essay' ? formData.essayAnswer : undefined,
           imageUrl: imageUrl || undefined,
+          hint: formData.hint || undefined,
+          explanation: formData.explanation || undefined,
         };
-        await updateQuizQuestion(question.id, payload);
+        await updateQuizQuestion(question.id, updatePayload);
       } else {
-        const payload: CreateQuizQuestionRequest = basePayload;
-        await addQuizQuestion(payload);
+        await addQuizQuestion(basePayload);
       }
       onSuccess?.();
       onClose();
@@ -203,13 +224,15 @@ export default function QuestionEditorDialog({
 
   const isMc = formData.type === 'MultipleChoice';
   const isEssay = formData.type === 'Essay';
+  const isTrueFalse = formData.type === 'TrueFalse';
+  const isMultiSelect = formData.type === 'MultiSelect';
+  const isFillInBlank = formData.type === 'FillInBlank';
 
-  const mcKeys: OptionKey[] = ['A', 'B', 'C', 'D'].slice(0, visibleMcCount) as OptionKey[];
+  const mcKeys = ['A', 'B', 'C', 'D'].slice(0, visibleMcCount);
 
   const setCorrect = (key: string) => {
-    const k = key.toUpperCase().slice(0, 1) as OptionKey;
+    const k = key.toUpperCase().slice(0, 1);
     setFormData((prev) => ({ ...prev, correctAnswer: k }));
-    syncPointsFromCorrect(k);
   };
 
   const addMcRow = () => {
@@ -253,6 +276,7 @@ export default function QuestionEditorDialog({
   if (!open) return null;
 
   const title = question ? 'Edit Assessment Question' : 'Add Assessment Question';
+  const modeDisplay = getQuizModeDisplay(quizMode);
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
@@ -269,14 +293,21 @@ export default function QuestionEditorDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between px-10 py-8">
-          <div>
-            <h2
-              id="question-editor-title"
-              className="font-['Manrope',sans-serif] text-2xl font-extrabold tracking-tight text-[#191c1e]"
-            >
-              {title}
-            </h2>
-            <p className="mt-1 text-sm text-[#424752]">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <h2
+                id="question-editor-title"
+                className="font-['Manrope',sans-serif] text-2xl font-extrabold tracking-tight text-[#191c1e]"
+              >
+                {title}
+              </h2>
+              {modeDisplay && (
+                <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${modeDisplay.bg} ${modeDisplay.color} ${modeDisplay.border}`}>
+                  {modeDisplay.label}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-[#424752]">
               Configure clinical parameters and diagnostic visual aids.
             </p>
           </div>
@@ -305,7 +336,6 @@ export default function QuestionEditorDialog({
                 </label>
                 {imageUrl ? (
                   <div className="group relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl border-2 border-[#00478d]/30 bg-[#2d3133]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={resolveApiAssetUrl(imageUrl)}
                       alt="Uploaded diagnostic image"
@@ -403,11 +433,23 @@ export default function QuestionEditorDialog({
                       >
                         {TYPE_OPTIONS.map((t) => (
                           <option key={t.value} value={t.value}>
-                            {t.label}
+                            {t.label} - {t.description}
                           </option>
                         ))}
                       </select>
                       <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#727783]" />
+                    </div>
+                    <div className={`rounded-xl p-3 text-xs ${
+                      isTrueFalse ? 'bg-orange-50 text-orange-800 border border-orange-200' :
+                      isMultiSelect ? 'bg-blue-50 text-blue-800 border border-blue-200' :
+                      isFillInBlank ? 'bg-green-50 text-green-800 border border-green-200' :
+                      'bg-[#eceef0] text-[#727783]'
+                    }`}>
+                      {isTrueFalse && 'Chọn True hoặc False làm đáp án đúng'}
+                      {isMultiSelect && 'Chọn nhiều đáp án đúng (VD: A, C)'}
+                      {isFillInBlank && 'Sinh viên nhập text - có nhiều đáp án được chấp nhận'}
+                      {isMc && 'Chọn 1 đáp án đúng từ A, B, C, D'}
+                      {isEssay && 'Sinh viên viết bài - giảng viên chấm tay'}
                     </div>
                   </div>
                   <div className="space-y-3">
@@ -433,11 +475,131 @@ export default function QuestionEditorDialog({
                   </div>
                 </div>
 
+                {/* TRUE/FALSE Options */}
+                {isTrueFalse && (
+                  <div className="space-y-4">
+                    <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
+                      Correct Answer
+                    </label>
+                    <div className="flex gap-4">
+                      <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
+                        formData.correctAnswer === 'A'
+                          ? 'border-green-500 bg-green-50 text-green-800'
+                          : 'border-[#eceef0] bg-[#eceef0] text-[#424752] hover:border-green-300'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="correctTrueFalse"
+                          checked={formData.correctAnswer === 'A'}
+                          onChange={() => setFormData({ ...formData, correctAnswer: 'A' })}
+                          className="hidden"
+                        />
+                        <span className="text-lg font-bold">True</span>
+                        {formData.correctAnswer === 'A' && (
+                          <span className="ml-auto rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">Correct</span>
+                        )}
+                      </label>
+                      <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
+                        formData.correctAnswer === 'B'
+                          ? 'border-red-500 bg-red-50 text-red-800'
+                          : 'border-[#eceef0] bg-[#eceef0] text-[#424752] hover:border-red-300'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="correctTrueFalse"
+                          checked={formData.correctAnswer === 'B'}
+                          onChange={() => setFormData({ ...formData, correctAnswer: 'B' })}
+                          className="hidden"
+                        />
+                        <span className="text-lg font-bold">False</span>
+                        {formData.correctAnswer === 'B' && (
+                          <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">Correct</span>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* MULTI-SELECT Options */}
+                {isMultiSelect && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
+                        Answer Options
+                      </label>
+                      <span className="text-xs text-blue-600">Tick all correct answers below</span>
+                    </div>
+                    <div className="space-y-3">
+                      {(['A', 'B', 'C', 'D'] as const).map((key) => {
+                        const isCorrect = formData.correctAnswers?.includes(key) || false;
+                        return (
+                          <div
+                            key={key}
+                            className={`flex items-center gap-3 rounded-2xl border-2 p-4 transition-all ${
+                              isCorrect
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-[#eceef0] bg-[#eceef0]/50 hover:border-blue-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isCorrect}
+                              onChange={(e) => {
+                                const current = formData.correctAnswers ? formData.correctAnswers.split(',').map(s => s.trim()).filter(Boolean) : [];
+                                const newAnswers = e.target.checked
+                                  ? [...current, key]
+                                  : current.filter(k => k !== key);
+                                setFormData({ ...formData, correctAnswers: newAnswers.join(',') });
+                              }}
+                              className="h-5 w-5 rounded border-[#c2c6d4] text-blue-600 focus:ring-blue-500"
+                            />
+                            <input
+                              type="text"
+                              value={formData[`option${key}` as keyof typeof formData] as string || ''}
+                              onChange={(e) =>
+                                setFormData({ ...formData, [`option${key}` as keyof typeof formData]: e.target.value })
+                              }
+                              placeholder={`Option ${key}`}
+                              className="flex-1 border-0 bg-transparent p-0 text-sm font-medium outline-none focus:ring-0"
+                            />
+                            {isCorrect && (
+                              <span className="rounded-full bg-blue-500 px-2 py-0.5 text-xs font-bold text-white">Correct</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-[#727783]">
+                      Enter each option text, then tick the checkboxes next to correct answers.
+                    </p>
+                  </div>
+                )}
+
+                {/* FILL-IN-BLANK Options */}
+                {isFillInBlank && (
+                  <div className="space-y-4">
+                    <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
+                      Accepted Answers <span className="text-green-600 normal-case">(Case-insensitive)</span>
+                    </label>
+                    <textarea
+                      value={formData.acceptedAnswers || ''}
+                      onChange={(e) => setFormData({ ...formData, acceptedAnswers: e.target.value })}
+                      className="w-full resize-none rounded-xl border-0 bg-[#eceef0] p-4 text-sm outline-none focus:ring-2 focus:ring-[#00478d]/20"
+                      rows={3}
+                      placeholder={'Enter accepted answers, one per line, or comma-separated:\nVD: gãy xương\nfracture\nx-quang'}
+                    />
+                    <p className="text-xs text-[#727783]">
+                      Each line or comma-separated value is an accepted answer. Comparison is case-insensitive.
+                    </p>
+                  </div>
+                )}
+
+                {/* MULTIPLE CHOICE Options */}
                 {isMc && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-2">
                       <label className="text-xs font-bold uppercase tracking-widest text-[#727783]">
-                        Answer Options &amp; Weighting
+                        Answer Options
                       </label>
                       {visibleMcCount < 4 && (
                         <button
@@ -481,50 +643,10 @@ export default function QuestionEditorDialog({
                                 isCorrect ? 'text-[#191c1e]' : 'text-[#424752]'
                               }`}
                             />
-                            <div
-                              className={`flex shrink-0 items-center rounded-full bg-[#eceef0]/90 px-3 py-1.5 ${
-                                isCorrect ? '' : 'opacity-50'
-                              }`}
-                            >
-                              <input
-                                type="number"
-                                min={0}
-                                max={99}
-                                value={optionPoints[key]}
-                                onChange={(e) => {
-                                  const v = parseInt(e.target.value, 10);
-                                  setOptionPoints((p) => ({
-                                    ...p,
-                                    [key]: Number.isNaN(v) ? 0 : v,
-                                  }));
-                                }}
-                                className="w-8 border-0 bg-transparent p-0 text-center text-xs font-bold outline-none"
-                              />
-                              <span className="ml-1 text-[10px] font-bold uppercase text-[#727783]">
-                                pts
-                              </span>
-                            </div>
                           </div>
                         );
                       })}
                     </div>
-                  </div>
-                )}
-
-                {formData.type === 'Annotation' && (
-                  <div className="space-y-3">
-                    <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      Reference answer
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.correctAnswer}
-                      onChange={(e) =>
-                        setFormData({ ...formData, correctAnswer: e.target.value })
-                      }
-                      className="w-full rounded-xl border-0 bg-[#eceef0] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#00478d]/20"
-                      placeholder="Expected identification or label"
-                    />
                   </div>
                 )}
 
@@ -547,6 +669,42 @@ export default function QuestionEditorDialog({
                     </p>
                   </div>
                 )}
+
+                {/* HINT AND EXPLANATION SECTION - For Practice Mode */}
+                <div className="space-y-4 rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-amber-200 px-2 py-1 text-xs font-bold text-amber-900">PRACTICE MODE</span>
+                    <span className="text-xs text-amber-800">Hint và Explanation chỉ hiện khi quiz ở Practice Mode</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#727783]">
+                      <span className="rounded bg-amber-200 px-2 py-0.5 text-amber-900">HINT</span>
+                      Gợi ý cho sinh viên (tùy chọn)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.hint || ''}
+                      onChange={(e) => setFormData({ ...formData, hint: e.target.value })}
+                      className="w-full rounded-xl border-0 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                      placeholder="VD: Xem xét kỹ vị trí gãy trên hình X-ray..."
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#727783]">
+                      <span className="rounded bg-blue-200 px-2 py-0.5 text-blue-900">EXPLANATION</span>
+                      Giải thích đáp án đúng (tùy chọn)
+                    </label>
+                    <textarea
+                      value={formData.explanation || ''}
+                      onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
+                      className="w-full resize-none rounded-xl border-0 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                      rows={3}
+                      placeholder="VD: Đáp án đúng là A vì xương đùi gãy ở 1/3 giữa là phổ biến nhất do..."
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

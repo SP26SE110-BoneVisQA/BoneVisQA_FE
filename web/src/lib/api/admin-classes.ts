@@ -26,22 +26,6 @@ export interface AdminClassModel {
   classSpecialtyCode?: string | null;
   focusLevel?: string | null;
   targetStudentLevel?: string | null;
-
-  // Expert Specialties
-  expertSpecialties?: ExpertSpecialtyInfo[];
-}
-
-export interface ExpertSpecialtyInfo {
-  id: string;
-  boneSpecialtyId: string;
-  boneSpecialtyName?: string | null;
-  boneSpecialtyCode?: string | null;
-  pathologyCategoryId?: string | null;
-  pathologyCategoryName?: string | null;
-  proficiencyLevel: number;
-  yearsExperience?: number | null;
-  certifications?: string | null;
-  isPrimary: boolean;
 }
 
 export interface ClassEnrollment {
@@ -146,34 +130,7 @@ export function normalizeAdminClassRow(item: unknown): AdminClassModel | null {
     classSpecialtyCode: r.classSpecialtyCode != null ? String(r.classSpecialtyCode) : r.ClassSpecialtyCode != null ? String(r.ClassSpecialtyCode) : null,
     focusLevel: r.focusLevel != null ? String(r.focusLevel) : r.FocusLevel != null ? String(r.FocusLevel) : null,
     targetStudentLevel: r.targetStudentLevel != null ? String(r.targetStudentLevel) : r.TargetStudentLevel != null ? String(r.TargetStudentLevel) : null,
-
-    // Expert Specialties
-    expertSpecialties: normalizeExpertSpecialties(r.expertSpecialties ?? r.ExpertSpecialties),
   };
-}
-
-function normalizeExpertSpecialties(data: unknown): ExpertSpecialtyInfo[] {
-  if (!data || !Array.isArray(data)) return [];
-  const result: ExpertSpecialtyInfo[] = [];
-  for (const item of data) {
-    if (!item || typeof item !== 'object') continue;
-    const s = item as Record<string, unknown>;
-    const id = String(s.id ?? s.Id ?? '').trim();
-    if (!id) continue;
-    result.push({
-      id,
-      boneSpecialtyId: String(s.boneSpecialtyId ?? s.BoneSpecialtyId ?? ''),
-      boneSpecialtyName: s.boneSpecialtyName != null ? String(s.boneSpecialtyName) : s.BoneSpecialtyName != null ? String(s.BoneSpecialtyName) : null,
-      boneSpecialtyCode: s.boneSpecialtyCode != null ? String(s.boneSpecialtyCode) : s.BoneSpecialtyCode != null ? String(s.BoneSpecialtyCode) : null,
-      pathologyCategoryId: s.pathologyCategoryId != null ? String(s.pathologyCategoryId) : s.PathologyCategoryId != null ? String(s.PathologyCategoryId) : null,
-      pathologyCategoryName: s.pathologyCategoryName != null ? String(s.pathologyCategoryName) : s.PathologyCategoryName != null ? String(s.PathologyCategoryName) : null,
-      proficiencyLevel: Number(s.proficiencyLevel ?? s.ProficiencyLevel ?? 1),
-      yearsExperience: s.yearsExperience != null ? Number(s.yearsExperience) : s.YearsExperience != null ? Number(s.YearsExperience) : null,
-      certifications: s.certifications != null ? String(s.certifications) : s.Certifications != null ? String(s.Certifications) : null,
-      isPrimary: Boolean(s.isPrimary ?? s.IsPrimary ?? false),
-    });
-  }
-  return result;
 }
 
 // ── READ CLASSES ────────────────────────────────────────────────────────────

@@ -30,7 +30,7 @@ import { Button } from '@/components/ui/button';
 
 type StatusFilter = 'all' | 'approved' | 'unapproved' | 'active' | 'inactive';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 // Filter options
 const LOCATION_OPTIONS = ['All', 'Upper Limb', 'Lower Limb', 'Spine', 'Pelvis', 'Shoulder', 'Elbow', 'Wrist', 'Hand', 'Hip', 'Knee', 'Ankle', 'Foot'];

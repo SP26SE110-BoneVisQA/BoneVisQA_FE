@@ -80,6 +80,10 @@ export default function QuizAttemptReviewPage({
   const [saving, setSaving] = useState(false);
   const [classId, setClassId] = useState<string>('');
 
+  // Computed points per question (new scoring system: 100 / total questions)
+  const totalQuestions = detail?.questions?.length ?? 0;
+  const pointsPerQuestion = totalQuestions > 0 ? 100 / totalQuestions : 1;
+
   // Load quiz to get classId first
   useEffect(() => {
     async function loadQuiz() {
@@ -127,16 +131,24 @@ export default function QuizAttemptReviewPage({
   const totalQ = detail?.questions.length ?? 0;
   const isEssay = currentQ?.type?.toLowerCase() === 'essay';
 
-  // Recalculate score in edit mode
+  // Recalculate score in edit mode (new system: total always 100, each question worth 100/totalQuestions)
   useEffect(() => {
     if (!editMode || !detail) return;
-    const totalPossible = detail.questions.reduce((sum, q) => sum + q.maxScore, 0);
-    const totalEarned = editAnswers.reduce((sum, a, idx) => {
-      const q = detail.questions[idx];
-      return sum + (a.scoreAwarded ?? (q.maxScore * (a.isCorrect ? 1 : 0)));
+    const totalQuestions = detail.questions.length;
+    const pointsPerQ = totalQuestions > 0 ? 100 / totalQuestions : 1;
+    const totalEarned = editAnswers.reduce((sum, a) => {
+      // MC/TF: full points if correct, 0 if wrong
+      // Essay: use scoreAwarded directly
+      if (a.isCorrect === true) {
+        return sum + pointsPerQ;
+      } else if (a.isCorrect === false) {
+        return sum; // 0 for wrong MC
+      } else {
+        // Essay or not graded
+        return sum + (a.scoreAwarded ?? 0);
+      }
     }, 0);
-    const newPct = totalPossible > 0 ? Math.round((totalEarned / totalPossible) * 100 * 10) / 10 : 0;
-    setEditScore(newPct);
+    setEditScore(totalEarned);
   }, [editAnswers, detail, editMode]);
 
   const updateAnswer = useCallback((idx: number, updates: Partial<UpdateAnswerDto>) => {
@@ -454,8 +466,7 @@ export default function QuizAttemptReviewPage({
                         <button
                           type="button"
                           onClick={() => {
-                            const maxScore = currentQ?.maxScore ?? 1;
-                            updateAnswer(currentIndex, { isCorrect: true, scoreAwarded: maxScore, isGraded: true });
+                            updateAnswer(currentIndex, { isCorrect: true, scoreAwarded: pointsPerQuestion, isGraded: true });
                           }}
                           className={`flex-1 py-2 rounded-md border-2 font-medium text-xs transition-all ${
                             currentAnswer.isCorrect === true
@@ -483,18 +494,23 @@ export default function QuizAttemptReviewPage({
                   {/* Manual Score Input */}
                   <div>
                     <label className="text-[10px] font-medium text-muted-foreground block mb-1">
-                      Points (max: {currentQ?.maxScore ?? 1})
+                      Points (max: {pointsPerQuestion.toFixed(1)})
                     </label>
                     <input
                       type="number"
                       min={0}
-                      max={currentQ?.maxScore ?? 1}
+                      max={pointsPerQuestion}
                       value={currentAnswer.scoreAwarded ?? ''}
                       onChange={(e) => {
-                        const val = e.target.value ? Number(e.target.value) : null;
+                        const rawVal = e.target.value;
+                        let val = rawVal ? Number(rawVal) : null;
+                        // Clamp to valid range
+                        if (val !== null) {
+                          val = Math.max(0, Math.min(val, pointsPerQuestion));
+                        }
                         updateAnswer(currentIndex, { 
                           scoreAwarded: val,
-                          isGraded: val !== null && val !== undefined
+                          isGraded: val !== null
                         });
                       }}
                       className="w-full h-9 rounded-md border border-border px-3 text-center font-medium text-sm"
@@ -520,14 +536,14 @@ export default function QuizAttemptReviewPage({
                       <div className="flex gap-2">
                         <button
                           type="button"
-                          onClick={() => updateAnswer(currentIndex, { scoreAwarded: currentQ?.maxScore ?? 1, isGraded: true })}
+                          onClick={() => updateAnswer(currentIndex, { scoreAwarded: pointsPerQuestion, isGraded: true })}
                           className="flex-1 py-2 rounded-lg border border-success/50 bg-success/5 text-success text-sm font-medium hover:bg-success/10 transition-colors"
                         >
                           Full marks
                         </button>
                         <button
                           type="button"
-                          onClick={() => updateAnswer(currentIndex, { scoreAwarded: Math.floor((currentQ?.maxScore ?? 1) / 2), isGraded: true })}
+                          onClick={() => updateAnswer(currentIndex, { scoreAwarded: Math.floor(pointsPerQuestion / 2), isGraded: true })}
                           className="flex-1 py-2 rounded-lg border border-warning/50 bg-warning/5 text-warning text-sm font-medium hover:bg-warning/10 transition-colors"
                         >
                           Half

@@ -39,6 +39,7 @@ import {
   Target,
   BrainCircuit,
   Stethoscope,
+  Lightbulb,
 } from 'lucide-react';
 
 // Organized topic structure with categories
@@ -84,6 +85,8 @@ type StudentQuizDraft = {
   topic: string;
   difficulty: string;
   answers: Record<string, string>;
+  multiSelectAnswers: Record<string, string[]>; // For MultiSelect questions
+  textAnswers: Record<string, string>; // For FillInBlank questions
   searchTerm: string;
   page: number;
   questionCount: number;
@@ -95,6 +98,8 @@ const EMPTY_QUIZ_DRAFT: StudentQuizDraft = {
   topic: allTopics[0],
   difficulty: '',
   answers: {},
+  multiSelectAnswers: {},
+  textAnswers: {},
   searchTerm: '',
   page: 1,
   questionCount: 5,
@@ -128,6 +133,9 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
   // Quiz state
   const [quiz, setQuiz] = useState<StudentPracticeQuiz | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>(quizDraft.answers || {});
+  const [multiSelectAnswers, setMultiSelectAnswers] = useState<Record<string, string[]>>(quizDraft.multiSelectAnswers || {});
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>(quizDraft.textAnswers || {});
+  const [shownHints, setShownHints] = useState<Record<string, boolean>>({});
   const [result, setResult] = useState<StudentQuizSubmissionResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -327,6 +335,9 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
     setQuiz(null);
     setAiQuestions([]);
     setAnswers({});
+    setMultiSelectAnswers({});
+    setTextAnswers({});
+    setShownHints({});
     setResult(null);
     setPage(1);
     clearQuizDraft();
@@ -337,13 +348,15 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
       topic,
       difficulty,
       answers,
+      multiSelectAnswers,
+      textAnswers,
       searchTerm,
       page,
       questionCount,
       boneSpecialtyId: selectedBoneSpecialty,
       pathologyCategoryId: selectedPathologyCategory,
     });
-  }, [answers, difficulty, page, questionCount, searchTerm, setQuizDraft, topic, selectedBoneSpecialty, selectedPathologyCategory]);
+  }, [answers, multiSelectAnswers, textAnswers, difficulty, page, questionCount, searchTerm, setQuizDraft, topic, selectedBoneSpecialty, selectedPathologyCategory]);
 
   return (
     <div className={embedded ? '' : 'min-h-screen'}>
@@ -756,12 +769,15 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
           ) : quiz ? (
             <div className="space-y-4">
               {quiz.questions.map((question, index) => {
-                const options = [
-                  { key: 'A', value: question.optionA },
-                  { key: 'B', value: question.optionB },
-                  { key: 'C', value: question.optionC },
-                  { key: 'D', value: question.optionD },
-                ];
+                const questionType = question.type?.toLowerCase() || '';
+                const isTrueFalse = questionType === 'truefalse' || questionType === 'true/false';
+                const isMultiSelect = questionType === 'multiselect' || questionType === 'multi-select';
+                const isFillInBlank = questionType === 'fillinblank' || questionType === 'fill-in-blank';
+                const isEssay = questionType === 'essay';
+                const showHint = question.hintAvailable && question.hint && !shownHints[question.questionId];
+
+                // Helper to check if an option is selected in MultiSelect
+                const isOptionSelected = (key: string) => multiSelectAnswers[question.questionId]?.includes(key) || false;
 
                 return (
                   <div
@@ -769,20 +785,19 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                     className="rounded-2xl border border-border bg-background p-6 shadow-sm"
                   >
                     <div className="mb-4 flex items-center justify-between gap-3">
-                      <div>
+                      <div className="flex-1">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
                           Question {index + 1}
+                          {isTrueFalse && <span className="ml-2 rounded bg-orange-100 px-2 py-0.5 text-orange-700">True/False</span>}
+                          {isMultiSelect && <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-blue-700">Multi-Select</span>}
+                          {isFillInBlank && <span className="ml-2 rounded bg-green-100 px-2 py-0.5 text-green-700">Fill in Blank</span>}
+                          {isEssay && <span className="ml-2 rounded bg-purple-100 px-2 py-0.5 text-purple-700">Essay</span>}
                         </p>
                         <h2 className="mt-2 font-['Manrope',sans-serif] text-base font-semibold text-card-foreground">
                           {question.questionText}
                         </h2>
                       </div>
                       <div className="flex items-center gap-2">
-                        {question.type && (
-                          <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-primary">
-                            {question.type}
-                          </span>
-                        )}
                         {question.imageUrl && (
                           <button
                             type="button"
@@ -805,31 +820,170 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                         />
                       </div>
                     )}
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {options.map((option) => {
-                        const isSelected = answers[question.questionId] === option.key;
-                        return (
+
+                    {/* Hint Button - Show button first, then show hint */}
+                    {question.hintAvailable && question.hint && (
+                      <div className="mb-4">
+                        {!shownHints[question.questionId] ? (
                           <button
-                            key={option.key}
                             type="button"
-                            onClick={() =>
-                              setAnswers((prev) => ({
-                                ...prev,
-                                [question.questionId]: option.key,
-                              }))
-                            }
-                            className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                              isSelected
-                                ? 'border-primary bg-primary/10 text-card-foreground ring-1 ring-primary/30'
-                                : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
-                            }`}
+                            onClick={() => setShownHints(prev => ({ ...prev, [question.questionId]: true }))}
+                            className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700 hover:bg-amber-100"
                           >
-                            <span className="mr-2 font-semibold text-primary">{option.key}.</span>
-                            {option.value}
+                            <Lightbulb className="h-4 w-4" />
+                            Show Hint
                           </button>
-                        );
-                      })}
-                    </div>
+                        ) : (
+                          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                            <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                            <div>
+                              <span className="mb-1 block font-bold">Hint:</span>
+                              {question.hint}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TRUE/FALSE Questions */}
+                    {isTrueFalse && (
+                      <div className="flex gap-4">
+                        {(['True', 'False'] as const).map((opt) => {
+                          const isSelected = answers[question.questionId] === opt;
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() =>
+                                setAnswers((prev) => ({
+                                  ...prev,
+                                  [question.questionId]: opt,
+                                }))
+                              }
+                              className={`flex flex-1 items-center justify-center rounded-xl border px-6 py-4 text-base font-semibold transition-all ${
+                                isSelected
+                                  ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/30'
+                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
+                              }`}
+                            >
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* MULTI-SELECT Questions */}
+                    {isMultiSelect && (
+                      <div className="space-y-3">
+                        <p className="text-xs text-muted-foreground">Select all that apply:</p>
+                        {(['A', 'B', 'C', 'D'] as const).map((key) => {
+                          const optionValue = question[`option${key}` as keyof typeof question];
+                          if (!optionValue) return null;
+                          const isSelected = isOptionSelected(key);
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() =>
+                                setMultiSelectAnswers((prev) => {
+                                  const current = prev[question.questionId] || [];
+                                  const newAnswers = isSelected
+                                    ? current.filter((k) => k !== key)
+                                    : [...current, key];
+                                  return { ...prev, [question.questionId]: newAnswers };
+                                })
+                              }
+                              className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                                isSelected
+                                  ? 'border-primary bg-primary/10 text-card-foreground ring-2 ring-primary/30'
+                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
+                              }`}
+                            >
+                              <div className={`flex h-5 w-5 items-center justify-center rounded border-2 ${
+                                isSelected ? 'border-primary bg-primary' : 'border-muted-foreground/30'
+                              }`}>
+                                {isSelected && (
+                                  <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                              <span className="font-semibold text-primary">{key}.</span>
+                              <span>{optionValue}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* FILL-IN-BLANK Questions */}
+                    {isFillInBlank && (
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Type your answer:</label>
+                        <Input
+                          type="text"
+                          value={textAnswers[question.questionId] || ''}
+                          onChange={(e) =>
+                            setTextAnswers((prev) => ({
+                              ...prev,
+                              [question.questionId]: e.target.value,
+                            }))
+                          }
+                          placeholder="Enter your answer..."
+                          className="rounded-xl border-border bg-background/70 px-4 py-3"
+                        />
+                      </div>
+                    )}
+
+                    {/* ESSAY Questions */}
+                    {isEssay && (
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Your answer:</label>
+                        <textarea
+                          value={textAnswers[question.questionId] || ''}
+                          onChange={(e) =>
+                            setTextAnswers((prev) => ({
+                              ...prev,
+                              [question.questionId]: e.target.value,
+                            }))
+                          }
+                          placeholder="Type your essay answer..."
+                          className="min-h-[150px] w-full rounded-xl border border-border bg-background/70 px-4 py-3 text-sm"
+                        />
+                      </div>
+                    )}
+
+                    {/* MULTIPLE CHOICE (default) */}
+                    {!isTrueFalse && !isMultiSelect && !isFillInBlank && !isEssay && (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {(['A', 'B', 'C', 'D'] as const).map((key) => {
+                          const optionValue = question[`option${key}` as keyof typeof question];
+                          if (!optionValue) return null;
+                          const isSelected = answers[question.questionId] === key;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() =>
+                                setAnswers((prev) => ({
+                                  ...prev,
+                                  [question.questionId]: key,
+                                }))
+                              }
+                              className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                                isSelected
+                                  ? 'border-primary bg-primary/10 text-card-foreground ring-1 ring-primary/30'
+                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
+                              }`}
+                            >
+                              <span className="mr-2 font-semibold text-primary">{key}.</span>
+                              {optionValue}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}

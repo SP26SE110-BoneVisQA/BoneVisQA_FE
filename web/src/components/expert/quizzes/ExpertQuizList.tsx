@@ -19,9 +19,22 @@ import {
   X,
   Loader2,
   AlertCircle,
+  Brain,
 } from 'lucide-react';
 
 type QuizStatus = 'Active' | 'Draft' | 'Completed';
+
+const QUIZ_MODE_LABELS: Record<number, string> = {
+  1: 'Exam',
+  2: 'Practice',
+  3: 'Adaptive',
+};
+
+const QUIZ_MODE_COLORS: Record<number, string> = {
+  1: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  2: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  3: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+};
 
 interface EnrichedQuiz extends ExpertQuiz {
   status: QuizStatus;
@@ -268,6 +281,7 @@ export default function ExpertQuizList({ onEditQuiz, onCreateQuiz, onRefresh }: 
               <tr className="bg-muted/40">
                 <th className="px-3 py-4 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">Quiz Title</th>
                 <th className="px-3 py-4 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">Topic</th>
+                <th className="px-2 py-4 text-center text-xs font-bold uppercase tracking-wide text-muted-foreground">Mode</th>
                 <th className="px-2 py-4 text-center text-xs font-bold uppercase tracking-wide text-muted-foreground">Difficulty</th>
                 <th className="px-2 py-4 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">Status</th>
                 <th className="px-3 py-4 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">Time / Pass</th>
@@ -278,7 +292,7 @@ export default function ExpertQuizList({ onEditQuiz, onCreateQuiz, onRefresh }: 
             <tbody className="divide-y divide-border">
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-20 text-center">
+                  <td colSpan={8} className="px-4 py-20 text-center">
                     <div className="flex flex-col items-center gap-4">
                       <ClipboardList className="h-12 w-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">No quizzes found.</p>
@@ -312,6 +326,12 @@ export default function ExpertQuizList({ onEditQuiz, onCreateQuiz, onRefresh }: 
                     <td className="px-3 py-4">
                       <span className="inline-block max-w-full break-words rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                         {quiz.topic || '—'}
+                      </span>
+                    </td>
+                    <td className="px-2 py-4 text-center">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${QUIZ_MODE_COLORS[quiz.quizMode ?? 1] || QUIZ_MODE_COLORS[1]}`}>
+                        <Brain className="h-3 w-3" />
+                        {QUIZ_MODE_LABELS[quiz.quizMode ?? 1] || 'Exam'}
                       </span>
                     </td>
                     <td className="px-2 py-4 text-center">

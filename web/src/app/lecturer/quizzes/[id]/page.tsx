@@ -54,7 +54,6 @@ function flattenBoneSpecialties(tree: BoneSpecialtyTreeDto[], level = 0): (BoneS
 
 const QUESTIONS_PER_PAGE = 3;
 const TOPIC_ROTATION = ['Trauma', 'Imaging', 'Joints'] as const;
-const POINTS_ROTATION = [10, 15, 5] as const;
 
 const CLASSIFICATION_OPTIONS = [
   'Resident Year 1',
@@ -121,6 +120,9 @@ export default function QuizDetailPage() {
   const [difficulty, setDifficulty] = useState('Medium');
   const [classification, setClassification] = useState<string>('Resident Year 1');
 
+  // Quiz Mode state: 1=Exam, 2=Practice, 3=Adaptive
+  const [quizMode, setQuizMode] = useState<number>(1);
+
   // Deep classification state
   const [boneSpecialties, setBoneSpecialties] = useState<BoneSpecialtyTreeDto[]>([]);
   const [flatBoneSpecialties, setFlatBoneSpecialties] = useState<(BoneSpecialtyTreeDto & { level: number })[]>([]);
@@ -133,6 +135,7 @@ export default function QuizDetailPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<QuizQuestionDto | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [lastEditedQuestionId, setLastEditedQuestionId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [classStats, setClassStats] = useState<ClassStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -145,7 +148,7 @@ export default function QuizDetailPage() {
   } | null>(null);
   const [deletingQuestion, setDeletingQuestion] = useState(false);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options?: { preserveQuestionId?: string }) => {
     // Validate quizId format
     if (!quizId) {
       setLoading(false);
@@ -175,6 +178,16 @@ export default function QuizDetailPage() {
         classificationApi.getPathologyCategories(),
       ]);
       setQuiz(quizData);
+
+      // Preserve page position for edited questions
+      if (options?.preserveQuestionId) {
+        const questionIndex = questionsData.findIndex(q => q.id === options.preserveQuestionId);
+        if (questionIndex !== -1) {
+          const newPage = Math.max(1, Math.ceil((questionIndex + 1) / QUESTIONS_PER_PAGE));
+          setCurrentPage(newPage);
+        }
+      }
+
       setQuestions(questionsData);
       setClasses(classesData);
       setBoneSpecialties(specialtiesTree);
@@ -200,6 +213,8 @@ export default function QuizDetailPage() {
       if (quizData.pathologyCategoryId) {
         setPathologyCategoryId(quizData.pathologyCategoryId);
       }
+      // Load Quiz Mode
+      setQuizMode(quizData.quizMode ?? 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load quiz');
     } finally {
@@ -253,6 +268,7 @@ export default function QuizDetailPage() {
         classification: classification || null,
         boneSpecialtyId: boneSpecialtyId || null,
         pathologyCategoryId: pathologyCategoryId || null,
+        quizMode: quizMode,
       });
       setQuiz(updated);
       if (selectedClassId && selectedClassId !== originalClassId) {
@@ -287,6 +303,7 @@ export default function QuizDetailPage() {
     console.log('[page.tsx] handleEditQuestion called with:', question);
     console.log('[page.tsx] question.imageUrl:', question.imageUrl);
     setEditingQuestion(question);
+    setLastEditedQuestionId(question.id);
     setEditorOpen(true);
   };
 
@@ -312,11 +329,12 @@ export default function QuizDetailPage() {
 
   const handleAddQuestion = () => {
     setEditingQuestion(null);
+    setLastEditedQuestionId(null);
     setEditorOpen(true);
   };
 
   const handleQuestionSuccess = () => {
-    loadData();
+    loadData(lastEditedQuestionId ? { preserveQuestionId: lastEditedQuestionId } : undefined);
   };
 
   const handleImportQuestions = async (parsed: ParsedQuestion[]) => {
@@ -420,7 +438,7 @@ export default function QuizDetailPage() {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="rounded-2xl border border-border/10 bg-card p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -456,6 +474,36 @@ export default function QuizDetailPage() {
           </div>
           <p className="text-xs font-medium text-muted-foreground">Time Limit</p>
           <p className="text-xl font-bold text-card-foreground">{timeLimit || '—'} min</p>
+        </div>
+        {/* Quiz Mode Badge */}
+        <div className={`rounded-2xl border p-4 shadow-sm ${
+          quizMode === 2 ? 'border-green-300 bg-green-50' :
+          quizMode === 3 ? 'border-purple-300 bg-purple-50' :
+          'border-red-300 bg-red-50'
+        }`}>
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+              quizMode === 2 ? 'bg-green-100' :
+              quizMode === 3 ? 'bg-purple-100' :
+              'bg-red-100'
+            }`}>
+              <span className={`text-xs font-bold ${
+                quizMode === 2 ? 'text-green-600' :
+                quizMode === 3 ? 'text-purple-600' :
+                'text-red-600'
+              }`}>
+                {quizMode === 1 ? 'EX' : quizMode === 2 ? 'PR' : 'AD'}
+              </span>
+            </div>
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">Quiz Mode</p>
+          <p className={`text-xl font-bold ${
+            quizMode === 2 ? 'text-green-600' :
+            quizMode === 3 ? 'text-purple-600' :
+            'text-red-600'
+          }`}>
+            {quizMode === 1 ? 'Exam' : quizMode === 2 ? 'Practice' : 'Adaptive'}
+          </p>
         </div>
       </div>
 
@@ -570,6 +618,31 @@ export default function QuizDetailPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+              {/* Quiz Mode */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">Quiz Mode</label>
+                <div className="relative">
+                  <select
+                    value={quizMode}
+                    onChange={(e) => setQuizMode(parseInt(e.target.value, 10))}
+                    className={`w-full cursor-pointer appearance-none rounded-lg border px-3 py-2 text-xs outline-none transition-all focus:ring-2 focus:ring-primary/20 ${
+                      quizMode === 2 ? 'border-green-400 bg-green-50 text-green-800' :
+                      quizMode === 3 ? 'border-purple-400 bg-purple-50 text-purple-800' :
+                      'border-border bg-muted/50 text-card-foreground'
+                    }`}
+                  >
+                    <option value={1}>Exam - Thi cuối kỳ, không gợi ý</option>
+                    <option value={2}>Practice - Luyện tập, có gợi ý & giải thích</option>
+                    <option value={3}>Adaptive - Độ khó tự điều chỉnh</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  {quizMode === 1 && 'Chế độ thi: không hiển thị gợi ý, không giải thích đáp án'}
+                  {quizMode === 2 && 'Chế độ luyện tập: cho phép xem gợi ý (Hint) và giải thích (Explanation)'}
+                  {quizMode === 3 && 'Chế độ thích ứng: điều chỉnh độ khó theo năng lực sinh viên'}
+                </p>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">Topic</label>
@@ -766,7 +839,6 @@ export default function QuizDetailPage() {
                         question={q}
                         variant="curated"
                         topicCategory={TOPIC_ROTATION[idx % TOPIC_ROTATION.length]}
-                        points={POINTS_ROTATION[idx % POINTS_ROTATION.length]}
                         onEdit={handleEditQuestion}
                         onDelete={openDeleteQuestionDialog}
                       />
@@ -836,10 +908,12 @@ export default function QuizDetailPage() {
         onClose={() => {
           setEditorOpen(false);
           setEditingQuestion(null);
+          setLastEditedQuestionId(null);
         }}
         quizId={quizId}
         question={editingQuestion}
         onSuccess={handleQuestionSuccess}
+        quizMode={quiz?.quizMode}
       />
 
       <QuestionImportDialog

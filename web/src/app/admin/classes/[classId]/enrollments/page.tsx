@@ -28,7 +28,6 @@ import {
   type ClassEnrollment,
 } from '@/lib/api/admin-classes';
 import { fetchAdminUsers } from '@/lib/api/admin-users';
-import { expertSpecialtyApi, type ExpertSpecialtyDto } from '@/lib/api/expert-specialty';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import Header from '@/components/Header';
@@ -51,15 +50,15 @@ function isStudentEnrollmentRow(e: ClassEnrollment): boolean {
 // Helper to get expert specialties by expert ID
 function getExpertSpecialties(
   expertId: string,
-  allSpecialties: ExpertSpecialtyDto[]
-): ExpertSpecialtyDto[] {
+  allSpecialties: { expertId: string; boneSpecialtyName?: string | null; isPrimary: boolean }[]
+): { expertId: string; boneSpecialtyName?: string | null; isPrimary: boolean }[] {
   return allSpecialties.filter((s) => s.expertId === expertId);
 }
 
 // Helper to get primary specialty name
 function getPrimarySpecialtyName(
   expertId: string,
-  allSpecialties: ExpertSpecialtyDto[]
+  allSpecialties: { expertId: string; boneSpecialtyName?: string | null; isPrimary: boolean }[]
 ): string | null {
   const specs = getExpertSpecialties(expertId, allSpecialties);
   const primary = specs.find((s) => s.isPrimary) || specs[0];
@@ -69,7 +68,7 @@ function getPrimarySpecialtyName(
 // Helper to get all specialty names for an expert
 function getAllSpecialtyNames(
   expertId: string,
-  allSpecialties: ExpertSpecialtyDto[]
+  allSpecialties: { expertId: string; boneSpecialtyName?: string | null; isPrimary: boolean }[]
 ): string[] {
   const specs = getExpertSpecialties(expertId, allSpecialties);
   return specs.map((s) => s.boneSpecialtyName).filter(Boolean) as string[];
@@ -105,14 +104,8 @@ export default function ClassEnrollmentsPage() {
     queryFn: fetchAdminUsers,
   });
 
-  // Fetch expert specialties for displaying in the UI
-  const expertSpecialtiesQuery = useQuery({
-    queryKey: ['admin', 'expert-specialties'],
-    queryFn: expertSpecialtyApi.getAllSpecialties,
-  });
-
   const roster = classDetailQuery.data ?? ({} as AdminClassModel);
-  const loading = enrollmentsQuery.isPending || usersQuery.isPending || classDetailQuery.isPending || expertSpecialtiesQuery.isPending;
+  const loading = enrollmentsQuery.isPending || usersQuery.isPending || classDetailQuery.isPending;
 
   const classEnrollments: ClassEnrollment[] = enrollmentsQuery.data ?? [];
 
@@ -144,7 +137,7 @@ export default function ClassEnrollmentsPage() {
   const expertDisplayName =
     expertEnrollment?.expertName?.trim() || roster.expertName?.trim() || roster.expertEmail || null;
 
-  const expertSpecialties = expertSpecialtiesQuery.data ?? [];
+  const expertSpecialties: { expertId: string; boneSpecialtyName?: string | null; isPrimary: boolean }[] = [];
 
   const availableUsers = useMemo(() => {
     let users = usersQuery.data ?? [];
@@ -406,11 +399,7 @@ export default function ClassEnrollmentsPage() {
                                   </span>
                                 );
                               })
-                            ) : (
-                              <span className="text-xs text-muted-foreground italic">
-                                No specialties registered
-                              </span>
-                            )}
+                            ) : null}
                           </div>
                         )}
                       </div>
@@ -574,11 +563,7 @@ export default function ClassEnrollmentsPage() {
                                 </span>
                               );
                             })
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">
-                              No specialties registered
-                            </span>
-                          )}
+                          ) : null}
                         </div>
                       )}
                     </div>

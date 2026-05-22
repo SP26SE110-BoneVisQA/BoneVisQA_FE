@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { fetchAdminCasesPaged } from '@/lib/api/admin-cases';
 import { Filter, AlertCircle, ChevronLeft, ChevronRight, Eye, Loader2, Search, X } from 'lucide-react';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 8;
 
 // Filter options
 const LOCATION_OPTIONS = ['All', 'Upper Limb', 'Lower Limb', 'Spine', 'Pelvis', 'Shoulder', 'Elbow', 'Wrist', 'Hand', 'Hip', 'Knee', 'Ankle', 'Foot'];

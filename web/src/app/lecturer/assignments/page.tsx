@@ -25,7 +25,7 @@ import {
 const statusFilters = ['all', 'active', 'overdue', 'completed'] as const;
 type StatusFilter = (typeof statusFilters)[number];
 
-const PAGE_SIZE = 9;
+const PAGE_SIZE = 10;
 
 function computeStatus(
   dueDate: string | null | undefined,

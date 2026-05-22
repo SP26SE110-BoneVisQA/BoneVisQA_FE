@@ -26,6 +26,8 @@ export interface ExpertQuiz {
   teachingPoints?: number;
   learningObjectives?: string[];
   targetStudentLevel?: string;
+  // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+  quizMode?: number;
 }
 
 interface ExpertQuizListResponse {
@@ -62,6 +64,8 @@ export interface CreateExpertQuizRequest {
   teachingPoints?: number;
   learningObjectives?: string[];
   targetStudentLevel?: string;
+  // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+  quizMode?: number;
 }
 
 export type UpdateExpertQuizRequest = Partial<CreateExpertQuizRequest>;
@@ -110,6 +114,8 @@ function mapExpertQuiz(row: unknown, fallbackId?: string): ExpertQuiz | null {
     teachingPoints: r.teachingPoints != null ? Number(r.teachingPoints) : r.TeachingPoints != null ? Number(r.TeachingPoints) : undefined,
     learningObjectives: parseLearningObjectives(r.learningObjectives ?? r.LearningObjectives),
     targetStudentLevel: r.targetStudentLevel != null ? String(r.targetStudentLevel) : r.TargetStudentLevel != null ? String(r.TargetStudentLevel) : undefined,
+    // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+    quizMode: r.quizMode != null ? Number(r.quizMode) : r.QuizMode != null ? Number(r.QuizMode) : undefined,
   };
 }
 
@@ -504,6 +510,8 @@ export interface ExpertQuizLibraryItem {
   createdAt: string;
   expertName: string;
   questionCount: number;
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number;
 }
 
 interface ExpertQuizLibraryResponse {
@@ -545,6 +553,8 @@ function mapExpertQuizLibraryItem(row: unknown, fallbackId?: string): ExpertQuiz
     createdAt: String(r.createdAt ?? r.CreatedAt ?? ''),
     expertName: r.expertName != null ? String(r.expertName) : r.ExpertName != null ? String(r.ExpertName) : 'Unknown',
     questionCount: Number(r.questionCount ?? r.QuestionCount ?? 0),
+    // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+    quizMode: r.quizMode != null ? Number(r.quizMode) : r.QuizMode != null ? Number(r.QuizMode) : undefined,
   };
 }
 
@@ -648,6 +658,8 @@ export interface QuizQuestionDto {
   optionD: string | null;
   correctAnswer: string | null;
   imageUrl: string | null;
+  hint: string | null;
+  explanation: string | null;
 }
 
 export interface CreateQuizQuestionRequest {
@@ -659,9 +671,14 @@ export interface CreateQuizQuestionRequest {
   optionC?: string;
   optionD?: string;
   correctAnswer?: string;
+  correctAnswers?: string;
+  acceptedAnswers?: string;
   essayAnswer?: string;
   imageUrl?: string;
   caseId?: string;
+  hint?: string;
+  explanation?: string;
+  maxScore?: number;
 }
 
 export async function getQuizQuestions(quizId: string): Promise<QuizQuestionDto[]> {
@@ -683,6 +700,8 @@ export async function getQuizQuestions(quizId: string): Promise<QuizQuestionDto[
       optionD: q.optionD ?? q.OptionD ?? null,
       correctAnswer: q.correctAnswer ?? q.CorrectAnswer ?? null,
       imageUrl: q.imageUrl ?? q.ImageUrl ?? null,
+      hint: q.hint ?? q.Hint ?? null,
+      explanation: q.explanation ?? q.Explanation ?? null,
     }));
   } catch (e) {
     throw new Error(getApiErrorMessage(e));

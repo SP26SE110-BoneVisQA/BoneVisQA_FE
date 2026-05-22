@@ -26,6 +26,7 @@ import {
   Stethoscope,
   ArrowLeft,
   BookOpen,
+  Brain,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -77,6 +78,12 @@ const DIFFICULTY_OPTIONS = [
   { value: 'Easy', label: 'Easy' },
   { value: 'Medium', label: 'Medium' },
   { value: 'Hard', label: 'Hard' },
+] as const;
+
+const QUIZ_MODE_OPTIONS = [
+  { value: 1, label: 'Exam', description: 'Timed assessment with grading' },
+  { value: 2, label: 'Practice', description: 'Unlimited attempts, hints & explanations' },
+  { value: 3, label: 'Adaptive', description: 'AI-powered personalized difficulty' },
 ] as const;
 
 function flattenBoneSpecialties(tree: BoneSpecialtyTreeDto[], level = 0): (BoneSpecialtyTreeDto & { level: number })[] {
@@ -134,6 +141,7 @@ function ExpertCreateQuizContent() {
     closeTime: '',
     timeLimit: '30',
     passingScore: '70',
+    quizMode: 1 as number,
   });
 
   const [classification, setClassification] = useState<string>('');
@@ -225,6 +233,7 @@ function ExpertCreateQuizContent() {
             closeTime: utcToLocalDatetimeLocal(quiz.closeTime),
             timeLimit: quiz.timeLimit?.toString() || '30',
             passingScore: quiz.passingScore?.toString() || '70',
+            quizMode: quiz.quizMode || 1,
           });
           setClassification(quiz.classification || '');
           setBoneSpecialtyId(quiz.boneSpecialtyId || '');
@@ -286,6 +295,7 @@ function ExpertCreateQuizContent() {
     passingScore: formData.passingScore ? parseInt(formData.passingScore, 10) : undefined,
     boneSpecialtyId: boneSpecialtyId || null,
     pathologyCategoryId: pathologyCategoryId || null,
+    quizMode: formData.quizMode,
   });
 
   // Build payload for update - only send changed fields
@@ -305,6 +315,7 @@ function ExpertCreateQuizContent() {
     if (formData.passingScore) payload['PassingScore'] = parseInt(formData.passingScore, 10);
     if (boneSpecialtyId) payload['BoneSpecialtyId'] = boneSpecialtyId;
     if (pathologyCategoryId) payload['PathologyCategoryId'] = pathologyCategoryId;
+    payload['QuizMode'] = formData.quizMode;
     
     return payload;
   };
@@ -441,6 +452,8 @@ function ExpertCreateQuizContent() {
         correctAnswer: q.correctAnswer || '',
         caseId: q.caseId || undefined,
         imageUrl: q.imageUrl || undefined,
+        hint: q.hint || '',
+        explanation: q.explanation || '',
       });
       setEditingTempIndex(null);
       setEditingQuestionId(q.id); // Store the question ID for update
@@ -473,6 +486,8 @@ function ExpertCreateQuizContent() {
           optionD: q.optionD || null,
           correctAnswer: q.correctAnswer || null,
           imageUrl: q.imageUrl || null,
+          hint: q.hint || null,
+          explanation: q.explanation || null,
         })));
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to delete question.');
@@ -506,6 +521,8 @@ function ExpertCreateQuizContent() {
             optionD: payload.optionD,
             correctAnswer: payload.correctAnswer ?? '',
             imageUrl: payload.imageUrl,
+            hint: payload.hint,
+            explanation: payload.explanation,
           });
           toast.success('Question updated successfully.');
         } else {
@@ -519,6 +536,8 @@ function ExpertCreateQuizContent() {
             optionD: payload.optionD,
             correctAnswer: payload.correctAnswer ?? '',
             imageUrl: payload.imageUrl,
+            hint: payload.hint,
+            explanation: payload.explanation,
           });
           toast.success('Question added successfully.');
         }
@@ -538,6 +557,8 @@ function ExpertCreateQuizContent() {
           optionD: q.optionD || null,
           correctAnswer: q.correctAnswer || null,
           imageUrl: q.imageUrl || null,
+          hint: q.hint || null,
+          explanation: q.explanation || null,
         })));
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to save question.');
@@ -605,6 +626,8 @@ function ExpertCreateQuizContent() {
           optionD: q.optionD || null,
           correctAnswer: q.correctAnswer || null,
           imageUrl: q.imageUrl || null,
+          hint: q.hint || null,
+          explanation: q.explanation || null,
         })));
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to import questions.');
@@ -675,7 +698,7 @@ function ExpertCreateQuizContent() {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="rounded-2xl border border-border/10 bg-card p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -711,6 +734,17 @@ function ExpertCreateQuizContent() {
           </div>
           <p className="text-xs font-medium text-muted-foreground">Pass Score</p>
           <p className="text-xl font-bold text-card-foreground">{formData.passingScore || '—'}%</p>
+        </div>
+        <div className="rounded-2xl border border-border/10 bg-card p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10">
+              <Brain className="h-4 w-4 text-purple-500" />
+            </div>
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">Quiz Mode</p>
+          <p className="text-xl font-bold text-card-foreground">
+            {QUIZ_MODE_OPTIONS.find(m => m.value === formData.quizMode)?.label || 'Exam'}
+          </p>
         </div>
       </div>
 
@@ -955,6 +989,35 @@ function ExpertCreateQuizContent() {
                   ))}
                 </select>
               </div>
+              <div className="space-y-2">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <Brain className="h-3 w-3" />
+                  Quiz Mode
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {QUIZ_MODE_OPTIONS.map((mode) => (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, quizMode: mode.value })}
+                      className={`flex flex-col items-center rounded-lg border-2 p-2.5 transition-all ${
+                        formData.quizMode === mode.value
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border bg-muted/30 hover:border-muted-foreground/30'
+                      }`}
+                    >
+                      <span className={`text-xs font-bold ${
+                        formData.quizMode === mode.value ? 'text-primary' : 'text-muted-foreground'
+                      }`}>
+                        {mode.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  {QUIZ_MODE_OPTIONS.find(m => m.value === formData.quizMode)?.description}
+                </p>
+              </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">Topic</label>
                 <input
@@ -1054,6 +1117,8 @@ function ExpertCreateQuizContent() {
                 optionD: editingQuestion.optionD || null,
                 correctAnswer: editingQuestion.correctAnswer || null,
                 imageUrl: editingQuestion.imageUrl || null,
+                hint: editingQuestion.hint || null,
+                explanation: editingQuestion.explanation || null,
               }
             : null
         }
@@ -1063,6 +1128,7 @@ function ExpertCreateQuizContent() {
           setEditingTempIndex(null);
           setEditingQuestionId(null);
         }}
+        quizMode={formData.quizMode}
       />
 
       <QuestionImportDialog

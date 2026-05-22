@@ -83,7 +83,7 @@ interface EnrichedAssignedQuiz extends AssignedQuizDto {
   creatorType?: string | null;
 }
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 function formatQuizInstant(iso: string | null | undefined): string {
   if (!iso) return '—';

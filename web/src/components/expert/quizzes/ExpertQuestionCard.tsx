@@ -6,8 +6,6 @@ import {
   Trash2,
   CheckCircle2,
   ZoomIn,
-  CircleDot,
-  Award,
 } from 'lucide-react';
 import type { QuizQuestionDto } from '@/lib/api/types';
 
@@ -16,7 +14,6 @@ interface QuestionCardProps {
   caseThumbnail?: string;
   onEdit?: (question: QuizQuestionDto) => void;
   onDelete?: (questionId: string, questionText: string) => void;
-  points?: number;
   variant?: 'default' | 'manager' | 'curated';
   topicCategory?: string;
 }
@@ -54,7 +51,6 @@ export default function ExpertQuestionCard({
   caseThumbnail,
   onEdit,
   onDelete,
-  points = 10,
   variant = 'default',
   topicCategory = 'Trauma',
 }: QuestionCardProps) {
@@ -143,13 +139,8 @@ export default function ExpertQuestionCard({
             <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{subtitle}</p>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-5">
-            <span className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
-              <CircleDot className="h-4 w-4" />
+            <span className="text-sm font-bold text-muted-foreground">
               {typeStyle.label}
-            </span>
-            <span className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
-              <Award className="h-4 w-4" />
-              {points} Points
             </span>
           </div>
         </div>
@@ -293,7 +284,6 @@ export default function ExpertQuestionCard({
         )}
 
         <div className="mt-4 flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          <span>{points} pts</span>
           {question.caseTitle && <span>· {question.caseTitle}</span>}
         </div>
       </div>
@@ -358,9 +348,6 @@ export default function ExpertQuestionCard({
           </div>
 
           <div className="mt-3 flex items-center gap-4">
-            <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
-              {points} Points
-            </span>
             {question.correctAnswer && (
               <span className="rounded bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
                 Answer: {question.correctAnswer}

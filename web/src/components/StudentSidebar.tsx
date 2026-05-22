@@ -16,6 +16,8 @@ import {
   Stethoscope,
   Sparkles,
   Eye,
+  BrainCircuit,
+  BarChart3,
 } from 'lucide-react';
 
 const studentMenuItems = [
@@ -23,10 +25,12 @@ const studentMenuItems = [
   { icon: BookOpen, label: 'Case Catalog', href: '/student/catalog' },
   { icon: ClipboardList, label: 'History', href: '/student/history' },
   { icon: BotMessageSquare, label: 'AI Q&A', href: '/student/qa' },
+  { icon: BrainCircuit, label: 'Spaced Review', href: '/student/review' },
   { icon: Trophy, label: 'Quizzes', href: '/student/quizzes' },
-  { icon: Eye, label: 'Flashcards', href: '/student/review' },
+  { icon: Eye, label: 'My Flashcards', href: '/student/flashcards' },
   // TODO: Uncomment when AI Quiz is ready for production
   // { icon: Sparkles, label: 'AI Quiz', href: '/student/ai-quiz' },
+  { icon: BarChart3, label: 'Analytics', href: '/student/analytics' },
   { icon: UserCircle, label: 'Profile', href: '/student/profile' },
   { icon: Settings, label: 'Settings', href: '/student/settings' },
 ];

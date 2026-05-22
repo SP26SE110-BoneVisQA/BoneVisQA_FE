@@ -15,6 +15,10 @@ export interface ExpertQuizQuestion {
   correctAnswer: string;
   /** URL của ảnh câu hỏi */
   imageUrl?: string | null;
+  /** Gợi ý cho sinh viên - chỉ hiện ở Practice Mode */
+  hint?: string | null;
+  /** Giải thích đáp án đúng */
+  explanation?: string | null;
 }
 
 export interface CreateExpertQuizQuestionRequest {
@@ -29,6 +33,10 @@ export interface CreateExpertQuizQuestionRequest {
   correctAnswer: string;
   /** URL của ảnh câu hỏi (bắt buộc) */
   imageUrl?: string;
+  /** Gợi ý cho sinh viên - chỉ hiện ở Practice Mode */
+  hint?: string;
+  /** Giải thích đáp án đúng */
+  explanation?: string;
 }
 
 export type UpdateExpertQuizQuestionRequest = CreateExpertQuizQuestionRequest & {
@@ -71,6 +79,8 @@ function mapExpertQuizQuestion(row: unknown, fallbackQuestionId?: string): Exper
     optionD: strOrUndef(r.optionD ?? (r as any).OptionD),
     correctAnswer: String(r.correctAnswer ?? (r as any).CorrectAnswer ?? ''),
     imageUrl: r.imageUrl != null ? String(r.imageUrl) : (r as any).ImageUrl != null ? String((r as any).ImageUrl) : undefined,
+    hint: strOrUndef(r.hint ?? (r as any).Hint) ?? null,
+    explanation: strOrUndef(r.explanation ?? (r as any).Explanation) ?? null,
   };
 }
 
@@ -118,6 +128,8 @@ export async function createExpertQuizQuestion(
       optionD: input.optionD || undefined,
       correctAnswer: input.correctAnswer,
       imageUrl: input.imageUrl || undefined,
+      hint: input.hint || undefined,
+      explanation: input.explanation || undefined,
     };
     const { data } = await http.post<unknown>(`/api/expert/quizzes/${quizId}/questions`, payload);
     const body = data as any;

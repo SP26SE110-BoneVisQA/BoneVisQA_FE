@@ -28,6 +28,8 @@ export interface UpdateQuizRequest {
   classification?: string | null;
   boneSpecialtyId?: string | null;
   pathologyCategoryId?: string | null;
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number;
 }
 
 // ========== Quiz Management ==========
@@ -174,6 +176,8 @@ export function normalizeQuizDto(raw: unknown): QuizDto {
     boneSpecialtyName: (r.boneSpecialtyName ?? r.BoneSpecialtyName ?? null) as string | null,
     pathologyCategoryId: (r.pathologyCategoryId ?? r.PathologyCategoryId ?? null) as string | null,
     pathologyCategoryName: (r.pathologyCategoryName ?? r.PathologyCategoryName ?? null) as string | null,
+    // Quiz mode: 1=Exam, 2=Practice, 3=Adaptive
+    quizMode: (r.quizMode ?? r.QuizMode ?? null) as number | null,
   };
 }
 

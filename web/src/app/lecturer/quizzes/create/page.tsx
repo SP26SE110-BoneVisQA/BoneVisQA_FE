@@ -52,9 +52,8 @@ import { useToast } from '@/components/ui/toast';
 import type { ParsedQuestion } from '@/components/lecturer/quizzes/QuestionImportDialog';
 import QuestionCard from '@/components/lecturer/quizzes/QuestionCard';
 
-const QUESTIONS_PER_PAGE = 3;
+const QUESTIONS_PER_PAGE = 10;
 const TOPIC_ROTATION = ['Trauma', 'Imaging', 'Joints'] as const;
-const POINTS_ROTATION = [10, 15, 5] as const;
 
 const CLASSIFICATION_OPTIONS = [
   'Resident Year 1',
@@ -116,6 +115,7 @@ export default function CreateQuizPage() {
     closeTime: '',
     timeLimit: '30',
     passingScore: '80',
+    quizMode: 2, // 1=Exam, 2=Practice, 3=Adaptive
   });
 
   const [classification, setClassification] = useState<string>('');
@@ -269,6 +269,7 @@ export default function CreateQuizPage() {
     passingScore: formData.passingScore ? parseInt(formData.passingScore, 10) : undefined,
     boneSpecialtyId: boneSpecialtyId || undefined,
     pathologyCategoryId: pathologyCategoryId || undefined,
+    quizMode: formData.quizMode || 1,
   });
 
   // ========== AI Quiz Handlers ==========
@@ -392,6 +393,7 @@ export default function CreateQuizPage() {
         passingScore: formData.passingScore ? parseInt(formData.passingScore, 10) : undefined,
         boneSpecialtyId: boneSpecialtyId || undefined,
         pathologyCategoryId: pathologyCategoryId || undefined,
+        quizMode: formData.quizMode || 1,
       });
 
       const payloads: CreateQuizQuestionRequest[] = aiQuestions.map((q) => ({
@@ -631,6 +633,19 @@ export default function CreateQuizPage() {
           </div>
           <p className="text-xs font-medium text-muted-foreground">Pass Score</p>
           <p className="text-xl font-bold text-card-foreground">{formData.passingScore || '—'}%</p>
+        </div>
+        <div className="rounded-2xl border border-border/10 bg-card p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${formData.quizMode === 2 ? 'bg-green-100' : formData.quizMode === 3 ? 'bg-purple-100' : 'bg-gray-100'}`}>
+              <span className={`text-sm font-bold ${formData.quizMode === 2 ? 'text-green-600' : formData.quizMode === 3 ? 'text-purple-600' : 'text-gray-600'}`}>
+                {formData.quizMode === 1 ? 'EX' : formData.quizMode === 2 ? 'PR' : 'AD'}
+              </span>
+            </div>
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">Quiz Mode</p>
+          <p className={`text-sm font-bold ${formData.quizMode === 2 ? 'text-green-600' : formData.quizMode === 3 ? 'text-purple-600' : 'text-card-foreground'}`}>
+            {formData.quizMode === 1 ? 'Exam' : formData.quizMode === 2 ? 'Practice' : 'Adaptive'}
+          </p>
         </div>
       </div>
 
@@ -994,6 +1009,18 @@ export default function CreateQuizPage() {
                     placeholder="80"
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Quiz Mode</label>
+                  <select
+                    value={formData.quizMode}
+                    onChange={(e) => setFormData({ ...formData, quizMode: parseInt(e.target.value, 10) })}
+                    className="w-full cursor-pointer rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs outline-none transition-all focus:border-primary"
+                  >
+                    <option value={1}>Exam - No hints/explanations</option>
+                    <option value={2}>Practice - Hints & explanations shown</option>
+                    <option value={3}>Adaptive - Personalized difficulty</option>
+                  </select>
+                </div>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">Description</label>
@@ -1133,6 +1160,7 @@ export default function CreateQuizPage() {
           setEditingQuestion(null);
           setEditingTempIndex(null);
         }}
+        quizMode={formData.quizMode}
       />
 
       <QuestionImportDialog

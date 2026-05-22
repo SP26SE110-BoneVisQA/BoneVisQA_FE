@@ -53,12 +53,12 @@ function formatDate(dateStr: string | null): string {
 
 function ScoreBadge({ score, maxScore }: { score: number | null; maxScore: number }) {
   if (score === null) return <span className="text-muted-foreground">Ungraded</span>;
-  const pct = maxScore > 0 ? (score / maxScore) * 100 : 0;
-  const color = pct >= 80 ? 'text-success bg-success/10' : pct >= 60 ? 'text-warning bg-warning/10' : 'text-destructive bg-destructive/10';
+  // New system: score is already 0-100, display as percentage
+  const color = score >= 80 ? 'text-success bg-success/10' : score >= 60 ? 'text-warning bg-warning/10' : 'text-destructive bg-destructive/10';
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}>
       <Award className="h-3 w-3" />
-      {score.toFixed(1)}/{maxScore}
+      {score.toFixed(1)}%
     </span>
   );
 }
@@ -371,20 +371,28 @@ function EditScoreModal({
     setManuallyEditedQuestions(new Set());
   }, [detail?.attemptId]);
 
-  // Recalculate when individual scores change (only for non-manually-edited questions)
+    // Recalculate when individual scores change (only for non-manually-edited questions)
   useEffect(() => {
     if (detail.questions.length === 0) return;
-    const totalPossible = detail.questions.reduce((sum, q) => sum + q.maxScore, 0);
+    // Total quiz score always = 100, divided equally among all questions
+    const totalQuestions = detail.questions.length;
+    const pointsPerQuestion = 100 / totalQuestions;
+    
     const totalEarned = answers.reduce((sum, a, idx) => {
-      const q = detail.questions[idx];
       // Only auto-calculate for questions not manually edited
       if (manuallyEditedQuestions.has(idx)) {
+        // For manually edited: use scoreAwarded directly
         return sum + (a.scoreAwarded ?? 0);
       }
-      return sum + ((a.scoreAwarded ?? (q.maxScore * (a.isCorrect ? 1 : 0))) || 0);
+      // MC/TF/etc: full points if correct, 0 if wrong
+      if (a.isCorrect) {
+        return sum + pointsPerQuestion;
+      }
+      return sum + (a.scoreAwarded ?? 0); // Essay: use scoreAwarded if graded
     }, 0);
-    const newPct = totalPossible > 0 ? Math.round((totalEarned / totalPossible) * 100 * 10) / 10 : 0;
-    setLocalScore(newPct);
+    
+    // totalEarned is already the score (0-100), no need to convert
+    setLocalScore(Math.max(0, Math.min(100, totalEarned)));
   }, [answers, detail.questions, manuallyEditedQuestions]);
 
   function updateAnswer(idx: number, updates: Partial<UpdateAnswerDto>) {
@@ -452,7 +460,13 @@ function EditScoreModal({
               min={0}
               max={100}
               value={localScore ?? ''}
-              onChange={(e) => setLocalScore(e.target.value ? Number(e.target.value) : null)}
+              onChange={(e) => {
+                const rawVal = e.target.value;
+                const val = rawVal ? Number(rawVal) : null;
+                // Clamp to valid range (0-100)
+                const clampedVal = val !== null ? Math.max(0, Math.min(val, 100)) : null;
+                setLocalScore(clampedVal);
+              }}
               className="w-20 h-8 rounded border border-border px-2 text-sm text-center"
               disabled={saving}
             />
@@ -483,8 +497,9 @@ function EditScoreModal({
           <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
             {detail.questions.map((q, i) => {
               const ans = answers[i];
-              const maxScore = q.maxScore;
-              const suggestedScore = ans.isCorrect ? maxScore : 0;
+              const totalQ = detail.questions.length;
+              const pointsPerQ = totalQ > 0 ? 100 / totalQ : 1;
+              const suggestedScore = ans.isCorrect ? pointsPerQ : 0;
               const isEssay = q.type?.toLowerCase() === 'essay';
 
               return (
@@ -555,7 +570,7 @@ function EditScoreModal({
                         <div className="flex gap-1">
                           <button
                             type="button"
-                            onClick={() => updateAnswer(i, { isCorrect: true, scoreAwarded: maxScore, isGraded: true })}
+                            onClick={() => updateAnswer(i, { isCorrect: true, scoreAwarded: pointsPerQ, isGraded: true })}
                             className={`px-2 py-0.5 text-xs rounded border transition-colors cursor-pointer ${
                               ans.isCorrect === true
                                 ? 'bg-success/10 border-success text-success'
@@ -589,22 +604,26 @@ function EditScoreModal({
                       <input
                         type="number"
                         min={0}
-                        max={maxScore}
+                        max={pointsPerQ}
                         value={
                           manuallyEditedQuestions.has(i)
                             ? (ans.scoreAwarded !== null ? ans.scoreAwarded : '')
-                            : (ans.scoreAwarded !== null ? ans.scoreAwarded : (ans.isCorrect ? maxScore : 0))
+                            : (ans.scoreAwarded !== null ? ans.scoreAwarded : (ans.isCorrect ? pointsPerQ : 0))
                         }
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const rawVal = e.target.value;
+                          const val = rawVal ? Number(rawVal) : null;
+                          // Clamp to valid range (0 to pointsPerQ)
+                          const clampedVal = val !== null ? Math.max(0, Math.min(val, pointsPerQ)) : null;
                           updateAnswer(i, {
-                            scoreAwarded: e.target.value ? Number(e.target.value) : null,
+                            scoreAwarded: clampedVal,
                             isGraded: true,
-                          })
-                        }
+                          });
+                        }}
                         className="w-16 h-8 rounded border border-primary/50 px-2 text-sm text-center font-medium"
                         disabled={saving}
                       />
-                      <span className="text-xs text-muted-foreground">/ {maxScore}</span>
+                      <span className="text-xs text-muted-foreground">/ {pointsPerQ.toFixed(1)}</span>
                     </div>
 
                     {/* Feedback */}
@@ -1034,82 +1053,73 @@ export default function QuizResultsPage({
         </div>
       </div>
 
-      {/* Release Answers Section */}
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isReleased ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
-            {isReleased ? <CheckCircle2 className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
-          </div>
-          <div>
-            <h3 className="font-semibold text-sm text-card-foreground">Release Answers</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {isReleased
-                ? `Đáp án đã được công bố (${releasedAt ? new Date(releasedAt).toLocaleString('vi-VN') : ''}). Sinh viên có thể xem đáp án đúng.`
-                : isQuizClosed
-                  ? 'Quiz đã đóng. Bạn có thể công bố đáp án để sinh viên xem.'
-                  : 'Quiz đang chạy. Sinh viên sẽ thấy đáp án sau khi bạn công bố.'}
-            </p>
-          </div>
+      {/* Action Bar - Compact */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between rounded-lg border border-success/30 bg-success/5 p-3">
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+            isReleased 
+              ? 'bg-success/10 text-success' 
+              : 'bg-muted text-muted-foreground'
+          }`}>
+            {isReleased ? <CheckCircle2 className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+            {isReleased ? 'Answers Released' : 'Answers Hidden'}
+          </span>
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            {isReleased
+              ? `(${releasedAt ? new Date(releasedAt).toLocaleString('vi-VN') : ''})`
+              : 'Students cannot see answers yet'}
+          </span>
         </div>
-        {isReleased ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleHideAnswers}
-            disabled={releasing}
-            className="shrink-0 border-destructive/30 bg-destructive/5 font-semibold text-destructive hover:bg-destructive/10"
-          >
-            {releasing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <EyeOff className="mr-2 h-4 w-4" />
-            )}
-            Hide Answers
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            onClick={() => setReleaseDialogOpen(true)}
-            disabled={releasing}
-            className="shrink-0 bg-success font-semibold text-white hover:bg-success/90"
-          >
-            {releasing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-            )}
-            Release Answers
-          </Button>
-        )}
-      </div>
-
-      {/* Retake management */}
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <RotateCcw className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-sm text-card-foreground">Retake management</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {attempts.filter((a) => a.completedAt).length} student(s) have submitted. You can reset attempts so they can take the quiz again.
-            </p>
-          </div>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={openRetakeAllDialog}
-          disabled={retakingAll || attempts.filter((a) => a.completedAt).length === 0}
-          className="shrink-0 border-primary/30 bg-primary/5 font-semibold text-primary hover:bg-primary/10"
-        >
-          {retakingAll ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <div className="flex items-center gap-2">
+          {isReleased ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleHideAnswers}
+              disabled={releasing}
+              className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              {releasing ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <EyeOff className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Hide Answers
+            </Button>
           ) : (
-            <RotateCcw className="mr-2 h-4 w-4" />
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setReleaseDialogOpen(true)}
+              disabled={releasing}
+              className="h-8 text-xs bg-success hover:bg-success/90"
+            >
+              {releasing ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Release Answers
+            </Button>
           )}
-          Allow all to retake
-        </Button>
+          <div className="h-6 w-px bg-border mx-1" />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={openRetakeAllDialog}
+            disabled={retakingAll || attempts.filter((a) => a.completedAt).length === 0}
+            className="h-8 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+          >
+            {retakingAll ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Allow Retake
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -1202,39 +1212,38 @@ export default function QuizResultsPage({
                       {formatDate(a.completedAt ?? a.startedAt)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {a.completedAt && (
+                      <div className="flex items-center justify-end gap-1">
+                        {a.completedAt && (
+                          <button
+                            type="button"
+                            onClick={() => openRetakeSingleDialog(a)}
+                            disabled={retakingId === a.attemptId}
+                            title="Allow retake"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-md border-2 border-blue-400 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:border-blue-500 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {retakingId === a.attemptId ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
+                        <Link
+                          href={`/lecturer/quizzes/${quizId}/results/${a.attemptId}`}
+                          title="View details"
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border hover:bg-muted transition-colors"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Link>
                         <button
                           type="button"
-                          onClick={() => openRetakeSingleDialog(a)}
-                          disabled={retakingId === a.attemptId}
-                          title="Allow this student to retake the quiz"
-                          className="mr-2 inline-flex items-center gap-1 rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50"
+                          onClick={() => openEditScore(a)}
+                          title="Edit score"
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
                         >
-                          {retakingId === a.attemptId ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RotateCcw className="h-3.5 w-3.5" />
-                          )}
-                          Retake
+                          <Edit className="h-3.5 w-3.5" />
                         </button>
-                      )}
-                      <Link
-                        href={`/lecturer/quizzes/${quizId}/results/${a.attemptId}`}
-                        className="mr-2 inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        View
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => openEditScore(a)}
-                        disabled={retakingId === a.attemptId}
-                        title="Edit this student's score"
-                        className="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                        Edit Score
-                      </button>
+                      </div>
                     </td>
                   </tr>
                 ))

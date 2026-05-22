@@ -669,6 +669,13 @@ function normalizeStudentSessionQuestion(row: unknown): StudentSessionQuestion {
     imageUrl: pickStrAny(q, 'imageUrl', 'ImageUrl', 'image_url'),
     essayAnswer: pickStrAny(q, 'essayAnswer', 'EssayAnswer', 'essay_answer'),
     correctAnswer: pickStrAny(q, 'correctAnswer', 'CorrectAnswer', 'correct_answer'),
+    hint: pickStrAny(q, 'hint', 'Hint'),
+    hintAvailable: (() => {
+      const v = pickStrAny(q, 'hintAvailable', 'hint_available', 'HintAvailable');
+      return v === 'true' || v === 'True' || v === '1' || v === true;
+    })(),
+    correctAnswers: pickStrAny(q, 'correctAnswers', 'CorrectAnswers', 'correct_answers'),
+    acceptedAnswers: pickStrAny(q, 'acceptedAnswers', 'AcceptedAnswers', 'accepted_answers'),
   };
 }
 
@@ -723,6 +730,22 @@ export async function requestRetake(quizId: string): Promise<{ message: string }
   }
 }
 
+/**
+ * ================================================================
+ * HÀM MAP KẾT QUẢ SUBMIT QUIZ
+ * ================================================================
+ * Chuyển đổi response từ API thành StudentQuizResultDto
+ * 
+ * XỬ LÝ:
+ * - Ép kiểu cả camelCase (JavaScript) và PascalCase (C#) 
+ *   vì API backend có thể trả về cả 2 format
+ * - score: chuyển thành number, null nếu không có
+ * - passed: boolean, mặc định false
+ * - correctAnswers: số nguyên, mặc định 0
+ * 
+ * LƯU Ý: score từ API là điểm phần trăm (0-100)
+ * ================================================================
+ */
 function mapSubmitQuizResult(raw: unknown): StudentQuizResultDto {
   const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const scoreRaw = r.score ?? r.Score;
@@ -740,7 +763,29 @@ function mapSubmitQuizResult(raw: unknown): StudentQuizResultDto {
 }
 
 /**
- * Submit all quiz answers.
+ * ================================================================
+ * GỌI API SUBMIT QUIZ
+ * ================================================================
+ * POST /api/student/quizzes/submit
+ * 
+ * Body gửi lên:
+ * {
+ *   attemptId: string,
+ *   answers: [
+ *     { questionId, studentAnswer, essayAnswer?, selectedAnswers? }
+ *   ]
+ * }
+ * 
+ * Response trả về: StudentQuizResultDto (đã map bởi mapSubmitQuizResult)
+ * 
+ * Trả về:
+ * - score: điểm phần trăm (0-100)
+ * - passed: true/false
+ * - correctAnswers: số câu đúng
+ * - totalQuestions: tổng câu hỏi
+ * - passingScore: ngưỡng pass
+ * - ungradedEssayCount: số essay chưa chấm
+ * ================================================================
  */
 export async function submitQuizSession(
   attemptId: string,
@@ -753,6 +798,7 @@ export async function submitQuizSession(
         questionId: a.questionId,
         studentAnswer: a.studentAnswer,
         essayAnswer: a.essayAnswer ?? undefined,
+        selectedAnswers: a.selectedAnswers ?? undefined,
       })),
     });
     return mapSubmitQuizResult(data);

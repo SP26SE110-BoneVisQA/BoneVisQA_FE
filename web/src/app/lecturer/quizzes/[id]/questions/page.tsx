@@ -293,7 +293,6 @@ export default function QuestionManagerPage() {
                   variant="manager"
                   onEdit={handleEditQuestion}
                   onDelete={openDeleteQuestionDialog}
-                  points={10}
                 />
               ))}
 
@@ -352,6 +351,7 @@ export default function QuestionManagerPage() {
         quizId={quizId}
         question={editingQuestion}
         onSuccess={handleQuestionSuccess}
+        quizMode={quiz?.quizMode}
       />
 
       {/* Delete question confirmation dialog */}
