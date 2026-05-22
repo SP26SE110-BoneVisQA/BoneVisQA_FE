@@ -1386,14 +1386,14 @@ export default function QuizSessionPage({
             {submitted && quizResult && (
               <div className="space-y-6 rounded-2xl border border-primary/25 bg-primary/5 p-8">
                 {/* ⚠️ Warning nếu có essay chưa chấm */}
-                {(quizResult.ungradedEssayCount ?? 0) > 0 && (
+                {(quizResult?.ungradedEssayCount ?? 0) > 0 && (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
                     <div className="flex items-start gap-3">
                       <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
                       <div>
                         <p className="font-bold">Essay awaiting instructor grading</p>
                         <p className="mt-1 text-sm">
-                          Your submission has {quizResult.ungradedEssayCount} essay question(s) not yet graded.
+                          Your submission has {quizResult?.ungradedEssayCount} essay question(s) not yet graded.
                         </p>
                       </div>
                     </div>
@@ -1420,7 +1420,7 @@ export default function QuizSessionPage({
                 */}
 
                 {/* Success Message */}
-                <div className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/50 p-8 text-center">
+                {/* <div className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/50 p-8 text-center">
                   <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-lg shadow-emerald-500/30">
                     <CheckCircle2 className="h-10 w-10 text-white" />
                   </div>
@@ -1430,11 +1430,11 @@ export default function QuizSessionPage({
                   <p className="text-sm text-emerald-600/80 dark:text-emerald-400/70">
                     Bài quiz của bạn đã được gửi thành công. Điểm sẽ được cập nhật sau khi giảng viên chấm điểm.
                   </p>
-                </div>
+                </div> */}
 
-                {(quizResult.ungradedEssayCount ?? 0) > 0 && (
+                {(quizResult?.ungradedEssayCount ?? 0) > 0 && (
                   <p className="mt-2 text-center text-xs text-amber-600 dark:text-amber-400">
-                    * {quizResult.ungradedEssayCount} essay(s) pending grading. Score will update after grading.
+                    * {quizResult?.ungradedEssayCount} essay(s) pending grading. Score will update after grading.
                   </p>
                 )}
 
@@ -1476,9 +1476,9 @@ export default function QuizSessionPage({
                     </Button>
                   )}
 
-                  <Link href="/student/quizzes">
+                  {/* <Link href="/student/quizzes">
                     <Button variant="outline" className="rounded-xl font-bold">Back to quizzes</Button>
-                  </Link>
+                  </Link> */}
                 </div>
               </div>
             </div>

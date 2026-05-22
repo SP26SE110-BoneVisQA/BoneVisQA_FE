@@ -1826,6 +1826,42 @@ export async function saveQuizToFlashcards(
   }
 }
 
+// ========== Save Bookmarked Questions to Flashcards ==========
+
+export interface SaveBookmarkedToFlashcardsRequest {
+  deckId?: string;
+  deckName?: string;
+  description?: string;
+  questionIds?: string[];
+}
+
+export interface SaveBookmarkedToFlashcardsResult {
+  success: boolean;
+  deckId: string;
+  deckName: string;
+  cardCount: number;
+  message: string;
+}
+
+export async function saveBookmarkedToFlashcards(
+  attemptId: string,
+  request?: SaveBookmarkedToFlashcardsRequest
+): Promise<SaveBookmarkedToFlashcardsResult> {
+  try {
+    const { data } = await http.post<unknown>('/api/student/quizzes/' + attemptId + '/save-bookmarked-to-flashcards', request ?? {});
+    const item = data as Record<string, unknown>;
+    return {
+      success: Boolean(item.success ?? item.Success ?? false),
+      deckId: String(item.deckId ?? item.DeckId ?? ''),
+      deckName: String(item.deckName ?? item.DeckName ?? ''),
+      cardCount: Number(item.cardCount ?? item.CardCount ?? 0),
+      message: String(item.message ?? item.Message ?? ''),
+    };
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
 // ========== Flashcard Deck Management ==========
 
 export interface FlashcardDeckDto {
@@ -1910,6 +1946,18 @@ export async function createFlashcard(deckId: string, frontContent: string, back
 export async function deleteFlashcard(cardId: string): Promise<void> {
   try {
     await http.delete('/api/student/flashcards/cards/' + cardId);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function updateFlashcardDeck(deckId: string, deckName: string, description?: string): Promise<FlashcardDeckDto> {
+  try {
+    const { data } = await http.put<unknown>('/api/student/flashcards/decks/' + deckId, {
+      deckName,
+      description,
+    });
+    return normalizeDeck(data as Record<string, unknown>);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }
