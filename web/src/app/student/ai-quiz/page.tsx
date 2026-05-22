@@ -424,7 +424,7 @@ export default function AIQuizPage() {
                   isLoading={quizState === 'generating'}
                   className="w-full gap-2 bg-gradient-to-r from-violet-600 to-purple-600 py-3 text-sm font-bold text-white shadow-lg hover:from-violet-700 hover:to-purple-700"
                 >
-                  {!quizState === 'generating' && <Sparkles className="h-4 w-4" />}
+                  {quizState !== 'generating' && <Sparkles className="h-4 w-4" />}
                   {quizState === 'generating' ? 'Đang tạo...' : 'Tạo Quiz AI ngay'}
                 </Button>
               </div>
