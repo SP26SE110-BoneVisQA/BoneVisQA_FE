@@ -47,6 +47,7 @@ function normalizeClassQuizDto(raw: ClassQuizDto & Record<string, unknown>): Cla
     CloseTime?: string | null;
     QuestionCount?: number;
     IsFromExpertLibrary?: boolean;
+    QuizMode?: number;
   };
   return {
     classId: raw.classId ?? r.ClassId ?? '',
@@ -59,6 +60,7 @@ function normalizeClassQuizDto(raw: ClassQuizDto & Record<string, unknown>): Cla
     closeTime: raw.closeTime ?? r.CloseTime ?? null,
     questionCount: raw.questionCount ?? r.QuestionCount,
     isFromExpertLibrary: raw.isFromExpertLibrary ?? r.IsFromExpertLibrary ?? false,
+    quizMode: raw.quizMode ?? r.QuizMode ?? 1,
   };
 }
 

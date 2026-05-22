@@ -31,6 +31,7 @@ const studentMenuItems = [
   // TODO: Uncomment when AI Quiz is ready for production
   // { icon: Sparkles, label: 'AI Quiz', href: '/student/ai-quiz' },
   { icon: BarChart3, label: 'Analytics', href: '/student/analytics' },
+  { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
   { icon: UserCircle, label: 'Profile', href: '/student/profile' },
   { icon: Settings, label: 'Settings', href: '/student/settings' },
 ];

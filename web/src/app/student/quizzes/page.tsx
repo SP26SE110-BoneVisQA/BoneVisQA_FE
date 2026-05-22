@@ -6,9 +6,9 @@ import { useSearchParams } from 'next/navigation';
 import Header from '@/components/Header';
 import { StudentPracticeQuizContent } from '@/components/student/StudentPracticeQuizContent';
 import { useToast } from '@/components/ui/toast';
-import { fetchStudentQuizHistory, getAssignedQuizzes } from '@/lib/api/student';
+import { fetchStudentQuizHistory, fetchStudentQuizHistoryPaged, getAssignedQuizzes } from '@/lib/api/student';
 import type { AssignedQuizItem } from '@/lib/api/types';
-import type { StudentQuizAttemptSummary } from '@/lib/api/student';
+import type { StudentQuizAttemptSummary, StudentQuizAttemptHistoryPageResult } from '@/lib/api/student';
 import {
   BookOpen,
   ClipboardList,
@@ -19,6 +19,9 @@ import {
   BotMessageSquare,
   CheckCircle,
   ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Clock,
   Trophy,
   XCircle,
@@ -78,17 +81,27 @@ function normalizeScoreToPercentage(score: number | null | undefined): number | 
 
 function QuizHistoryPanel() {
   const toast = useToast();
-  const [attempts, setAttempts] = useState<StudentQuizAttemptSummary[]>([]);
+  const [pageResult, setPageResult] = useState<StudentQuizAttemptHistoryPageResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterMode>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+
+  const PAGE_SIZE = 5;
 
   useEffect(() => {
     let cancelled = false;
+    const isAiGenerated = filter === 'ai' ? true : filter === 'assigned' ? false : undefined;
+    
     (async () => {
       try {
-        const data = await fetchStudentQuizHistory();
-        if (!cancelled) setAttempts(data);
+        setLoading(true);
+        const data = await fetchStudentQuizHistoryPaged({
+          pageIndex,
+          pageSize: PAGE_SIZE,
+          isAiGenerated,
+        });
+        if (!cancelled) setPageResult(data);
       } catch (error) {
         if (!cancelled) toast.error(error instanceof Error ? error.message : 'Failed to load quiz history.');
       } finally {
@@ -98,13 +111,11 @@ function QuizHistoryPanel() {
     return () => {
       cancelled = true;
     };
-  }, [toast]);
+  }, [toast, pageIndex, filter]);
 
-  const filtered = useMemo(() => {
-    if (filter === 'ai') return attempts.filter((a) => a.isAiGenerated);
-    if (filter === 'assigned') return attempts.filter((a) => !a.isAiGenerated);
-    return attempts;
-  }, [attempts, filter]);
+  const attempts = pageResult?.items ?? [];
+  const totalCount = pageResult?.totalCount ?? 0;
+  const totalPages = pageResult?.totalPages ?? 0;
 
   const stats = useMemo(() => {
     const completed = attempts.filter((a) => a.completedAt);
@@ -113,8 +124,8 @@ function QuizHistoryPanel() {
     // Only exclude null/undefined values
     const scores = completed.map((a) => normalizeScoreToPercentage(a.score)).filter((s) => s !== null);
     const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
-    return { total: attempts.length, completed: completed.length, ai: aiAttempts.length, avgScore: avg };
-  }, [attempts]);
+    return { total: totalCount, completed: completed.length, ai: aiAttempts.length, avgScore: avg };
+  }, [totalCount, attempts]);
 
   if (loading) {
     return (
@@ -159,7 +170,10 @@ function QuizHistoryPanel() {
           <button
             key={val}
             type="button"
-            onClick={() => setFilter(val)}
+            onClick={() => {
+              setFilter(val);
+              setPageIndex(0);
+            }}
             className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
               filter === val
                 ? 'bg-primary text-white'
@@ -170,19 +184,20 @@ function QuizHistoryPanel() {
           </button>
         ))}
         <span className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} attempt{filtered.length !== 1 ? 's' : ''}
+          {attempts.length} of {totalCount} attempt{totalCount !== 1 ? 's' : ''}
         </span>
       </div>
 
-      {filtered.length === 0 ? (
+      {attempts.length === 0 && !loading ? (
         <div className="rounded-2xl border border-dashed border-border px-6 py-12 text-center">
           <Trophy className="mx-auto h-8 w-8 text-muted-foreground" />
           <h3 className="mt-3 text-base font-semibold text-foreground">No quiz history yet</h3>
           <p className="mt-1 text-sm text-muted-foreground">Your completed quiz attempts will appear here.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((attempt) => (
+        <>
+          <div className="space-y-2">
+            {attempts.map((attempt) => (
             <div key={attempt.attemptId} className="overflow-hidden rounded-xl border border-border bg-card">
               <div
                 className="flex cursor-pointer items-center justify-between p-4 hover:bg-muted/50"
@@ -277,6 +292,75 @@ function QuizHistoryPanel() {
             </div>
           ))}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPageIndex(0)}
+              disabled={pageIndex === 0}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPageIndex(Math.max(0, pageIndex - 1))}
+              disabled={pageIndex === 0}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-1.5">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 5) {
+                  pageNum = i;
+                } else if (pageIndex < 3) {
+                  pageNum = i;
+                } else if (pageIndex > totalPages - 3) {
+                  pageNum = totalPages - 5 + i;
+                } else {
+                  pageNum = pageIndex - 2 + i;
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    type="button"
+                    onClick={() => setPageIndex(pageNum)}
+                    className={`flex h-9 min-w-[2.5rem] items-center justify-center rounded-lg px-3 text-sm font-semibold transition-colors ${
+                      pageIndex === pageNum
+                        ? 'bg-primary text-white'
+                        : 'border border-border text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {pageNum + 1}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPageIndex(Math.min(totalPages - 1, pageIndex + 1))}
+              disabled={pageIndex >= totalPages - 1}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPageIndex(totalPages - 1)}
+              disabled={pageIndex >= totalPages - 1}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </>
       )}
     </div>
   );
