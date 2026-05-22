@@ -182,8 +182,8 @@ export default function ExpertQuizList({ onEditQuiz, onCreateQuiz, onRefresh }: 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-32 rounded-3xl border border-border/10 bg-card animate-pulse" />
           ))}
         </div>
@@ -195,7 +195,7 @@ export default function ExpertQuizList({ onEditQuiz, onCreateQuiz, onRefresh }: 
   return (
     <div className="space-y-8">
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="rounded-3xl border border-border/10 bg-card p-6 shadow-sm">
           <div className="mb-4 flex items-start justify-between">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
@@ -223,8 +223,22 @@ export default function ExpertQuizList({ onEditQuiz, onCreateQuiz, onRefresh }: 
           <p className="text-sm font-medium text-muted-foreground">Drafts</p>
           <p className="mt-1 text-3xl font-black text-card-foreground">{draftQuizzes}</p>
         </div>
-      </div>
+     
 
+      <div className="rounded-3xl border border-border/10 bg-card p-6 shadow-sm">
+          <div className="mb-4 flex items-start justify-between">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary/20">
+              <CheckCircle className="h-5 w-5 text-secondary" />
+            </div>
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">AI Generated</p>
+          <p className="mt-1 text-3xl font-black text-card-foreground">
+            {quizzes.filter((q) => q.isAiGenerated).length}
+          </p>
+        </div>
+        </div>
+     
+     
       {/* Quiz Table */}
       <div className="rounded-3xl border border-border/40 bg-card shadow-sm overflow-x-auto">
         <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -290,6 +304,11 @@ export default function ExpertQuizList({ onEditQuiz, onCreateQuiz, onRefresh }: 
                           <p className="line-clamp-2 break-words text-sm font-bold leading-snug text-card-foreground">
                             {quiz.title || 'Untitled quiz'}
                           </p>
+                          {quiz.isAiGenerated && (
+                            <span className="mt-1 inline-block rounded-full bg-purple-100 px-2 py-0.5 text-[9px] font-bold uppercase text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                              AI Generated
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
