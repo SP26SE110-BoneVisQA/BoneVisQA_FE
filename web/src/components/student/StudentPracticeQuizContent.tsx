@@ -12,8 +12,11 @@ import {
   generateAIPracticeQuiz,
   fetchBoneSpecialtyOptions,
   fetchPathologyCategoryOptions,
+  fetchAvailableCasesForQuiz,
+  generateAIPracticeQuizFromCases,
   type BoneSpecialtyOption,
-  type PathologyCategoryOption
+  type PathologyCategoryOption,
+  type AvailableCaseForQuiz
 } from '@/lib/api/student';
 import { resolveApiAssetUrl } from '@/lib/api/client';
 import type { StudentPracticeQuiz, StudentQuizSubmissionResult } from '@/lib/api/types';
@@ -39,6 +42,8 @@ import {
   Target,
   BrainCircuit,
   Stethoscope,
+  FolderOpen,
+  Check,
 } from 'lucide-react';
 
 // Organized topic structure with categories
@@ -142,9 +147,18 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
     optionC: string;
     optionD: string;
     correctAnswer: string;
+    explanation?: string;
     caseId?: string;
     caseTitle?: string;
   }>>([]);
+
+  // Case Selection state
+  const [showCaseSelector, setShowCaseSelector] = useState(false);
+  const [availableCases, setAvailableCases] = useState<AvailableCaseForQuiz[]>([]);
+  const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set());
+  const [loadingCases, setLoadingCases] = useState(false);
+  const [caseSearchTerm, setCaseSearchTerm] = useState('');
+  const [generatingFromCases, setGeneratingFromCases] = useState(false);
 
   // Load classification options
   useEffect(() => {
@@ -279,7 +293,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
     setSubmitting(true);
     try {
       const correctCount = aiQuestions.filter((q, index) =>
-        answers[`ai-${index}`]?.toUpperCase() === q.correctAnswer.toUpperCase()
+        answers[`ai-${index}`]?.toUpperCase() === q.correctAnswer?.toUpperCase()
       ).length;
       const score = (correctCount / aiQuestions.length) * 100;
 
@@ -329,7 +343,100 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
     setAnswers({});
     setResult(null);
     setPage(1);
+    setSelectedCases(new Set());
     clearQuizDraft();
+  };
+
+  // Load available cases for quiz generation
+  const handleLoadCases = async (search?: string) => {
+    setLoadingCases(true);
+    try {
+      const cases = await fetchAvailableCasesForQuiz(search || caseSearchTerm, 50);
+      setAvailableCases(cases);
+    } catch (error) {
+      console.error('Error loading cases:', error);
+      toast.error('Failed to load available cases.');
+    } finally {
+      setLoadingCases(false);
+    }
+  };
+
+  // Toggle case selection
+  const toggleCaseSelection = (caseId: string) => {
+    setSelectedCases((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(caseId)) {
+        newSet.delete(caseId);
+      } else {
+        newSet.add(caseId);
+      }
+      return newSet;
+    });
+  };
+
+  // Generate AI quiz from selected cases
+  const handleGenerateQuizFromCases = async () => {
+    if (selectedCases.size === 0) {
+      toast.error('Please select at least 1 case.');
+      return;
+    }
+
+    setGeneratingFromCases(true);
+    setLoading(true);
+    setResult(null);
+    setAnswers({});
+    setPage(1);
+
+    try {
+      const selectedCasesData = availableCases
+        .filter((c) => selectedCases.has(c.caseId))
+        .map((c) => ({
+          caseId: c.caseId,
+          caseTitle: c.caseTitle,
+          caseDescription: c.caseDescription ?? undefined,
+          keyFindings: c.keyFindings ?? undefined,
+          suggestedDiagnosis: c.suggestedDiagnosis ?? undefined,
+          difficulty: c.difficulty ?? undefined,
+          imageUrl: c.imageUrl ?? undefined,
+          modality: c.modality ?? undefined,
+        }));
+
+      const data = await generateAIPracticeQuizFromCases(
+        selectedCasesData,
+        questionCount,
+        difficulty || undefined
+      );
+
+      if (data.questions.length > 0) {
+        // Convert to AI questions format and navigate to quiz session
+        const quizData = await generateAIPracticeQuiz(
+          data.topic || 'Case-based Quiz',
+          questionCount,
+          difficulty || undefined
+        );
+        
+        if (quizData.success && quizData.questions.length > 0) {
+          setAiQuestions(quizData.questions);
+          toast.success(`AI generated ${quizData.questions.length} questions from ${selectedCases.size} case(s)!`);
+          setShowCaseSelector(false);
+        } else {
+          // Use the session directly if available
+          if (data.quizId) {
+            router.push(`/student/quiz/${data.attemptId}`);
+            toast.success('Quiz generated! Redirecting to quiz session...');
+          } else {
+            toast.error(data.message || 'Failed to generate quiz from cases.');
+          }
+        }
+      } else {
+        toast.error(data.message || 'Failed to generate quiz from cases.');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to generate quiz from cases.');
+    } finally {
+      setGeneratingFromCases(false);
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -370,8 +477,8 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
             className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
               showAdvancedFilters || selectedBoneSpecialty || selectedPathologyCategory
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                ? 'border-primary text-primary'
+                : 'border-border text-muted-foreground hover:border-primary hover:text-primary'
             }`}
           >
             <Layers className="h-4 w-4" />
@@ -459,7 +566,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
             {(selectedBoneSpecialty || selectedPathologyCategory) && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {selectedBoneSpecialty && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-medium text-primary">
                     {boneSpecialties.find(s => s.id === selectedBoneSpecialty)?.name}
                     <button
                       type="button"
@@ -471,7 +578,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                   </span>
                 )}
                 {selectedPathologyCategory && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-secondary/20 px-3 py-1 text-xs font-medium text-secondary">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-secondary px-3 py-1 text-xs font-medium text-secondary">
                     {pathologyCategories.find(p => p.id === selectedPathologyCategory)?.name}
                     <button
                       type="button"
@@ -484,6 +591,186 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Case Selector Modal */}
+        {showCaseSelector && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-border p-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                    <FolderOpen className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-card-foreground">Select Cases for AI Quiz</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Choose 1 or more cases to generate a personalized practice quiz
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCaseSelector(false)}
+                  className="rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="border-b border-border p-4">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    value={caseSearchTerm}
+                    onChange={(e) => setCaseSearchTerm(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        void handleLoadCases();
+                      }
+                    }}
+                    placeholder="Search cases by title, diagnosis, or findings..."
+                    className="rounded-lg pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Case List */}
+              <div className="max-h-[50vh] overflow-y-auto p-4">
+                {loadingCases ? (
+                  <div className="flex min-h-[200px] items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <span className="ml-2 text-sm text-muted-foreground">Loading cases...</span>
+                  </div>
+                ) : availableCases.length === 0 ? (
+                  <div className="flex min-h-[200px] flex-col items-center justify-center text-center">
+                    <FolderOpen className="h-12 w-12 text-muted-foreground" />
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      No cases found. Try a different search term.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handleLoadCases()}
+                      className="mt-3"
+                    >
+                      Load all cases
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {availableCases.map((caseItem) => {
+                      const isSelected = selectedCases.has(caseItem.caseId);
+                      return (
+                        <button
+                          key={caseItem.caseId}
+                          type="button"
+                          onClick={() => toggleCaseSelection(caseItem.caseId)}
+                          className={`flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all ${
+                            isSelected
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border bg-background hover:border-primary/50 hover:bg-muted/50'
+                          }`}
+                        >
+                          <div
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                              isSelected
+                                ? 'border-primary bg-primary text-white'
+                                : 'border-muted-foreground/30'
+                            }`}
+                          >
+                            {isSelected && <Check className="h-3.5 w-3.5" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <h4 className="font-semibold text-card-foreground truncate">
+                                  {caseItem.caseTitle}
+                                </h4>
+                                {caseItem.suggestedDiagnosis && (
+                                  <p className="mt-1 text-xs text-primary">
+                                    Diagnosis: {caseItem.suggestedDiagnosis}
+                                  </p>
+                                )}
+                              </div>
+                              {caseItem.difficulty && (
+                                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                                  {caseItem.difficulty}
+                                </span>
+                              )}
+                            </div>
+                            {caseItem.keyFindings && (
+                              <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                                Findings: {caseItem.keyFindings}
+                              </p>
+                            )}
+                            <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                              {caseItem.modality && (
+                                <span className="rounded bg-muted px-1.5 py-0.5">
+                                  {caseItem.modality}
+                                </span>
+                              )}
+                              {caseItem.imageUrl && (
+                                <span className="flex items-center gap-1">
+                                  <ImageIcon className="h-3 w-3" />
+                                  Has image
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {caseItem.imageUrl && (
+                            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-border">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={resolveApiAssetUrl(caseItem.imageUrl)}
+                                alt={caseItem.caseTitle}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between border-t border-border p-6">
+                <div className="text-sm text-muted-foreground">
+                  {selectedCases.size > 0 ? (
+                    <span>
+                      <span className="font-semibold text-primary">{selectedCases.size}</span> case(s) selected
+                    </span>
+                  ) : (
+                    <span>Select at least 1 case</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowCaseSelector(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void handleGenerateQuizFromCases()}
+                    disabled={selectedCases.size === 0 || generatingFromCases}
+                    isLoading={generatingFromCases}
+                    className="bg-gradient-to-r from-purple-600 to-purple-500 text-white hover:from-purple-700 hover:to-purple-600"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Generate Quiz from Cases
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -660,6 +947,20 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
               {!aiGenerating && <Sparkles className="mr-2 h-4 w-4" />}
               Generate AI Quiz
             </Button>
+            <div className="mt-2 border-t border-purple-200 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowCaseSelector(true);
+                  void handleLoadCases();
+                }}
+                className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
+              >
+                <FolderOpen className="mr-2 h-4 w-4" />
+                Generate from Case Library
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -756,12 +1057,8 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
           ) : quiz ? (
             <div className="space-y-4">
               {quiz.questions.map((question, index) => {
-                const options = [
-                  { key: 'A', value: question.optionA },
-                  { key: 'B', value: question.optionB },
-                  { key: 'C', value: question.optionC },
-                  { key: 'D', value: question.optionD },
-                ];
+                const isTrueFalse =
+                  question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
 
                 return (
                   <div
@@ -779,7 +1076,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                       </div>
                       <div className="flex items-center gap-2">
                         {question.type && (
-                          <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-primary">
+                          <span className="rounded-full border border-secondary px-3 py-1 text-xs font-medium text-secondary">
                             {question.type}
                           </span>
                         )}
@@ -805,31 +1102,68 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                         />
                       </div>
                     )}
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {options.map((option) => {
-                        const isSelected = answers[question.questionId] === option.key;
-                        return (
-                          <button
-                            key={option.key}
-                            type="button"
-                            onClick={() =>
-                              setAnswers((prev) => ({
-                                ...prev,
-                                [question.questionId]: option.key,
-                              }))
-                            }
-                            className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                              isSelected
-                                ? 'border-primary bg-primary/10 text-card-foreground ring-1 ring-primary/30'
-                                : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
-                            }`}
-                          >
-                            <span className="mr-2 font-semibold text-primary">{option.key}.</span>
-                            {option.value}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {isTrueFalse ? (
+                      // True/False options
+                      <div className="grid grid-cols-2 gap-3">
+                        {(['True', 'False'] as const).map((opt) => {
+                          const isSelected = answers[question.questionId] === opt;
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() =>
+                                setAnswers((prev) => ({
+                                  ...prev,
+                                  [question.questionId]: opt,
+                                }))
+                              }
+                              className={`rounded-xl border px-4 py-4 text-center text-base transition-all ${
+                                isSelected
+                                  ? 'border-primary bg-primary/10 text-card-foreground ring-1 ring-primary/30 font-semibold'
+                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
+                              }`}
+                            >
+                              <span className={`mr-2 font-bold ${isSelected ? 'text-primary' : ''}`}>
+                                {opt === 'True' ? 'T' : 'F'}
+                              </span>
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      // Standard ABCD options
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {[
+                          { key: 'A', value: question.optionA },
+                          { key: 'B', value: question.optionB },
+                          { key: 'C', value: question.optionC },
+                          { key: 'D', value: question.optionD },
+                        ].map((option) => {
+                          const isSelected = answers[question.questionId] === option.key;
+                          return (
+                            <button
+                              key={option.key}
+                              type="button"
+                              onClick={() =>
+                                setAnswers((prev) => ({
+                                  ...prev,
+                                  [question.questionId]: option.key,
+                                }))
+                              }
+                              className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                                isSelected
+                                  ? 'border-primary bg-primary/10 text-card-foreground ring-1 ring-primary/30'
+                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
+                              }`}
+                            >
+                              <span className="mr-2 font-semibold text-primary">{option.key}.</span>
+                              {option.value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -843,12 +1177,8 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                 </span>
               </div>
               {aiQuestions.map((question, index) => {
-                const options = [
-                  { key: 'A', value: question.optionA },
-                  { key: 'B', value: question.optionB },
-                  { key: 'C', value: question.optionC },
-                  { key: 'D', value: question.optionD },
-                ];
+                const isTrueFalse =
+                  question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
                 const questionId = `ai-${index}`;
 
                 return (
@@ -866,36 +1196,73 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                         </h2>
                       </div>
                       {question.caseTitle && (
-                        <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-primary">
+                        <span className="rounded-full border border-secondary px-3 py-1 text-xs font-medium text-secondary">
                           Case: {question.caseTitle}
                         </span>
                       )}
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {options.map((option) => {
-                        const isSelected = answers[questionId] === option.key;
-                        return (
-                          <button
-                            key={option.key}
-                            type="button"
-                            onClick={() =>
-                              setAnswers((prev) => ({
-                                ...prev,
-                                [questionId]: option.key,
-                              }))
-                            }
-                            className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                              isSelected
-                                ? 'border-purple-500 bg-purple-100 text-card-foreground ring-1 ring-purple-500/30'
-                                : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
-                            }`}
-                          >
-                            <span className="mr-2 font-semibold text-purple-600">{option.key}.</span>
-                            {option.value}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {isTrueFalse ? (
+                      // True/False options for AI quiz
+                      <div className="grid grid-cols-2 gap-3">
+                        {(['True', 'False'] as const).map((opt) => {
+                          const isSelected = answers[questionId] === opt;
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() =>
+                                setAnswers((prev) => ({
+                                  ...prev,
+                                  [questionId]: opt,
+                                }))
+                              }
+                              className={`rounded-xl border px-4 py-4 text-center text-base transition-all ${
+                                isSelected
+                                  ? 'border-purple-500 bg-purple-100 text-card-foreground ring-1 ring-purple-500/30 font-semibold'
+                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
+                              }`}
+                            >
+                              <span className={`mr-2 font-bold ${isSelected ? 'text-purple-600' : ''}`}>
+                                {opt === 'True' ? 'T' : 'F'}
+                              </span>
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      // Standard ABCD options for AI quiz
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {[
+                          { key: 'A', value: question.optionA },
+                          { key: 'B', value: question.optionB },
+                          { key: 'C', value: question.optionC },
+                          { key: 'D', value: question.optionD },
+                        ].map((option) => {
+                          const isSelected = answers[questionId] === option.key;
+                          return (
+                            <button
+                              key={option.key}
+                              type="button"
+                              onClick={() =>
+                                setAnswers((prev) => ({
+                                  ...prev,
+                                  [questionId]: option.key,
+                                }))
+                              }
+                              className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                                isSelected
+                                  ? 'border-purple-500 bg-purple-100 text-card-foreground ring-1 ring-purple-500/30'
+                                  : 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:border-muted-foreground/30'
+                              }`}
+                            >
+                              <span className="mr-2 font-semibold text-purple-600">{option.key}.</span>
+                              {option.value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -984,7 +1351,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
         )}
       </div>
 
-      {/* Results Section */}
+      {/* Results Section - AI Quiz with Answer Review */}
       {result && (
         <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
           <div className="border-b border-border bg-muted/30 p-6">
@@ -995,31 +1362,217 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
               </h3>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 p-6 lg:grid-cols-4">
-            <div className="rounded-2xl border border-border bg-background p-4 text-center">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Score</p>
-              <p className={`mt-2 text-2xl font-extrabold ${result.passed ? 'text-success' : 'text-warning'}`}>
-                {result.score}%
+
+          {/* Correct Answers Summary */}
+          <div className="p-6">
+            <div className="rounded-2xl border border-border bg-background p-6 text-center">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Correct Answers</p>
+              <p className="mt-2 text-4xl font-extrabold text-success">
+                {result.correctAnswers} <span className="text-2xl text-muted-foreground">/ {result.totalQuestions}</span>
               </p>
-            </div>
-            <div className="rounded-2xl border border-border bg-background p-4 text-center">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Passing</p>
-              <p className="mt-2 text-2xl font-extrabold text-card-foreground">{result.passingScore}%</p>
-            </div>
-            <div className="rounded-2xl border border-border bg-background p-4 text-center">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Correct</p>
-              <p className="mt-2 text-2xl font-extrabold text-card-foreground">
-                {result.correctAnswers}/{result.totalQuestions}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border bg-background p-4 text-center">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Outcome</p>
-              <p className={`mt-2 text-xl font-extrabold ${result.passed ? 'text-success' : 'text-warning'}`}>
-                {result.passed ? 'Passed' : 'Retry'}
+              <p className="mt-2 text-sm text-muted-foreground">
+                {result.correctAnswers === result.totalQuestions
+                  ? "Perfect score! Great job!"
+                  : `Keep practicing to improve!`}
               </p>
             </div>
           </div>
-          
+
+          {/* Question Navigation Bookmark - Always visible */}
+          {aiQuestions.length > 0 && (
+            <div className="border-t border-border bg-gradient-to-r from-purple-50 to-indigo-50 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-purple-700">Jump to question:</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {aiQuestions.map((q, i) => {
+                    const studentAnswer = answers[`ai-${i}`]?.toUpperCase();
+                    const isCorrect = studentAnswer === q.correctAnswer?.toUpperCase();
+                    return (
+                      <button
+                        key={`ai-${i}`}
+                        type="button"
+                        onClick={() => {
+                          document.getElementById(`ai-review-q-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className={`flex h-10 w-10 items-center justify-center rounded-xl border-2 text-sm font-bold transition-all shadow-sm hover:scale-110 hover:shadow-md ${
+                          isCorrect
+                            ? 'border-emerald-500 bg-emerald-500 text-white'
+                            : 'border-red-400 bg-red-400 text-white'
+                        }`}
+                        title={`Question ${i + 1}: ${isCorrect ? 'Correct' : 'Incorrect'}`}
+                      >
+                        {i + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="hidden items-center gap-3 text-xs sm:flex">
+                  <span className="flex items-center gap-1 font-medium text-emerald-600">
+                    <span className="h-3 w-3 rounded-full bg-emerald-500" /> Correct
+                  </span>
+                  <span className="flex items-center gap-1 font-medium text-red-500">
+                    <span className="h-3 w-3 rounded-full bg-red-400" /> Incorrect
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Answer Review with Bookmark Navigation */}
+          {aiQuestions.length > 0 && (
+            <div className="border-t border-border">
+              {/* Question-by-Question Review */}
+              <div className="space-y-4 p-6">
+                <h4 className="font-semibold text-card-foreground">Answer Review</h4>
+                {aiQuestions.map((question, index) => {
+                  const questionId = `ai-${index}`;
+                  const studentAnswer = answers[questionId];
+                  const isCorrect = studentAnswer?.toUpperCase() === question.correctAnswer?.toUpperCase();
+                  const isTrueFalse =
+                    question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
+
+                  return (
+                    <div
+                      key={questionId}
+                      id={`ai-review-q-${index}`}
+                      className={`rounded-2xl border-2 p-6 ${
+                        isCorrect ? 'border-emerald-400/40 bg-emerald-50' : 'border-red-300/40 bg-red-50'
+                      }`}
+                    >
+                      {/* Question header */}
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white ${
+                              isCorrect ? 'bg-emerald-500' : 'bg-red-400'
+                            }`}>
+                              {isCorrect ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                            </span>
+                            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                              Question {index + 1}
+                            </span>
+                          </div>
+                          <h3 className="mt-2 font-semibold text-card-foreground">
+                            {question.questionText}
+                          </h3>
+                        </div>
+                      </div>
+
+                      {/* Options */}
+                      <div className="grid gap-2">
+                        {isTrueFalse ? (
+                          // True/False review
+                          <div className="grid grid-cols-2 gap-3">
+                            {(['True', 'False'] as const).map((opt) => {
+                              const isSelected = studentAnswer === opt;
+                              const isCorrectOption = opt.toLowerCase() === question.correctAnswer?.toLowerCase();
+
+                              let optionClass = 'border-border bg-white/70 text-muted-foreground';
+                              if (isCorrectOption) {
+                                optionClass = 'border-emerald-500 bg-emerald-100 text-emerald-800 font-semibold';
+                              } else if (isSelected && !isCorrectOption) {
+                                optionClass = 'border-red-400 bg-red-100 text-red-700';
+                              }
+
+                              return (
+                                <div
+                                  key={opt}
+                                  className={`flex items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 ${optionClass}`}
+                                >
+                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 font-bold text-sm">
+                                    {opt === 'True' ? 'T' : 'F'}
+                                  </span>
+                                  <span className="flex-1 text-center font-semibold">{opt}</span>
+                                  {isCorrectOption && (
+                                    <CheckCircle className="h-5 w-5 shrink-0 text-emerald-600" />
+                                  )}
+                                  {isSelected && !isCorrectOption && (
+                                    <X className="h-5 w-5 shrink-0 text-red-500" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          // Standard ABCD review
+                          <>
+                            {[
+                              { key: 'A', value: question.optionA },
+                              { key: 'B', value: question.optionB },
+                              { key: 'C', value: question.optionC },
+                              { key: 'D', value: question.optionD },
+                            ].map((option) => {
+                              const isSelected = studentAnswer === option.key;
+                              const isCorrectOption = option.key.toUpperCase() === question.correctAnswer?.toUpperCase();
+
+                              let optionClass = 'border-border bg-white/70 text-muted-foreground';
+                              if (isCorrectOption) {
+                                optionClass = 'border-emerald-500 bg-emerald-100 text-emerald-800 font-semibold';
+                              } else if (isSelected && !isCorrectOption) {
+                                optionClass = 'border-red-400 bg-red-100 text-red-700';
+                              }
+
+                              return (
+                                <div
+                                  key={option.key}
+                                  className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 ${optionClass}`}
+                                >
+                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 font-bold text-sm">
+                                    {option.key}
+                                  </span>
+                                  <span className="flex-1">{option.value}</span>
+                                  {isCorrectOption && (
+                                    <CheckCircle className="h-5 w-5 shrink-0 text-emerald-600" />
+                                  )}
+                                  {isSelected && !isCorrectOption && (
+                                    <X className="h-5 w-5 shrink-0 text-red-500" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Your answer vs Correct answer */}
+                      <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                        <span className="rounded-full bg-white/80 px-3 py-1">
+                          <span className="font-medium text-muted-foreground">Your answer: </span>
+                          <span className={`font-bold ${isCorrect ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {studentAnswer || 'Not answered'}
+                          </span>
+                        </span>
+                        <span className="rounded-full bg-emerald-100 px-3 py-1">
+                          <span className="font-medium text-emerald-700">Correct: </span>
+                          <span className="font-bold text-emerald-800">
+                            {isTrueFalse
+                              ? question.correctAnswer
+                              : `${question.correctAnswer}. ${question[`option${question.correctAnswer}` as keyof typeof question] || ''}`}
+                          </span>
+                        </span>
+                      </div>
+
+                      {/* Explanation */}
+                      {question.explanation && (
+                        <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4">
+                          <div className="mb-2 flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-purple-600" />
+                            <span className="text-xs font-bold uppercase tracking-widest text-purple-700">Explanation</span>
+                          </div>
+                          <p className="text-sm leading-relaxed text-purple-900 whitespace-pre-wrap">
+                            {question.explanation}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Action buttons after submission */}
           <div className="border-t border-border p-6">
             <div className="flex flex-wrap gap-3">

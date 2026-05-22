@@ -20,6 +20,9 @@ import {
   ZoomOut,
   Maximize2,
   RotateCcw,
+  Sun,
+  Contrast,
+  Droplet,
 } from 'lucide-react';
 import { getQuizAttemptDetail, updateQuizAttempt } from '@/lib/api/lecturer';
 import { getQuiz } from '@/lib/api/lecturer-quiz';
@@ -31,6 +34,21 @@ import { useToast } from '@/components/ui/toast';
 
 const ZOOM_LEVELS = [0.75, 1, 1.25, 1.5, 2];
 
+// Image enhancement state
+interface ImageEnhancement {
+  brightness: number;
+  contrast: number;
+  invert: boolean;
+  grayscale: boolean;
+}
+
+const DEFAULT_ENHANCEMENT: ImageEnhancement = {
+  brightness: 1,
+  contrast: 1,
+  invert: false,
+  grayscale: false,
+};
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleString('en-GB', {
@@ -40,6 +58,20 @@ function formatDate(dateStr: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function getImageStyle(enhancement: ImageEnhancement): React.CSSProperties {
+  const filters = [
+    `brightness(${enhancement.brightness})`,
+    `contrast(${enhancement.contrast})`,
+    enhancement.invert ? 'invert(1)' : '',
+    enhancement.grayscale ? 'grayscale(1)' : '',
+  ].filter(Boolean);
+  return { filter: filters.join(' ') };
+}
+
+function resetEnhancement() {
+  return DEFAULT_ENHANCEMENT;
 }
 
 function ScoreBadge({ score }: { score: number | null }) {
@@ -72,6 +104,10 @@ export default function QuizAttemptReviewPage({
   // Image zoom state
   const [zoomIndex, setZoomIndex] = useState(1);
   const [imgFullscreen, setImgFullscreen] = useState(false);
+
+  // Image enhancement state
+  const [enhancement, setEnhancement] = useState<ImageEnhancement>(DEFAULT_ENHANCEMENT);
+  const [showEnhancePanel, setShowEnhancePanel] = useState(false);
 
   // Edit mode state
   const [editMode, setEditMode] = useState(false);
@@ -287,7 +323,17 @@ export default function QuizAttemptReviewPage({
             {currentQ?.imageUrl ? (
               <div className="bg-card border border-border rounded-lg overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b border-border">
-                  <span className="text-[10px] font-medium text-muted-foreground">Case Image</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-medium text-muted-foreground">Case Image</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowEnhancePanel(!showEnhancePanel)}
+                      className={`p-1 rounded transition-colors ${showEnhancePanel ? 'bg-primary/20 text-primary' : 'hover:bg-muted text-muted-foreground'}`}
+                      title="Image Enhancement"
+                    >
+                      <Droplet className="h-3 w-3" />
+                    </button>
+                  </div>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
@@ -316,13 +362,95 @@ export default function QuizAttemptReviewPage({
                     </button>
                   </div>
                 </div>
+
+                {/* Image Enhancement Panel */}
+                {showEnhancePanel && (
+                  <div className="px-3 py-2 bg-muted/30 border-b border-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold text-muted-foreground">Image Enhancement</span>
+                      <button
+                        type="button"
+                        onClick={() => setEnhancement(DEFAULT_ENHANCEMENT)}
+                        className="p-0.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                        title="Reset"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Brightness */}
+                      <div className="flex items-center gap-1.5">
+                        <Sun className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2"
+                          step="0.1"
+                          value={enhancement.brightness}
+                          onChange={(e) => setEnhancement(prev => ({ ...prev, brightness: Number(e.target.value) }))}
+                          className="flex-1 h-1 accent-primary"
+                        />
+                        <span className="text-[9px] text-muted-foreground w-6 text-right">{enhancement.brightness.toFixed(1)}</span>
+                      </div>
+                      {/* Contrast */}
+                      <div className="flex items-center gap-1.5">
+                        <Contrast className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="3"
+                          step="0.1"
+                          value={enhancement.contrast}
+                          onChange={(e) => setEnhancement(prev => ({ ...prev, contrast: Number(e.target.value) }))}
+                          className="flex-1 h-1 accent-primary"
+                        />
+                        <span className="text-[9px] text-muted-foreground w-6 text-right">{enhancement.contrast.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    {/* Toggle buttons */}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEnhancement(prev => ({ ...prev, invert: !prev.invert }))}
+                        className={`flex-1 py-1 px-2 rounded text-[10px] font-medium transition-colors ${
+                          enhancement.invert
+                            ? 'bg-primary text-white'
+                            : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                        }`}
+                      >
+                        Invert
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEnhancement(prev => ({ ...prev, grayscale: !prev.grayscale }))}
+                        className={`flex-1 py-1 px-2 rounded text-[10px] font-medium transition-colors ${
+                          enhancement.grayscale
+                            ? 'bg-primary text-white'
+                            : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                        }`}
+                      >
+                        Gray
+                      </button>
+                      {/* Quick presets for X-ray */}
+                      <button
+                        type="button"
+                        onClick={() => setEnhancement({ brightness: 1.5, contrast: 2, invert: true, grayscale: false })}
+                        className="flex-1 py-1 px-2 rounded text-[10px] font-medium bg-blue-100 hover:bg-blue-200 text-blue-800 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-300 transition-colors"
+                        title="Best for X-ray: Light background, dark bones"
+                      >
+                        X-ray
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-3 bg-muted/20">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={resolveApiAssetUrl(currentQ.imageUrl)}
                     alt={`Question ${currentIndex + 1}`}
-                    className="w-full h-auto max-h-[400px] object-contain mx-auto transition-transform"
-                    style={{ transform: `scale(${ZOOM_LEVELS[zoomIndex]})` }}
+                    className="w-full h-auto max-h-[400px] object-contain mx-auto transition-all"
+                    style={{ ...getImageStyle(enhancement), transform: `scale(${ZOOM_LEVELS[zoomIndex]})` }}
                   />
                 </div>
               </div>
@@ -624,16 +752,43 @@ export default function QuizAttemptReviewPage({
         >
           <button
             type="button"
-            className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full p-2 transition-colors"
+            className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full p-2 transition-colors z-10"
             onClick={() => setImgFullscreen(false)}
           >
             <XCircle className="h-8 w-8" />
           </button>
+          {/* Quick enhancement controls in fullscreen */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+            <button
+              type="button"
+              onClick={() => setEnhancement(prev => ({ ...prev, invert: !prev.invert }))}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                enhancement.invert ? 'bg-primary text-white' : 'bg-white/20 hover:bg-white/30 text-white'
+              }`}
+            >
+              Invert
+            </button>
+            <button
+              type="button"
+              onClick={() => setEnhancement({ brightness: 1.5, contrast: 2, invert: true, grayscale: false })}
+              className="px-3 py-1.5 rounded-full text-xs font-medium bg-blue-500/30 hover:bg-blue-500/50 text-white transition-colors"
+            >
+              X-ray Mode
+            </button>
+            <button
+              type="button"
+              onClick={() => setEnhancement(DEFAULT_ENHANCEMENT)}
+              className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/20 hover:bg-white/30 text-white transition-colors"
+            >
+              Reset
+            </button>
+          </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={resolveApiAssetUrl(currentQ.imageUrl)}
             alt="Full size"
             className="max-w-full max-h-full object-contain"
+            style={getImageStyle(enhancement)}
             onClick={(e) => e.stopPropagation()}
           />
         </div>

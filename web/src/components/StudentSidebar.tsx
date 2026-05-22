@@ -25,8 +25,7 @@ const studentMenuItems = [
   { icon: BotMessageSquare, label: 'AI Q&A', href: '/student/qa' },
   { icon: Trophy, label: 'Quizzes', href: '/student/quizzes' },
   { icon: Eye, label: 'Flashcards', href: '/student/review' },
-  // TODO: Uncomment when AI Quiz is ready for production
-  // { icon: Sparkles, label: 'AI Quiz', href: '/student/ai-quiz' },
+  { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
   { icon: UserCircle, label: 'Profile', href: '/student/profile' },
   { icon: Settings, label: 'Settings', href: '/student/settings' },
 ];

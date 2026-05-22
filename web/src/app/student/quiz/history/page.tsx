@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { StudentAppChrome, StudentDashboardFab } from '@/components/student/StudentAppChrome';
-import { fetchStudentQuizHistory } from '@/lib/api/student';
-import type { StudentQuizAttemptSummary } from '@/lib/api/student';
+import { fetchStudentQuizHistoryPaged } from '@/lib/api/student';
+import type { StudentQuizAttemptSummary, StudentQuizAttemptHistoryPageResult } from '@/lib/api/student';
 import { useToast } from '@/components/ui/toast';
 import {
   BarChart3,
   BotMessageSquare,
   CheckCircle,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Filter,
@@ -20,52 +21,69 @@ import {
   BookOpen,
   XCircle,
   BrainCircuit,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 
 type FilterMode = 'all' | 'ai' | 'assigned';
 
+const PAGE_SIZE = 5;
+
 export default function StudentQuizHistoryPage() {
   const toast = useToast();
-  const [attempts, setAttempts] = useState<StudentQuizAttemptSummary[]>([]);
+  const [pageResult, setPageResult] = useState<StudentQuizAttemptHistoryPageResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterMode>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [filterAi, setFilterAi] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
+
+    // Map filter mode to isAiGenerated param
+    const isAiGenerated = filter === 'ai' ? true : filter === 'assigned' ? false : undefined;
+
     (async () => {
       try {
-        const data = await fetchStudentQuizHistory();
-        if (!cancelled) setAttempts(data);
+        setLoading(true);
+        const data = await fetchStudentQuizHistoryPaged({
+          pageIndex,
+          pageSize: PAGE_SIZE,
+          isAiGenerated,
+        });
+        if (!cancelled) {
+          setPageResult(data);
+          setFilterAi(isAiGenerated);
+        }
       } catch (error) {
         if (!cancelled) toast.error(error instanceof Error ? error.message : 'Failed to load quiz history.');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [toast]);
+  }, [toast, pageIndex, filter]);
 
-  const filtered = useMemo(() => {
-    if (filter === 'ai') return attempts.filter((a) => a.isAiGenerated);
-    if (filter === 'assigned') return attempts.filter((a) => !a.isAiGenerated);
-    return attempts;
-  }, [attempts, filter]);
+  const attempts = pageResult?.items ?? [];
+  const totalCount = pageResult?.totalCount ?? 0;
+  const totalPages = pageResult?.totalPages ?? 0;
 
   const stats = useMemo(() => {
-    const completed = attempts.filter((a) => a.completedAt);
-    const aiAttempts = attempts.filter((a) => a.isAiGenerated);
-    const scores = completed.map((a) => a.score ?? 0).filter((s) => s > 0);
-    const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+    const completed = attempts.filter(a => a.completedAt != null).length;
+    const ai = attempts.filter(a => a.isAiGenerated).length;
+    const scores = attempts.filter(a => a.completedAt && a.score != null).map(a => a.score!);
+    const avgScore = scores.length > 0 ? scores.reduce((sum, s) => sum + s, 0) / scores.length : null;
     return {
-      total: attempts.length,
-      completed: completed.length,
-      ai: aiAttempts.length,
-      avgScore: avg,
+      total: totalCount,
+      completed,
+      ai,
+      avgScore,
     };
-  }, [attempts]);
+  }, [totalCount, attempts]);
 
   function formatDate(iso?: string | null): string {
     if (!iso) return '—';
@@ -141,7 +159,10 @@ export default function StudentQuizHistoryPage() {
                     <button
                       key={val}
                       type="button"
-                      onClick={() => setFilter(val)}
+                      onClick={() => {
+                        setFilter(val);
+                        setPageIndex(0);
+                      }}
                       className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
                         filter === val
                           ? 'bg-[#00478d] text-white'
@@ -152,12 +173,12 @@ export default function StudentQuizHistoryPage() {
                     </button>
                   ))}
                   <span className="ml-auto text-xs text-[#727783]">
-                    {filtered.length} attempt{filtered.length !== 1 ? 's' : ''}
+                    {attempts.length} of {totalCount} attempt{totalCount !== 1 ? 's' : ''}
                   </span>
                 </div>
 
                 {/* List */}
-                {filtered.length === 0 ? (
+                {attempts.length === 0 && !loading ? (
                   <div className="rounded-2xl border border-dashed border-[#c2c6d4] bg-white px-6 py-16 text-center">
                     <Trophy className="mx-auto h-10 w-10 text-[#727783]" />
                     <h3 className="mt-4 text-lg font-semibold text-[#191c1e]">No quiz history yet</h3>
@@ -180,8 +201,9 @@ export default function StudentQuizHistoryPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {filtered.map((attempt) => (
+                  <>
+                    <div className="space-y-3">
+                      {attempts.map((attempt) => (
                       <div
                         key={attempt.attemptId}
                         className={`overflow-hidden rounded-2xl border transition-all ${
@@ -326,9 +348,76 @@ export default function StudentQuizHistoryPage() {
                       </div>
                     ))}
                   </div>
-                )}
-              </>
-            )}
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="mt-6 flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPageIndex(0)}
+                        disabled={pageIndex === 0}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#c2c6d4]/40 text-[#424752] transition-colors hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronsLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPageIndex(Math.max(0, pageIndex - 1))}
+                        disabled={pageIndex === 0}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#c2c6d4]/40 text-[#424752] transition-colors hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum: number;
+                          if (totalPages <= 5) {
+                            pageNum = i;
+                          } else if (pageIndex < 3) {
+                            pageNum = i;
+                          } else if (pageIndex > totalPages - 3) {
+                            pageNum = totalPages - 5 + i;
+                          } else {
+                            pageNum = pageIndex - 2 + i;
+                          }
+                          return (
+                            <button
+                              key={pageNum}
+                              type="button"
+                              onClick={() => setPageIndex(pageNum)}
+                              className={`flex h-9 min-w-[2.5rem] items-center justify-center rounded-lg px-3 text-sm font-semibold transition-colors ${
+                                pageIndex === pageNum
+                                  ? 'bg-[#00478d] text-white'
+                                  : 'border border-[#c2c6d4]/40 text-[#424752] hover:bg-[#f2f4f6]'
+                              }`}
+                            >
+                              {pageNum + 1}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setPageIndex(Math.min(totalPages - 1, pageIndex + 1))}
+                        disabled={pageIndex >= totalPages - 1}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#c2c6d4]/40 text-[#424752] transition-colors hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPageIndex(totalPages - 1)}
+                        disabled={pageIndex >= totalPages - 1}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#c2c6d4]/40 text-[#424752] transition-colors hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronsRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
       </div>
 
       <StudentDashboardFab />

@@ -496,8 +496,22 @@ export async function updateStudentProfile(
 
 export async function fetchStudentProgress(): Promise<StudentProgress> {
   try {
-    const { data } = await http.get<StudentProgress>('/api/student/progress', { skipApiToast: true });
-    return data;
+    const { data } = await http.get<unknown>('/api/student/progress', { skipApiToast: true });
+    const item = data as Record<string, unknown>;
+    // Map both PascalCase (backend default) and camelCase (if configured) to frontend types
+    return {
+      totalCasesViewed: Number(item.totalCasesViewed ?? item.TotalCasesViewed ?? 0),
+      totalQuestionsAsked: Number(item.totalQuestionsAsked ?? item.TotalQuestionsAsked ?? 0),
+      avgQuizScore: item.avgQuizScore != null ? Number(item.avgQuizScore) : 
+                    item.AvgQuizScore != null ? Number(item.AvgQuizScore) : null,
+      totalQuizAttempts: Number(item.totalQuizAttempts ?? item.TotalQuizAttempts ?? 0),
+      completedQuizzes: Number(item.completedQuizzes ?? item.CompletedQuizzes ?? item.quizzesCompleted ?? item.QuizzesCompleted ?? 0),
+      escalatedAnswers: Number(item.escalatedAnswers ?? item.EscalatedAnswers ?? 0),
+      latestQuizScore: item.latestQuizScore != null ? Number(item.latestQuizScore) : 
+                       item.LatestQuizScore != null ? Number(item.LatestQuizScore) : null,
+      quizAccuracyRate: item.quizAccuracyRate != null ? Number(item.quizAccuracyRate) : 
+                        item.QuizAccuracyRate != null ? Number(item.QuizAccuracyRate) : null,
+    };
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }
@@ -532,31 +546,38 @@ export async function generateAIPracticeQuiz(
     optionC: string;
     optionD: string;
     correctAnswer: string;
+    explanation?: string;
     caseId?: string;
     caseTitle?: string;
   }>;
 }> {
   try {
-    const { data } = await http.post<{
-      success: boolean;
-      message?: string;
-      questions: Array<{
-        questionText: string;
-        type: string;
-        optionA: string;
-        optionB: string;
-        optionC: string;
-        optionD: string;
-        correctAnswer: string;
-        caseId?: string;
-        caseTitle?: string;
-      }>;
-    }>('/api/student/quizzes/practice/generate', {
+    const { data } = await http.post<unknown>('/api/student/quizzes/practice/generate', {
       topic,
       questionCount,
       difficulty,
     });
-    return data;
+    // Normalize: BE trả về PascalCase Success, axios/JSON có thể lowercase
+    const normalized = data as Record<string, unknown>;
+    const rawQuestions = Array.isArray(normalized.questions ?? normalized.Questions)
+      ? (normalized.questions ?? normalized.Questions) as Record<string, unknown>[]
+      : [];
+    return {
+      success: Boolean(normalized.success ?? normalized.Success ?? false),
+      message: String(normalized.message ?? normalized.Message ?? ''),
+      questions: rawQuestions.map((q) => ({
+        questionText: String(q.questionText ?? q.QuestionText ?? ''),
+        type: String(q.type ?? q.Type ?? 'MultipleChoice'),
+        optionA: String(q.optionA ?? q.OptionA ?? ''),
+        optionB: String(q.optionB ?? q.OptionB ?? ''),
+        optionC: String(q.optionC ?? q.OptionC ?? ''),
+        optionD: String(q.optionD ?? q.OptionD ?? ''),
+        correctAnswer: String(q.correctAnswer ?? q.CorrectAnswer ?? ''),
+        explanation: String(q.explanation ?? q.Explanation ?? '') || undefined,
+        caseId: q.caseId != null ? String(q.caseId) : q.CaseId != null ? String(q.CaseId) : undefined,
+        caseTitle: q.caseTitle != null ? String(q.caseTitle) : q.CaseTitle != null ? String(q.CaseTitle) : undefined,
+      })),
+    };
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }
@@ -589,6 +610,90 @@ export async function getAssignedQuizzes(): Promise<AssignedQuizItem[]> {
         ? (data as { items?: unknown[] }).items ?? []
         : [];
     return (list as Record<string, unknown>[]).map(mapQuizListItem);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+// ========== AI Practice Quiz from Cases ==========
+
+export interface AvailableCaseForQuiz {
+  caseId: string;
+  caseTitle: string;
+  caseDescription: string;
+  keyFindings?: string | null;
+  suggestedDiagnosis?: string | null;
+  difficulty?: string | null;
+  imageUrl?: string | null;
+  modality?: string | null;
+}
+
+/**
+ * Get available cases for AI quiz generation.
+ * GET /api/student/quizzes/cases?topic=xxx&limit=20
+ */
+export async function fetchAvailableCasesForQuiz(topic?: string, limit = 20): Promise<AvailableCaseForQuiz[]> {
+  try {
+    const params: Record<string, string | number> = { limit };
+    if (topic) {
+      params.topic = topic;
+    }
+    const { data } = await http.get<unknown[]>('/api/student/quizzes/cases', { params });
+    const list = Array.isArray(data) ? data : [];
+    return (list as Record<string, unknown>[]).map((item) => ({
+      caseId: String(item.caseId ?? item.CaseId ?? item.id ?? ''),
+      caseTitle: String(item.caseTitle ?? item.CaseTitle ?? item.title ?? 'Untitled Case'),
+      caseDescription: String(item.caseDescription ?? item.CaseDescription ?? item.description ?? ''),
+      keyFindings: item.keyFindings as string | null | undefined,
+      suggestedDiagnosis: item.suggestedDiagnosis as string | null | undefined,
+      difficulty: item.difficulty as string | null | undefined,
+      imageUrl: item.imageUrl as string | null | undefined,
+      modality: item.modality as string | null | undefined,
+    }));
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+/**
+ * Generate AI Practice Quiz from selected cases.
+ * POST /api/student/quizzes/practice/from-cases
+ */
+export async function generateAIPracticeQuizFromCases(
+  cases: Array<{ caseId: string; caseTitle?: string; caseDescription?: string; keyFindings?: string; suggestedDiagnosis?: string; difficulty?: string; imageUrl?: string; modality?: string }>,
+  questionCount = 5,
+  difficulty?: string
+): Promise<StudentGeneratedQuizSession> {
+  try {
+    const { data } = await http.post<unknown>('/api/student/quizzes/practice/from-cases', {
+      cases,
+      questionCount,
+      difficulty,
+    });
+    const item = data as Record<string, unknown>;
+    const questions = Array.isArray(item.questions) ? (item.questions as Record<string, unknown>[]) : [];
+    return {
+      attemptId: String(item.attemptId ?? item.AttemptId ?? ''),
+      quizId: String(item.quizId ?? item.QuizId ?? ''),
+      title: String(item.title ?? item.Title ?? ''),
+      topic: item.topic != null ? String(item.topic) : item.Topic != null ? String(item.Topic) : null,
+      message: item.message != null ? String(item.message) : item.Message != null ? String(item.Message) : undefined,
+      questions: questions.map((q) => ({
+        questionId: String(q.questionId ?? q.QuestionId ?? q.id ?? ''),
+        questionText: String(q.questionText ?? q.QuestionText ?? ''),
+        type: q.type != null ? String(q.type) : q.Type != null ? String(q.Type) : null,
+        caseId: q.caseId != null ? String(q.caseId) : q.CaseId != null ? String(q.CaseId) : null,
+        caseTitle: q.caseTitle != null ? String(q.caseTitle) : q.CaseTitle != null ? String(q.CaseTitle) : null,
+        optionA: q.optionA != null ? String(q.optionA) : q.OptionA != null ? String(q.OptionA) : null,
+        optionB: q.optionB != null ? String(q.optionB) : q.OptionB != null ? String(q.OptionB) : null,
+        optionC: q.optionC != null ? String(q.optionC) : q.OptionC != null ? String(q.OptionC) : null,
+        optionD: q.optionD != null ? String(q.optionD) : q.OptionD != null ? String(q.OptionD) : null,
+        imageUrl: q.imageUrl != null ? String(q.imageUrl) : q.ImageUrl != null ? String(q.ImageUrl) : null,
+        correctAnswer: q.correctAnswer != null ? String(q.correctAnswer) : q.CorrectAnswer != null ? String(q.CorrectAnswer) : null,
+        explanation: q.explanation != null ? String(q.explanation) : q.Explanation != null ? String(q.Explanation) : null,
+      })),
+      savedToHistory: Boolean(item.savedToHistory ?? item.SavedToHistory ?? true),
+    };
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }
@@ -973,12 +1078,13 @@ export async function fetchCaseCatalogDetail(caseId: string): Promise<StudentCas
 function mapStudentTopicStat(row: unknown): StudentTopicStat | null {
   if (!row || typeof row !== 'object') return null;
   const item = row as Record<string, unknown>;
-  const topicName = String(item.topicName ?? item.topic ?? item.name ?? '');
+  // Handle both backend naming conventions: Topic (PascalCase) vs topicName (camelCase)
+  const topicName = String(item.topicName ?? item.topic ?? item.Topic ?? item.name ?? '');
   if (!topicName) return null;
   return {
     topicName,
-    accuracyRate: Number(item.accuracyRate ?? 0),
-    quizAttempts: Number(item.quizAttempts ?? 0),
+    accuracyRate: Number(item.accuracyRate ?? item.AccuracyRate ?? item.accuracyRate ?? 0),
+    quizAttempts: Number(item.quizAttempts ?? item.QuizAttempts ?? 0),
   };
 }
 
@@ -1081,6 +1187,7 @@ export interface StudentGeneratedQuizSession {
   quizId: string;
   title: string;
   topic?: string | null;
+  message?: string;
   questions: Array<{
     questionId: string;
     questionText: string;
@@ -1092,6 +1199,10 @@ export interface StudentGeneratedQuizSession {
     optionC?: string | null;
     optionD?: string | null;
     imageUrl?: string | null;
+    /** Đáp án đúng - hiển thị sau khi nộp bài */
+    correctAnswer?: string | null;
+    /** Giải thích đáp án - hiển thị sau khi nộp bài */
+    explanation?: string | null;
   }>;
   savedToHistory: boolean;
 }
@@ -1171,6 +1282,44 @@ export interface StudentQuizAttemptSummary {
   totalQuestions: number;
   correctAnswers: number;
   isAiGenerated: boolean;
+}
+
+export interface StudentQuizAttemptHistoryPageResult {
+  items: StudentQuizAttemptSummary[];
+  totalCount: number;
+  pageIndex: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface QuizHistoryFilters {
+  pageIndex?: number;
+  pageSize?: number;
+  quizTitle?: string;
+  topic?: string;
+  isAiGenerated?: boolean;
+  passed?: boolean;
+  fromDate?: string;
+  toDate?: string;
+}
+
+function mapStudentQuizAttemptSummary(item: Record<string, unknown>): StudentQuizAttemptSummary {
+  return {
+    attemptId: String(item.attemptId ?? item.AttemptId ?? ''),
+    quizId: String(item.quizId ?? item.QuizId ?? ''),
+    quizTitle: String(item.quizTitle ?? item.QuizTitle ?? item.title ?? item.Title ?? ''),
+    topic: item.topic != null ? String(item.topic) : item.Topic != null ? String(item.Topic) : null,
+    difficulty: item.difficulty != null ? String(item.difficulty) : item.Difficulty != null ? String(item.Difficulty) : null,
+    className: item.className != null ? String(item.className) : item.ClassName != null ? String(item.ClassName) : null,
+    startedAt: item.startedAt != null ? String(item.startedAt) : item.StartedAt != null ? String(item.StartedAt) : null,
+    completedAt: item.completedAt != null ? String(item.completedAt) : item.CompletedAt != null ? String(item.CompletedAt) : null,
+    score: item.score != null ? Number(item.score) : item.Score != null ? Number(item.Score) : null,
+    passingScore: item.passingScore != null ? Number(item.passingScore) : item.PassingScore != null ? Number(item.PassingScore) : null,
+    passed: Boolean(item.passed ?? item.Passed ?? false),
+    totalQuestions: Number(item.totalQuestions ?? item.TotalQuestions ?? 0),
+    correctAnswers: Number(item.correctAnswers ?? item.CorrectAnswers ?? 0),
+    isAiGenerated: Boolean(item.isAiGenerated ?? item.IsAiGenerated ?? false),
+  };
 }
 
 /** ====== Class Detail ====== */
@@ -1381,6 +1530,9 @@ export async function generateAndSaveAIPracticeQuiz(
         optionC: q.optionC != null ? String(q.optionC) : q.OptionC != null ? String(q.OptionC) : null,
         optionD: q.optionD != null ? String(q.optionD) : q.OptionD != null ? String(q.OptionD) : null,
         imageUrl: q.imageUrl != null ? String(q.imageUrl) : q.ImageUrl != null ? String(q.ImageUrl) : null,
+        // Đáp án đúng và giải thích cho Practice Mode
+        correctAnswer: q.correctAnswer != null ? String(q.correctAnswer) : q.CorrectAnswer != null ? String(q.CorrectAnswer) : null,
+        explanation: q.explanation != null ? String(q.explanation) : q.Explanation != null ? String(q.Explanation) : null,
       })),
       savedToHistory: Boolean(item.savedToHistory ?? item.SavedToHistory ?? true),
     };
@@ -1438,23 +1590,365 @@ export async function fetchStudentQuizHistory(): Promise<StudentQuizAttemptSumma
   try {
     const { data } = await http.get<unknown>('/api/student/quizzes/history');
     const list = Array.isArray(data) ? data : [];
-    return (list as Record<string, unknown>[]).map((item) => ({
-      attemptId: String(item.attemptId ?? item.AttemptId ?? ''),
-      quizId: String(item.quizId ?? item.QuizId ?? ''),
-      quizTitle: String(item.quizTitle ?? item.QuizTitle ?? item.title ?? item.Title ?? ''),
-      topic: item.topic != null ? String(item.topic) : item.Topic != null ? String(item.Topic) : null,
-      difficulty: item.difficulty != null ? String(item.difficulty) : item.Difficulty != null ? String(item.Difficulty) : null,
-      className: item.className != null ? String(item.className) : item.ClassName != null ? String(item.ClassName) : null,
-      startedAt: item.startedAt != null ? String(item.startedAt) : item.StartedAt != null ? String(item.StartedAt) : null,
-      completedAt: item.completedAt != null ? String(item.completedAt) : item.CompletedAt != null ? String(item.CompletedAt) : null,
-      score: item.score != null ? Number(item.score) : item.Score != null ? Number(item.Score) : null,
-      passingScore: item.passingScore != null ? Number(item.passingScore) : item.PassingScore != null ? Number(item.PassingScore) : null,
-      passed: Boolean(item.passed ?? item.Passed ?? false),
-      totalQuestions: Number(item.totalQuestions ?? item.TotalQuestions ?? 0),
-      correctAnswers: Number(item.correctAnswers ?? item.CorrectAnswers ?? 0),
-      isAiGenerated: Boolean(item.isAiGenerated ?? item.IsAiGenerated ?? false),
-    }));
+    return (list as Record<string, unknown>[]).map(mapStudentQuizAttemptSummary);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }
+}
+
+/**
+ * Get quiz attempt history with pagination and filters.
+ * GET /api/student/quizzes/history/paged
+ */
+export async function fetchStudentQuizHistoryPaged(
+  filters: QuizHistoryFilters = {}
+): Promise<StudentQuizAttemptHistoryPageResult> {
+  try {
+    const params: Record<string, string | number | boolean> = {};
+
+    if (filters.pageIndex !== undefined) params.pageIndex = filters.pageIndex;
+    if (filters.pageSize !== undefined) params.pageSize = filters.pageSize;
+    else params.pageSize = 5; // Default 5 items per page
+
+    if (filters.quizTitle) params.quizTitle = filters.quizTitle;
+    if (filters.topic) params.topic = filters.topic;
+    if (filters.isAiGenerated !== undefined) params.isAiGenerated = filters.isAiGenerated;
+    if (filters.passed !== undefined) params.passed = filters.passed;
+    if (filters.fromDate) params.fromDate = filters.fromDate;
+    if (filters.toDate) params.toDate = filters.toDate;
+
+    const { data } = await http.get<unknown>('/api/student/quizzes/history/paged', { params });
+    const payload = (data && typeof data === 'object') ? (data as Record<string, unknown>) : null;
+
+    const items = Array.isArray(payload?.items)
+      ? (payload.items as Record<string, unknown>[]).map(mapStudentQuizAttemptSummary)
+      : [];
+
+    return {
+      items,
+      totalCount: Number(payload?.totalCount ?? payload?.TotalCount ?? 0),
+      pageIndex: Number(payload?.pageIndex ?? payload?.PageIndex ?? 0),
+      pageSize: Number(payload?.pageSize ?? payload?.PageSize ?? 5),
+      totalPages: Number(payload?.totalPages ?? payload?.TotalPages ?? 0),
+    };
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+// ========== AI Flashcard Recommendations ==========
+
+export interface FlashcardRecommendationResult {
+  success: boolean;
+  errorMessage?: string;
+  urgentReviewCards: CardRecommendation[];
+  recommendedStudyCards: CardRecommendation[];
+  weakAreas: string[];
+  studyTips?: string;
+  suggestedTopics: string[];
+  masteryScore: number;
+}
+
+export interface CardRecommendation {
+  cardId: string;
+  deckId: string;
+  deckName: string;
+  frontContent: string;
+  backContent: string;
+  imageUrl?: string;
+  priority: 'high' | 'medium' | 'low';
+  recommendationReason: string;
+  reviewCount: number;
+  easeFactor: number;
+  lastReviewDate?: string;
+  nextReviewDate?: string;
+}
+
+export async function fetchFlashcardRecommendations(): Promise<FlashcardRecommendationResult> {
+  try {
+    const { data } = await http.get<unknown>('/api/student/flashcards/recommendations');
+    const item = data as Record<string, unknown>;
+    return {
+      success: Boolean(item.success ?? item.Success ?? false),
+      errorMessage: item.errorMessage as string | undefined,
+      urgentReviewCards: normalizeCardRecommendations(item.urgentReviewCards),
+      recommendedStudyCards: normalizeCardRecommendations(item.recommendedStudyCards),
+      weakAreas: Array.isArray(item.weakAreas) ? item.weakAreas.map(String) : [],
+      studyTips: item.studyTips as string | undefined,
+      suggestedTopics: Array.isArray(item.suggestedTopics) ? item.suggestedTopics.map(String) : [],
+      masteryScore: Number(item.masteryScore ?? item.MasteryScore ?? 0),
+    };
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+function normalizeCardRecommendations(raw: unknown): CardRecommendation[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Record<string, unknown>[]).map((item) => ({
+    cardId: String(item.cardId ?? item.CardId ?? item.id ?? item.Id ?? ''),
+    deckId: String(item.deckId ?? item.DeckId ?? ''),
+    deckName: String(item.deckName ?? item.DeckName ?? ''),
+    frontContent: String(item.frontContent ?? item.FrontContent ?? ''),
+    backContent: String(item.backContent ?? item.BackContent ?? ''),
+    imageUrl: item.imageUrl as string | undefined,
+    priority: (item.priority === 'high' || item.priority === 'medium' || item.priority === 'low'
+      ? item.priority
+      : 'medium') as 'high' | 'medium' | 'low',
+    recommendationReason: String(item.recommendationReason ?? item.RecommendationReason ?? ''),
+    reviewCount: Number(item.reviewCount ?? item.ReviewCount ?? 0),
+    easeFactor: Number(item.easeFactor ?? item.EaseFactor ?? 2.5),
+    lastReviewDate: item.lastReviewDate as string | undefined,
+    nextReviewDate: item.nextReviewDate as string | undefined,
+  }));
+}
+
+export async function fetchCardStudyTip(cardId: string): Promise<string | null> {
+  try {
+    const { data } = await http.get<unknown>(`/api/student/flashcards/cards/${cardId}/study-tip`);
+    const item = data as Record<string, unknown>;
+    return item.studyTip as string | null;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+// ========== AI Quiz Hints ==========
+
+export interface QuizHintResult {
+  success: boolean;
+  hint?: string;
+  hintLevel: number;
+  isFromAi: boolean;
+  errorMessage?: string;
+}
+
+export async function fetchQuizHint(
+  questionId: string,
+  attemptId?: string,
+  level = 1
+): Promise<QuizHintResult> {
+  try {
+    const params = new URLSearchParams();
+    if (attemptId) params.set('attemptId', attemptId);
+    params.set('level', String(level));
+    const { data } = await http.get<unknown>(`/api/student/questions/${questionId}/hint?${params}`);
+    const item = data as Record<string, unknown>;
+    return {
+      success: Boolean(item.success ?? item.Success ?? false),
+      hint: item.hint as string | undefined,
+      hintLevel: Number(item.hintLevel ?? item.HintLevel ?? level),
+      isFromAi: Boolean(item.isFromAi ?? item.IsFromAi ?? true),
+      errorMessage: item.errorMessage as string | undefined,
+    };
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+// ========== Save Quiz to Flashcards ==========
+
+export interface SaveQuizToFlashcardsRequest {
+  deckName?: string;
+  description?: string;
+}
+
+export interface SaveQuizToFlashcardsResult {
+  success: boolean;
+  deckId: string;
+  deckName: string;
+  cardCount: number;
+  message: string;
+}
+
+export async function saveQuizToFlashcards(
+  attemptId: string,
+  request?: SaveQuizToFlashcardsRequest
+): Promise<SaveQuizToFlashcardsResult> {
+  try {
+    const { data } = await http.post<unknown>('/api/student/quizzes/' + attemptId + '/save-to-flashcards', request ?? {});
+    const item = data as Record<string, unknown>;
+    return {
+      success: Boolean(item.success ?? item.Success ?? false),
+      deckId: String(item.deckId ?? item.DeckId ?? ''),
+      deckName: String(item.deckName ?? item.DeckName ?? ''),
+      cardCount: Number(item.cardCount ?? item.CardCount ?? 0),
+      message: String(item.message ?? item.Message ?? ''),
+    };
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+// ========== Flashcard Deck Management ==========
+
+export interface FlashcardDeckDto {
+  id: string;
+  deckName: string;
+  description?: string;
+  studentId: string;
+  cardCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlashcardDto {
+  id: string;
+  deckId: string;
+  frontContent: string;
+  backContent: string;
+  imageUrl?: string;
+  easeFactor: number;
+  intervalDays: number;
+  repetitionCount: number;
+  nextReviewDate?: string;
+  lastReviewDate?: string;
+  isBookmarked: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchFlashcardDecks(): Promise<FlashcardDeckDto[]> {
+  try {
+    const { data } = await http.get<unknown>('/api/student/flashcards/decks');
+    if (!Array.isArray(data)) return [];
+    return (data as Record<string, unknown>[]).map(normalizeDeck);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function createFlashcardDeck(deckName: string, description?: string): Promise<FlashcardDeckDto> {
+  try {
+    const { data } = await http.post<unknown>('/api/student/flashcards/decks', {
+      deckName,
+      description,
+    });
+    return normalizeDeck(data as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function deleteFlashcardDeck(deckId: string): Promise<void> {
+  try {
+    await http.delete('/api/student/flashcards/decks/' + deckId);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchFlashcardsByDeck(deckId: string): Promise<FlashcardDto[]> {
+  try {
+    const { data } = await http.get<unknown>('/api/student/flashcards/decks/' + deckId + '/cards');
+    if (!Array.isArray(data)) return [];
+    return (data as Record<string, unknown>[]).map(normalizeFlashcard);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function createFlashcard(deckId: string, frontContent: string, backContent: string): Promise<FlashcardDto> {
+  try {
+    const { data } = await http.post<unknown>('/api/student/flashcards/cards', {
+      deckId,
+      frontContent,
+      backContent,
+    });
+    return normalizeFlashcard(data as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function deleteFlashcard(cardId: string): Promise<void> {
+  try {
+    await http.delete('/api/student/flashcards/cards/' + cardId);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+// ========== AI Flashcard Generator ==========
+
+export interface FlashcardGenerationResult {
+  success: boolean;
+  deckId: string;
+  deckName: string;
+  cardsGenerated: number;
+  message: string;
+  generatedCards?: Array<{
+    frontContent: string;
+    backContent: string;
+  }>;
+}
+
+export async function generateFlashcardsFromText(
+  sourceText: string,
+  cardCount: number,
+  deckName?: string
+): Promise<FlashcardGenerationResult> {
+  try {
+    const { data } = await http.post<unknown>('/api/student/flashcards/generate/from-text', {
+      sourceText,
+      cardCount,
+      deckName,
+    });
+    const item = data as Record<string, unknown>;
+    return {
+      success: Boolean(item.success ?? item.Success ?? false),
+      deckId: String(item.deckId ?? item.DeckId ?? ''),
+      deckName: String(item.deckName ?? item.DeckName ?? ''),
+      cardsGenerated: Number(item.cardsGenerated ?? item.CardsGenerated ?? 0),
+      message: String(item.message ?? item.Message ?? ''),
+    };
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function generateFlashcardsFromCase(caseId: string, cardCount = 10): Promise<FlashcardGenerationResult> {
+  try {
+    const { data } = await http.post<unknown>('/api/student/flashcards/generate/from-case/' + caseId + '?cardCount=' + cardCount, {});
+    const item = data as Record<string, unknown>;
+    return {
+      success: Boolean(item.success ?? item.Success ?? false),
+      deckId: String(item.deckId ?? item.DeckId ?? ''),
+      deckName: String(item.deckName ?? item.DeckName ?? ''),
+      cardsGenerated: Number(item.cardsGenerated ?? item.CardsGenerated ?? 0),
+      message: String(item.message ?? item.Message ?? ''),
+    };
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+function normalizeDeck(raw: Record<string, unknown>): FlashcardDeckDto {
+  return {
+    id: String(raw.id ?? raw.Id ?? ''),
+    deckName: String(raw.deckName ?? raw.DeckName ?? ''),
+    description: raw.description as string | undefined,
+    studentId: String(raw.studentId ?? raw.StudentId ?? ''),
+    cardCount: Number(raw.cardCount ?? raw.CardCount ?? 0),
+    createdAt: String(raw.createdAt ?? raw.CreatedAt ?? ''),
+    updatedAt: String(raw.updatedAt ?? raw.UpdatedAt ?? ''),
+  };
+}
+
+function normalizeFlashcard(raw: Record<string, unknown>): FlashcardDto {
+  return {
+    id: String(raw.id ?? raw.Id ?? ''),
+    deckId: String(raw.deckId ?? raw.DeckId ?? ''),
+    frontContent: String(raw.frontContent ?? raw.FrontContent ?? ''),
+    backContent: String(raw.backContent ?? raw.BackContent ?? ''),
+    imageUrl: raw.imageUrl as string | undefined,
+    easeFactor: Number(raw.easeFactor ?? raw.EaseFactor ?? 2.5),
+    intervalDays: Number(raw.intervalDays ?? raw.IntervalDays ?? 1),
+    repetitionCount: Number(raw.repetitionCount ?? raw.RepetitionCount ?? 0),
+    nextReviewDate: raw.nextReviewDate as string | undefined,
+    lastReviewDate: raw.lastReviewDate as string | undefined,
+    isBookmarked: Boolean(raw.isBookmarked ?? raw.IsBookmarked ?? false),
+    createdAt: String(raw.createdAt ?? raw.CreatedAt ?? ''),
+    updatedAt: String(raw.updatedAt ?? raw.UpdatedAt ?? ''),
+  };
 }
