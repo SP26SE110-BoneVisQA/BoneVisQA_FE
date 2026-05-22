@@ -119,6 +119,7 @@ function QuestionReviewContent({
   index: number;
 }) {
   const [imgFullscreen, setImgFullscreen] = useState(false);
+  const [enhancement, setEnhancement] = useState({ brightness: 1, contrast: 1, invert: false, grayscale: false });
   const isEssay = q.type?.toLowerCase() === 'essay';
   const options = [
     { key: 'A', value: q.optionA },
@@ -126,6 +127,16 @@ function QuestionReviewContent({
     { key: 'C', value: q.optionC },
     { key: 'D', value: q.optionD },
   ];
+
+  const getImageStyle = (enh: typeof enhancement): React.CSSProperties => {
+    const filters = [
+      `brightness(${enh.brightness})`,
+      `contrast(${enh.contrast})`,
+      enh.invert ? 'invert(1)' : '',
+      enh.grayscale ? 'grayscale(1)' : '',
+    ].filter(Boolean);
+    return { filter: filters.join(' ') };
+  };
 
   return (
     <>
@@ -229,15 +240,42 @@ function QuestionReviewContent({
         >
           <button
             type="button"
-            className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full p-2 transition-colors"
+            className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full p-2 transition-colors z-10"
             onClick={() => setImgFullscreen(false)}
           >
             <XCircle className="h-8 w-8" />
           </button>
+          {/* Enhancement controls */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setEnhancement(prev => ({ ...prev, invert: !prev.invert })); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                enhancement.invert ? 'bg-primary text-white' : 'bg-white/20 hover:bg-white/30 text-white'
+              }`}
+            >
+              Invert
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setEnhancement({ brightness: 1.5, contrast: 2, invert: true, grayscale: false }); }}
+              className="px-3 py-1.5 rounded-full text-xs font-medium bg-blue-500/30 hover:bg-blue-500/50 text-white transition-colors"
+            >
+              X-ray Mode
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setEnhancement({ brightness: 1, contrast: 1, invert: false, grayscale: false }); }}
+              className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/20 hover:bg-white/30 text-white transition-colors"
+            >
+              Reset
+            </button>
+          </div>
           <img
             src={resolveApiAssetUrl(q.imageUrl)}
             alt={`Question ${index + 1} full size`}
             className="max-w-full max-h-full object-contain"
+            style={getImageStyle(enhancement)}
             onClick={(e) => e.stopPropagation()}
           />
         </div>
@@ -516,10 +554,10 @@ function EditScoreModal({
                           src={resolveApiAssetUrl(q.imageUrl)}
                           alt={`Question ${i + 1} image`}
                           className="w-full h-auto max-h-40 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                          onClick={() => window.open(resolveApiAssetUrl(q.imageUrl), '_blank')}
+                          onClick={() => window.open(resolveApiAssetUrl(q.imageUrl) + '?enhance=true', '_blank')}
                         />
                         <p className="text-xs text-center text-muted-foreground py-1 px-2 bg-muted/50">
-                          Click to view full size
+                          Click for full size with enhancement options
                         </p>
                       </div>
                     )}
@@ -1034,82 +1072,74 @@ export default function QuizResultsPage({
         </div>
       </div>
 
-      {/* Release Answers Section */}
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isReleased ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
-            {isReleased ? <CheckCircle2 className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+      {/* Actions Bar */}
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center">
+        {/* Release Answers */}
+        <div className="flex flex-1 items-center gap-3">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isReleased ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
+            {isReleased ? <CheckCircle2 className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           </div>
-          <div>
-            <h3 className="font-semibold text-sm text-card-foreground">Release Answers</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-card-foreground">Release Answers</p>
+            <p className="text-xs text-muted-foreground truncate">
               {isReleased
-                ? `Đáp án đã được công bố (${releasedAt ? new Date(releasedAt).toLocaleString('vi-VN') : ''}). Sinh viên có thể xem đáp án đúng.`
+                ? `Published ${releasedAt ? new Date(releasedAt).toLocaleDateString('vi-VN') : ''}`
                 : isQuizClosed
-                  ? 'Quiz đã đóng. Bạn có thể công bố đáp án để sinh viên xem.'
-                  : 'Quiz đang chạy. Sinh viên sẽ thấy đáp án sau khi bạn công bố.'}
+                  ? 'Quiz closed — ready to publish'
+                  : 'Not published yet'}
             </p>
           </div>
-        </div>
-        {isReleased ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleHideAnswers}
-            disabled={releasing}
-            className="shrink-0 border-destructive/30 bg-destructive/5 font-semibold text-destructive hover:bg-destructive/10"
-          >
-            {releasing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <EyeOff className="mr-2 h-4 w-4" />
-            )}
-            Hide Answers
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            onClick={() => setReleaseDialogOpen(true)}
-            disabled={releasing}
-            className="shrink-0 bg-success font-semibold text-white hover:bg-success/90"
-          >
-            {releasing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-            )}
-            Release Answers
-          </Button>
-        )}
-      </div>
-
-      {/* Retake management */}
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <RotateCcw className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-sm text-card-foreground">Retake management</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {attempts.filter((a) => a.completedAt).length} student(s) have submitted. You can reset attempts so they can take the quiz again.
-            </p>
-          </div>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={openRetakeAllDialog}
-          disabled={retakingAll || attempts.filter((a) => a.completedAt).length === 0}
-          className="shrink-0 border-primary/30 bg-primary/5 font-semibold text-primary hover:bg-primary/10"
-        >
-          {retakingAll ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          {isReleased ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleHideAnswers}
+              disabled={releasing}
+              className="shrink-0 text-destructive hover:bg-destructive/10"
+            >
+              {releasing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Hide'}
+            </Button>
           ) : (
-            <RotateCcw className="mr-2 h-4 w-4" />
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setReleaseDialogOpen(true)}
+              disabled={releasing}
+              className="shrink-0 bg-success text-white hover:bg-success/90"
+            >
+              {releasing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Publish'}
+            </Button>
           )}
-          Allow all to retake
-        </Button>
+        </div>
+
+        {/* Divider */}
+        <div className="h-8 w-px bg-border hidden sm:block" />
+
+        {/* Retake Management */}
+        <div className="flex flex-1 items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <RotateCcw className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-card-foreground">Allow Retake</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {attempts.filter((a) => a.completedAt).length > 0
+                ? `${attempts.filter((a) => a.completedAt).length} submission(s)`
+                : 'No submissions yet'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={openRetakeAllDialog}
+            disabled={retakingAll || attempts.filter((a) => a.completedAt).length === 0}
+            className="shrink-0 text-primary hover:bg-primary/10"
+          >
+            {retakingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reset All'}
+          </Button>
+        </div>
       </div>
 
       {/* Search */}

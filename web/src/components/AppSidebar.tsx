@@ -33,6 +33,9 @@ import {
   Server,
   HardDrive,
   FileBarChart,
+  Eye,
+  BotMessageSquare,
+  UserCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { LucideIcon } from 'lucide-react';
@@ -78,11 +81,16 @@ const navByRole: Record<RoleKey, NavItem[]> = {
   ],
   student: [
     { label: 'Dashboard', href: '/student/dashboard', icon: LayoutDashboard },
-    { label: 'Case Library', href: '/student/catalog', icon: BookOpen },
-    { label: 'Visual QA', href: '/student/qa/image', icon: ScanSearch },
+    { label: 'Case Catalog', href: '/student/catalog', icon: BookOpen },
+    { label: 'History', href: '/student/history', icon: ClipboardList },
+    { label: 'AI Q&A', href: '/student/qa', icon: BotMessageSquare },
     { label: 'Quizzes', href: '/student/quizzes', icon: HelpCircle },
+    { label: 'Flashcards', href: '/student/review', icon: Eye },
+    { label: 'AI Assistant', href: '/student/ai-assistant', icon: Sparkles },
     { label: 'Analytics', href: '/student/analytics', icon: BarChart3 },
     { label: 'Class', href: '/student/classes', icon: Users },
+    { label: 'Profile', href: '/student/profile', icon: UserCircle },
+    { label: 'Settings', href: '/student/settings', icon: Settings },
   ],
 };
 

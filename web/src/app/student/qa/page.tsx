@@ -1,75 +1,54 @@
 import { StudentAppChrome } from '@/components/student/StudentAppChrome';
 import Link from 'next/link';
-import { BotMessageSquare, ImageUp, ArrowRight } from 'lucide-react';
-
-const modes = [
-  {
-    title: 'Q&A by Topic',
-    description: 'Choose a bone/joint topic and chat with AI using our medical knowledge base (RAG).',
-    details: [
-      'Select from categorized bone & joint topics',
-      'AI answers based on curated medical documents',
-      'Responses include cited references',
-    ],
-    icon: BotMessageSquare,
-    href: '/student/qa/topic',
-    iconColor: 'bg-primary/10 text-primary',
-    borderColor: 'hover:border-primary/50',
-  },
-  {
-    title: 'Q&A by Image',
-    description: 'Upload an X-ray, CT, or MRI image and ask AI questions about it.',
-    details: [
-      'Support X-ray, CT, MRI image formats',
-      'AI detects and analyzes bone lesions',
-      'Get structured diagnostic suggestions',
-    ],
-    icon: ImageUp,
-    href: '/student/qa/image',
-    iconColor: 'bg-warning/10 text-warning',
-    borderColor: 'hover:border-warning/50',
-  },
-];
+import { ImageUp, ArrowRight, ArrowLeft } from 'lucide-react';
 
 export default function StudentQAPage() {
   return (
     <div className="min-h-screen">
-      <StudentAppChrome breadcrumb="AI Q&A" title="AI Q&A" subtitle="Choose a mode to start asking questions" />
+      <StudentAppChrome breadcrumb="AI Q&A" title="AI Q&A" subtitle="Upload medical images for AI analysis" />
 
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {modes.map((mode) => {
-            const Icon = mode.icon;
-            return (
-              <Link
-                key={mode.title}
-                href={mode.href}
-                className={`bg-card rounded-xl border border-border p-6 transition-all duration-200 hover:shadow-lg ${mode.borderColor} group`}
-              >
-                <div className={`w-14 h-14 rounded-xl ${mode.iconColor} flex items-center justify-center mb-4`}>
-                  <Icon className="w-7 h-7" />
-                </div>
+      <div className="p-6 max-w-2xl mx-auto">
+        <Link
+          href="/student/dashboard"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Dashboard
+        </Link>
 
-                <h2 className="text-xl font-semibold text-card-foreground mb-2">{mode.title}</h2>
-                <p className="text-sm text-muted-foreground mb-4">{mode.description}</p>
+        <Link
+          href="/student/qa/image"
+          className="block bg-card rounded-xl border border-border p-8 transition-all duration-200 hover:shadow-lg hover:border-warning/50 group"
+        >
+          <div className="w-16 h-16 rounded-xl bg-warning/10 text-warning flex items-center justify-center mb-6 mx-auto">
+            <ImageUp className="w-8 h-8" />
+          </div>
 
-                <ul className="space-y-2 mb-6">
-                  {mode.details.map((detail) => (
-                    <li key={detail} className="flex items-start gap-2 text-sm text-card-foreground">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />
-                      {detail}
-                    </li>
-                  ))}
-                </ul>
+          <h2 className="text-2xl font-semibold text-card-foreground mb-3 text-center">Q&A by Image</h2>
+          <p className="text-muted-foreground mb-6 text-center">
+            Upload an X-ray, CT, or MRI image and ask AI questions about it.
+          </p>
 
-                <div className="flex items-center gap-2 text-primary font-medium text-sm group-hover:gap-3 transition-all duration-200">
-                  Get started
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+          <ul className="space-y-3 mb-8">
+            <li className="flex items-start gap-3 text-sm text-card-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 flex-shrink-0" />
+              Support X-ray, CT, MRI image formats
+            </li>
+            <li className="flex items-start gap-3 text-sm text-card-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 flex-shrink-0" />
+              AI detects and analyzes bone lesions
+            </li>
+            <li className="flex items-start gap-3 text-sm text-card-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 flex-shrink-0" />
+              Get structured diagnostic suggestions
+            </li>
+          </ul>
+
+          <div className="flex items-center justify-center gap-2 text-warning font-medium text-sm group-hover:gap-3 transition-all duration-200">
+            Get started
+            <ArrowRight className="w-4 h-4" />
+          </div>
+        </Link>
       </div>
     </div>
   );

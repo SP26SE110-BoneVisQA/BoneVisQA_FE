@@ -625,7 +625,8 @@ export interface StudentSessionQuestion {
   optionD: string | null;
   imageUrl?: string | null;
   essayAnswer?: string | null; // Model answer for essay questions (from backend)
-  correctAnswer?: string | null; // Correct answer (only available after review/reveal)
+  correctAnswer?: string | null; // Correct answer (available in Practice Mode after submit)
+  explanation?: string | null; // Explanation of correct answer (available in Practice Mode)
 }
 
 export interface StudentSubmitQuestionDto {
@@ -899,6 +900,8 @@ export interface ClassQuizDto {
   creatorName?: string | null;
   /** Creator type: "Lecturer" or "Expert" */
   creatorType?: string | null;
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number;
 }
 
 export interface AssignedQuizDto {
@@ -915,6 +918,8 @@ export interface AssignedQuizDto {
   isFromExpertLibrary: boolean;
   creatorName?: string | null;
   creatorType?: string | null; // "Expert" or "Lecturer"
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number;
 }
 
 export interface CreateQuizRequest {

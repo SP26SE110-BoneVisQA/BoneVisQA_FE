@@ -30,6 +30,9 @@ import {
   Loader2,
   AlertCircle,
   Download,
+  Target,
+  BrainCircuit,
+  FileText,
 } from 'lucide-react';
 import { deleteQuiz, removeQuizFromClass, getUnassignedLecturerQuizzes, getAssignedQuizzes, getLecturerQuizzes } from '@/lib/api/lecturer-quiz';
 import { getStoredUserId } from '@/lib/getStoredUserId';
@@ -45,6 +48,7 @@ import { quizExtensionsApi } from '@/lib/api/quiz-extensions';
 
 type QuizStatus = 'Active' | 'Draft' | 'Completed';
 type TabType = 'my-quizzes' | 'expert-library' | 'assigned-quizzes';
+type QuizModeType = 'all' | '1' | '2' | '3';
 
 interface EnrichedQuiz {
   quizId: string;
@@ -69,6 +73,7 @@ interface EnrichedQuiz {
   passingScore?: number | null;
   creatorName?: string | null;
   creatorType?: string | null;
+  quizMode: number;
 }
 
 interface EnrichedAssignedQuiz extends AssignedQuizDto {
@@ -81,6 +86,7 @@ interface EnrichedAssignedQuiz extends AssignedQuizDto {
   compactAssigned: string;
   creatorName?: string | null;
   creatorType?: string | null;
+  quizMode: number;
 }
 
 const PAGE_SIZE = 5;
@@ -141,6 +147,7 @@ export default function QuizListPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [selectedQuizMode, setSelectedQuizMode] = useState<QuizModeType>('all');
   const [page, setPage] = useState(1);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EnrichedQuiz | EnrichedAssignedQuiz | null>(null);
@@ -316,6 +323,7 @@ export default function QuizListPage() {
           passingScore: q.passingScore ?? null,
           creatorName: q.creatorName ?? null,
           creatorType: q.creatorType ?? null,
+          quizMode: q.quizMode ?? 1,
         };
       });
       setMyQuizzes(enriched);
@@ -357,6 +365,7 @@ export default function QuizListPage() {
           compactAssigned: formatAssignedCompact(q.assignedAt ?? null),
           creatorName: q.creatorName ?? null,
           creatorType: q.creatorType ?? null,
+          quizMode: q.quizMode ?? 1,
         };
       });
       setAssignedQuizzes(enriched);
@@ -388,6 +397,7 @@ export default function QuizListPage() {
     // Clear filters and selections when switching tabs
     setSearchTerm('');
     setSelectedClass('all');
+    setSelectedQuizMode('all');
     setSelectedQuizIds(new Set());
     // Load data for the new tab
     if (tab === 'my-quizzes') {
@@ -408,7 +418,8 @@ export default function QuizListPage() {
       (quiz.topic?.toLowerCase().includes(term) ?? false) ||
       (quiz.topicLabel?.toLowerCase().includes(term) ?? false);
     const matchesClass = selectedClass === 'all' || quiz.className === selectedClass;
-    return matchesSearch && matchesClass;
+    const matchesQuizMode = selectedQuizMode === 'all' || String(quiz.quizMode) === selectedQuizMode;
+    return matchesSearch && matchesClass && matchesQuizMode;
   });
 
   const totalPages = filtered.length === 0 ? 0 : Math.ceil(filtered.length / PAGE_SIZE);
@@ -587,15 +598,29 @@ export default function QuizListPage() {
             )}
 
             <div className="border-b border-border px-6 py-3">
-              <div className="relative max-w-md">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-                  placeholder="Search quizzes or topics…"
-                  className="h-10 w-full rounded-full border border-border bg-muted pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative max-w-md">
+                  <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+                    placeholder="Search quizzes or topics…"
+                    className="h-10 w-full rounded-full border border-border bg-muted pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedQuizMode}
+                    onChange={(e) => { setSelectedQuizMode(e.target.value as QuizModeType); setPage(1); }}
+                    className="appearance-none rounded-full border border-border bg-white px-4 py-2 pr-8 text-xs font-bold text-muted-foreground focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                  >
+                    <option value="all">All Modes</option>
+                    <option value="1">Exam</option>
+                    <option value="2">Practice</option>
+                    <option value="3">Adaptive</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -610,6 +635,7 @@ export default function QuizListPage() {
                     {activeTab === 'assigned-quizzes' && <th className="px-2 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Class</th>}
                     <th className="px-2 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Topic</th>
                     <th className="px-1 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-2 sm:py-4 sm:text-xs">Q#</th>
+                    <th className="px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Mode</th>
                     <th className="px-2 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Status</th>
                     <th className="px-2 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Opens / Closes</th>
                     <th className="px-2 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Actions</th>
@@ -618,7 +644,7 @@ export default function QuizListPage() {
                 <tbody className="divide-y divide-border">
                   {paged.length === 0 ? (
                     <tr>
-                      <td colSpan={activeTab === 'assigned-quizzes' ? 8 : 7} className="px-4 py-20 text-center sm:px-8">
+                      <td colSpan={activeTab === 'assigned-quizzes' ? 9 : 8} className="px-4 py-20 text-center sm:px-8">
                         <p className="text-muted-foreground">No quizzes found.</p>
                       </td>
                     </tr>
@@ -665,6 +691,32 @@ export default function QuizListPage() {
                           </td>
                           <td className="px-1 py-4 text-center align-top sm:py-5">
                             <span className="text-sm font-bold text-card-foreground">{quiz.questionCount || '—'}</span>
+                          </td>
+                          <td className="px-2 py-4 text-center align-top sm:px-3 sm:py-5">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold sm:px-2.5 sm:py-1 sm:text-[10px] ${
+                              quiz.quizMode === 1 
+                                ? 'bg-primary/15 text-primary' 
+                                : quiz.quizMode === 2 
+                                ? 'bg-success/15 text-success' 
+                                : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                            }`}>
+                              {quiz.quizMode === 1 ? (
+                                <>
+                                  <FileText className="h-3 w-3" />
+                                  Exam
+                                </>
+                              ) : quiz.quizMode === 2 ? (
+                                <>
+                                  <Target className="h-3 w-3" />
+                                  Practice
+                                </>
+                              ) : (
+                                <>
+                                  <BrainCircuit className="h-3 w-3" />
+                                  Adaptive
+                                </>
+                              )}
+                            </span>
                           </td>
                           <td className="px-2 py-4 align-top sm:px-3 sm:py-5">
                             <span className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs ${quiz.status === 'Active' ? 'bg-secondary/15 text-secondary' : quiz.status === 'Completed' ? 'bg-muted text-muted-foreground' : 'bg-warning/10 text-warning'}`}>
