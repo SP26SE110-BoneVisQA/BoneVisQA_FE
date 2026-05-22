@@ -39,6 +39,7 @@ interface QuizModeQuestion {
   questionId: string;
   questionText: string;
   type: string | null;
+  typeLabel: string;
   optionA: string | null;
   optionB: string | null;
   optionC: string | null;
@@ -115,6 +116,7 @@ export default function QuizSessionPage({
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [quizResult, setQuizResult] = useState<StudentQuizResultDto | null>(null);
+  const [hoveredQuestionIndex, setHoveredQuestionIndex] = useState<number | null>(null);
   const [reviewData, setReviewData] = useState<{ correctAnswer: string }[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
   const [requestingRetake, setRequestingRetake] = useState(false);
@@ -210,25 +212,41 @@ export default function QuizSessionPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRetakeRequested, quizInfo]);
 
-  const questions: QuizModeQuestion[] = (session?.questions ?? []).map(q => ({
-    questionId: q.questionId,
-    questionText: q.questionText,
-    type: q.type ?? null,
-    optionA: q.optionA ?? null,
-    optionB: q.optionB ?? null,
-    optionC: q.optionC ?? null,
-    optionD: q.optionD ?? null,
-    caseId: q.caseId ?? null,
-    caseTitle: q.caseTitle ?? null,
-    imageUrl: q.imageUrl ?? null,
-    explanation: (q as any).explanation ?? null,
-    correctAnswer: q.correctAnswer ?? null,
-    essayAnswer: q.essayAnswer ?? null,
-    hint: (q as any).hint ?? null,
-    hintAvailable: (q as any).hintAvailable ?? false,
-    correctAnswers: (q as any).correctAnswers ?? null,
-    acceptedAnswers: (q as any).acceptedAnswers ?? null,
-  }));
+  const questions: QuizModeQuestion[] = (session?.questions ?? []).map(q => {
+    const typeLower = (q.type ?? '').toLowerCase();
+    const typeLabel =
+      typeLower.includes('multiple')
+        ? 'Multiple choice'
+        : typeLower === 'truefalse' || typeLower === 'true/false'
+          ? 'True / False'
+          : typeLower === 'multiselect' || typeLower === 'multi-select'
+            ? 'Multi-Select'
+            : typeLower === 'fillinblank' || typeLower === 'fill-in-blank'
+              ? 'Fill in Blank'
+              : typeLower === 'essay'
+                ? 'Essay'
+                : (q.type ?? 'Diagnostic analysis');
+    return {
+      questionId: q.questionId,
+      questionText: q.questionText,
+      type: q.type ?? null,
+      typeLabel,
+      optionA: q.optionA ?? null,
+      optionB: q.optionB ?? null,
+      optionC: q.optionC ?? null,
+      optionD: q.optionD ?? null,
+      caseId: q.caseId ?? null,
+      caseTitle: q.caseTitle ?? null,
+      imageUrl: q.imageUrl ?? null,
+      explanation: (q as any).explanation ?? null,
+      correctAnswer: q.correctAnswer ?? null,
+      essayAnswer: q.essayAnswer ?? null,
+      hint: (q as any).hint ?? null,
+      hintAvailable: (q as any).hintAvailable ?? false,
+      correctAnswers: (q as any).correctAnswers ?? null,
+      acceptedAnswers: (q as any).acceptedAnswers ?? null,
+    };
+  });
   const currentQ = questions[currentIndex];
   const totalQ = questions.length;
   // ================================================================
@@ -1072,29 +1090,7 @@ export default function QuizSessionPage({
                 </div>
               )}
 
-              <div>
-                <h4 className="mb-4 flex items-center gap-2 font-headline text-base font-bold text-on-surface">
-                  <span className="h-1 w-6 rounded-full bg-primary" />
-                  Reference material
-                </h4>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
-                    <BookOpen className="mb-3 h-7 w-7 text-primary" />
-                    <p className="text-sm font-bold text-on-surface">Classification atlas</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">AO/OTA fracture classification systems</p>
-                  </div>
-                  <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
-                    <PlayCircle className="mb-3 h-7 w-7 text-primary" />
-                    <p className="text-sm font-bold text-on-surface">Diagnostic video</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">Clinical signs in emergency radiography</p>
-                  </div>
-                  <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
-                    <TrendingUp className="mb-3 h-7 w-7 text-primary" />
-                    <p className="text-sm font-bold text-on-surface">Success rate</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">Track your progress after each attempt</p>
-                  </div>
-                </div>
-              </div>
+             
             </div>
           </div>
 
@@ -1102,20 +1098,25 @@ export default function QuizSessionPage({
             <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-6 sm:p-8">
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 <span className="inline-flex rounded-lg bg-primary px-2.5 py-1 font-headline text-xs font-extrabold text-white sm:text-sm">
-                  Q{currentIndex + 1} / {totalQ}
+                  Q{(hoveredQuestionIndex ?? currentIndex) + 1} / {totalQ}
                 </span>
-                <span className="inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-primary">
-                  {questionTag}
-                </span>
+                {!(
+                  (hoveredQuestionIndex !== null ? questions[hoveredQuestionIndex]?.type : currentQ.type)?.toLowerCase() === 'truefalse' ||
+                  (hoveredQuestionIndex !== null ? questions[hoveredQuestionIndex]?.type : currentQ.type)?.toLowerCase() === 'true/false'
+                ) && (
+                  <span className="inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-primary">
+                    {hoveredQuestionIndex !== null ? questions[hoveredQuestionIndex]?.typeLabel : questionTag}
+                  </span>
+                )}
               </div>
               <p className="font-headline text-lg font-bold leading-snug text-on-surface sm:text-xl">
-                {currentQ.questionText}
+                {hoveredQuestionIndex !== null ? questions[hoveredQuestionIndex]?.questionText : currentQ.questionText}
               </p>
             </div>
 
             {/* True/False Options */}
             {(currentQ.type?.toLowerCase() === 'truefalse' || currentQ.type?.toLowerCase() === 'true/false') && (
-              <div className="flex gap-4">
+              <div className="mt-6 flex gap-4">
                 {(['True', 'False'] as const).map((opt) => {
                   const isSelected = currentAnswer === opt;
                   const isCorrect = currentQ.correctAnswer?.toLowerCase() === opt.toLowerCase();
@@ -1150,7 +1151,7 @@ export default function QuizSessionPage({
 
             {/* Multi-Select Options */}
             {(currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select') && (
-              <div className="space-y-3">
+              <div className="mt-6 space-y-3">
                 <p className="text-sm text-on-surface-variant">Select all that apply:</p>
                 {(['A', 'B', 'C', 'D'] as const).map((key) => {
                   const optionValue = currentQ[`option${key}` as keyof typeof currentQ] as string | null;
@@ -1206,7 +1207,7 @@ export default function QuizSessionPage({
 
             {/* Fill-in-Blank Input */}
             {(currentQ.type?.toLowerCase() === 'fillinblank' || currentQ.type?.toLowerCase() === 'fill-in-blank') && (
-              <div className="space-y-3">
+              <div className="mt-6 space-y-3">
                 <label className="block text-sm font-semibold text-on-surface">Type your answer:</label>
                 <input
                   type="text"
@@ -1232,7 +1233,7 @@ export default function QuizSessionPage({
 
             {/* Default Multiple Choice Options */}
             {!['truefalse', 'true/false', 'multiselect', 'multi-select', 'fillinblank', 'fill-in-blank', 'essay'].includes(currentQ.type?.toLowerCase() || '') && (
-              <div className="space-y-4">
+              <div className="mt-6 space-y-4">
                 {(
                   [
                     { key: 'A' as const, text: currentQ.optionA },
@@ -1293,7 +1294,7 @@ export default function QuizSessionPage({
 
             {/* Essay Answer Textarea - shown only for Essay type questions */}
             {currentQ.type?.toLowerCase() === 'essay' && (
-              <div className="space-y-3 rounded-2xl border border-outline-variant/15 bg-surface-container-low p-6">
+              <div className="mt-6 space-y-3 rounded-2xl border border-outline-variant/15 bg-surface-container-low p-6">
                 <label className="block text-xs font-bold uppercase tracking-widest text-primary">
                   Your Essay Response
                 </label>
@@ -1522,7 +1523,7 @@ export default function QuizSessionPage({
             )}
 
         {/* Question Navigation with Pagination */}
-        <div className="mt-10 border-t border-outline-variant/10 pt-10">
+        <div className="mt-16 border-t border-outline-variant/10 pt-10">
         <h4 className="mb-4 flex items-center gap-2 font-headline text-base font-bold text-on-surface">
           <span className="h-1 w-6 rounded-full bg-primary" />
           Question Navigation
@@ -1564,6 +1565,8 @@ export default function QuizSessionPage({
                         setCurrentIndex(globalIndex);
                         setShowFeedback(false);
                       }}
+                      onMouseEnter={() => setHoveredQuestionIndex(globalIndex)}
+                      onMouseLeave={() => setHoveredQuestionIndex(null)}
                       className={`flex h-10 w-10 items-center justify-center rounded-xl border-2 text-sm font-bold transition-all ${cls}`}
                     >
                       {globalIndex + 1}
@@ -1647,6 +1650,29 @@ export default function QuizSessionPage({
         )}
 
         </div>
+         <div>
+                <h4 className="mb-4 flex items-center gap-2 font-headline text-base font-bold text-on-surface">
+                  <span className="h-1 w-6 rounded-full bg-primary" />
+                  Reference material
+                </h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
+                    <BookOpen className="mb-3 h-7 w-7 text-primary" />
+                    <p className="text-sm font-bold text-on-surface">Classification atlas</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">AO/OTA fracture classification systems</p>
+                  </div>
+                  <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
+                    <PlayCircle className="mb-3 h-7 w-7 text-primary" />
+                    <p className="text-sm font-bold text-on-surface">Diagnostic video</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">Clinical signs in emergency radiography</p>
+                  </div>
+                  <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
+                    <TrendingUp className="mb-3 h-7 w-7 text-primary" />
+                    <p className="text-sm font-bold text-on-surface">Success rate</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">Track your progress after each attempt</p>
+                  </div>
+                </div>
+              </div>
       </div>
 
       {/* Save to Flashcards Modal */}
