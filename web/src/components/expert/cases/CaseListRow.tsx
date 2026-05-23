@@ -8,6 +8,8 @@ import { resolveApiAssetUrl, getApiProblemDetails } from '@/lib/api/client';
 import { deleteExpertCase, formatCaseDateForDisplay } from '@/lib/api/expert-cases';
 import { useState } from 'react';
 
+const RECENT_EDITED_CASE_IDS_KEY = 'expert_case_library_recent_ids';
+
 interface CaseListRowProps {
   id: string;
   title: string;
@@ -67,6 +69,18 @@ export default function CaseListRow({
       toast.error(detail ? `${errTitle}: ${detail}` : errTitle);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const markCaseAsRecentlyEdited = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(RECENT_EDITED_CASE_IDS_KEY);
+      const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+      const unique = [id, ...parsed.filter((x) => x !== id)];
+      localStorage.setItem(RECENT_EDITED_CASE_IDS_KEY, JSON.stringify(unique.slice(0, 30)));
+    } catch {
+      // ignore localStorage parse/write issues
     }
   };
 
@@ -132,6 +146,7 @@ export default function CaseListRow({
           </Link>
           <Link
             href={`/expert/cases/${id}/edit`}
+            onClick={markCaseAsRecentlyEdited}
             className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground hover:bg-slate-50"
           >
             <Edit className="h-4 w-4" />
@@ -139,7 +154,7 @@ export default function CaseListRow({
           <Button
             type="button"
             variant="outline"
-            className="h-9 w-9 border-destructive/40 p-0 text-destructive hover:bg-destructive/10"
+            className="h-9 min-w-9 px-3 border-destructive/40 p-0 text-destructive hover:bg-destructive/10"
             disabled={deleting}
             onClick={() => void handleDelete()}
           >

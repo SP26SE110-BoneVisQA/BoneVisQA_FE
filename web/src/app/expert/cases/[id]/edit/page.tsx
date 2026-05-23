@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSWRConfig } from 'swr';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import Header from '@/components/Header';
 import { PageLoadingSkeleton, SkeletonBlock } from '@/components/shared/DashboardSkeletons';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,15 @@ import { useToast } from '@/components/ui/toast';
 import {
   fetchExpertCase,
   fetchExpertCategories,
+  fetchExpertTags,
   updateExpertCase,
   createExpertCaseImage,
   deleteExpertCaseImage,
+  createExpertCaseTag,
+  deleteExpertCaseTag,
   DB_IMAGE_MODALITIES,
   type ExpertCategory,
+  type ExpertTag,
   type SaveExpertCaseInput,
   type ExpertCase,
   type ExpertCaseMedicalImageJson,
@@ -67,6 +71,7 @@ export default function ExpertCaseEditPage() {
   const [keyFindings, setKeyFindings] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [isApproved, setIsApproved] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(() => new Set());
 
   // Image handling state
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -83,6 +88,12 @@ export default function ExpertCaseEditPage() {
   const categoriesQuery = useQuery({
     queryKey: ['expert', 'categories'],
     queryFn: fetchExpertCategories,
+  });
+
+  const tagsQuery = useQuery({
+    queryKey: ['expert', 'tags', 'case-edit'],
+    queryFn: () => fetchExpertTags(1, 200),
+    enabled: Boolean(id),
   });
 
   const profileQuery = useQuery({
@@ -102,17 +113,37 @@ export default function ExpertCaseEditPage() {
     setKeyFindings(c.keyFindings);
     setIsActive(c.isActive);
     setIsApproved(c.isApproved);
+    setSelectedTagIds(new Set((c.tags ?? []).map((t) => t.id).filter(Boolean)));
   }, [caseQuery.data]);
 
-  const updateMutation = useMutation({
-    mutationFn: (payload: SaveExpertCaseInput) => updateExpertCase(id, payload),
+  type SaveCaseVariables = {
+    payload: SaveExpertCaseInput;
+    selectedTagIdsSnapshot: string[];
+    serverTagsSnapshot: ExpertCase['tags'] | undefined;
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async ({ payload, selectedTagIdsSnapshot, serverTagsSnapshot }: SaveCaseVariables) => {
+      await updateExpertCase(id, payload);
+      const serverSet = new Set((serverTagsSnapshot ?? []).map((t) => t.id).filter(Boolean));
+      const desired = new Set(selectedTagIdsSnapshot);
+      const toAdd = [...desired].filter((tid) => !serverSet.has(tid));
+      const toRemove = [...serverSet].filter((tid) => !desired.has(tid));
+      const caseId = id.trim();
+      for (const tagId of toAdd) {
+        await createExpertCaseTag({ medicalCaseId: caseId, tagId });
+      }
+      for (const tagId of toRemove) {
+        await deleteExpertCaseTag({ caseId, tagId });
+      }
+    },
     onSuccess: () => {
       toast.success('Case updated successfully.');
       void queryClient.invalidateQueries({ queryKey: ['expert', 'case', id] });
       void queryClient.invalidateQueries({ queryKey: ['expert', 'cases'] });
       void swrMutate('expert-case-library');
       void queryClient.invalidateQueries({ queryKey: EXPERT_DASHBOARD_QUERY_KEY });
-      router.push(`/expert/cases/${id}`);
+      router.push('/expert/cases');
     },
     onError: (err: unknown) => {
       const { title: errTitle, detail } = getApiProblemDetails(err);
@@ -136,17 +167,30 @@ export default function ExpertCaseEditPage() {
       return;
     }
 
-    updateMutation.mutate({
-      title: title.trim(),
-      createdByExpertId: expertId,
-      description: description.trim(),
-      difficulty,
-      isApproved,
-      isActive,
-      categoryId: categoryId.trim(),
-      suggestedDiagnosis: suggestedDiagnosis.trim(),
-      reflectiveQuestions: reflectiveQuestions.trim(),
-      keyFindings: keyFindings.trim(),
+    saveMutation.mutate({
+      payload: {
+        title: title.trim(),
+        createdByExpertId: expertId,
+        description: description.trim(),
+        difficulty,
+        isApproved,
+        isActive,
+        categoryId: categoryId.trim(),
+        suggestedDiagnosis: suggestedDiagnosis.trim(),
+        reflectiveQuestions: reflectiveQuestions.trim(),
+        keyFindings: keyFindings.trim(),
+      },
+      selectedTagIdsSnapshot: Array.from(selectedTagIds),
+      serverTagsSnapshot: caseQuery.data?.tags,
+    });
+  };
+
+  const toggleTag = (tagId: string) => {
+    setSelectedTagIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) next.delete(tagId);
+      else next.add(tagId);
+      return next;
     });
   };
 
@@ -209,8 +253,18 @@ export default function ExpertCaseEditPage() {
 
   const loading = caseQuery.isPending || categoriesQuery.isPending || profileQuery.isPending;
   const categories: ExpertCategory[] = categoriesQuery.data ?? [];
-  const busy = updateMutation.isPending || uploadingImage || deletingImageId !== null;
+  const catalogTags: ExpertTag[] = tagsQuery.data ?? [];
+  const busy = saveMutation.isPending || uploadingImage || deletingImageId !== null;
   const caseData: ExpertCase | undefined = caseQuery.data;
+
+  const selectedTagChips = useMemo(() => {
+    return Array.from(selectedTagIds).map((tid) => {
+      const fromCatalog = catalogTags.find((t) => t.id === tid);
+      if (fromCatalog) return { id: tid, name: fromCatalog.name };
+      const fromCase = caseData?.tags?.find((t) => t.id === tid);
+      return { id: tid, name: fromCase?.name ?? 'Tag' };
+    });
+  }, [selectedTagIds, catalogTags, caseData?.tags]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
@@ -517,6 +571,56 @@ export default function ExpertCaseEditPage() {
                       />
                     </div>
 
+                    {catalogTags.length > 0 ? (
+                      <div>
+                        <p className="mb-2 text-xs font-medium text-muted-foreground">Tags (optional)</p>
+                        <p className="mb-2 text-xs text-muted-foreground">
+                          Tag changes apply when you click Save Changes. Selected:{' '}
+                          {selectedTagIds.size > 0 ? `${selectedTagIds.size} tag(s)` : 'None'}
+                        </p>
+                        {selectedTagChips.length > 0 ? (
+                          <div className="mb-3">
+                            <p className="mb-1.5 text-xs text-muted-foreground">
+                              Current selection — click to remove from selection
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedTagChips.map((t) => (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onClick={() => toggleTag(t.id)}
+                                  disabled={busy}
+                                  className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
+                                >
+                                  {t.name}
+                                  <X className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                        <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto rounded-lg border border-border bg-muted/30 p-2">
+                          {catalogTags.map((t) => (
+                            <label
+                              key={t.id}
+                              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium hover:bg-muted/60"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedTagIds.has(t.id)}
+                                onChange={() => toggleTag(t.id)}
+                                disabled={busy}
+                                className="rounded border-border"
+                              />
+                              {t.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : tagsQuery.isPending ? (
+                      <p className="text-xs text-muted-foreground">Loading tags…</p>
+                    ) : null}
+
                     {/* Toggle Switches */}
                     <div className="flex flex-wrap gap-6 rounded-lg border border-border bg-muted/30 p-4">
                       <label className="flex cursor-pointer items-center gap-3 text-card-foreground hover:text-foreground transition-colors">
@@ -554,7 +658,7 @@ export default function ExpertCaseEditPage() {
                 type="button"
                 variant="ghost"
                 className="flex-1 sm:flex-none px-6"
-                onClick={() => router.push(`/expert/cases/${id}`)}
+                onClick={() => router.push('/expert/cases')}
                 disabled={busy}
               >
                 Cancel

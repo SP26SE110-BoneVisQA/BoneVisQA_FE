@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { http, getApiErrorMessage } from './client';
 
 export interface ExpertDashboardStats {
@@ -205,7 +204,6 @@ export async function fetchExpertPendingReviews(): Promise<ExpertPendingReview[]
     throw new Error(getApiErrorMessage(e));
   }
 }
-
 export async function fetchExpertRecentCases(): Promise<ExpertRecentCase[]> {
   try {
     const { data } = await http.get<unknown>('/api/expert/dashboard/recent-cases', {
@@ -215,10 +213,10 @@ export async function fetchExpertRecentCases(): Promise<ExpertRecentCase[]> {
       .map(mapRecentCase)
       .filter((item): item is ExpertRecentCase => item !== null);
   } catch (e) {
-    if (axios.isAxiosError(e)) throw e;
     throw new Error(getApiErrorMessage(e));
   }
 }
+
 
 export async function fetchExpertActivity(): Promise<ExpertActivity> {
   try {
