@@ -28,7 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   GraduationCap,
-  Settings2,
+  Settings,
   FileText,
   Server,
   HardDrive,
@@ -77,7 +77,6 @@ const navByRole: Record<RoleKey, NavItem[]> = {
     { label: 'Dashboard', href: '/expert/dashboard', icon: LayoutDashboard },
     { label: 'Expert review', href: '/expert/reviews', icon: CheckSquare },
     { label: 'Case Library', href: '/expert/cases', icon: BookOpen },
-    { label: 'Quiz Library', href: '/expert/quizzes', icon: FileQuestion },
   ],
   student: [
     { label: 'Dashboard', href: '/student/dashboard', icon: LayoutDashboard },

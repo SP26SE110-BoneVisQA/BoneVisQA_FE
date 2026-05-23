@@ -15,7 +15,6 @@ import {
 
 const expertMenuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/expert/dashboard' },
-  { icon: FileText, label: 'Quiz', href: '/expert/quizzes' },
   { icon: MessageSquareText, label: 'Reviews', href: '/expert/reviews' },
   { icon: FolderOpen, label: 'Medical case', href: '/expert/cases' },
 ];

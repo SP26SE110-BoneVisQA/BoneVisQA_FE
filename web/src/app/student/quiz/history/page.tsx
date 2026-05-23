@@ -418,6 +418,8 @@ export default function StudentQuizHistoryPage() {
                   )}
                 </>
               )}
+            </>
+          )}
       </div>
 
       <StudentDashboardFab />
