@@ -35,6 +35,8 @@ import {
   FileText,
 } from 'lucide-react';
 import { deleteQuiz, removeQuizFromClass, getUnassignedLecturerQuizzes, getAssignedQuizzes, getLecturerQuizzes } from '@/lib/api/lecturer-quiz';
+import { fetchLecturerDashboardStats } from '@/lib/api/lecturer-dashboard';
+import type { LecturerDashboardStats } from '@/lib/api/types';
 import { getStoredUserId } from '@/lib/getStoredUserId';
 import { exportAllQuizResultsExcel } from '@/lib/api/lecturer';
 import type { ClassQuizDto, AssignedQuizDto, QuizDto } from '@/lib/api/types';
@@ -158,6 +160,7 @@ export default function QuizListPage() {
   const [previewQuiz, setPreviewQuiz] = useState<EnrichedQuiz | null>(null);
   const [assignQuiz, setAssignQuiz] = useState<EnrichedQuiz | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [engagementStats, setEngagementStats] = useState<LecturerDashboardStats | null>(null);
 
   const handleExportAllResults = async () => {
     if (activeTab !== 'assigned-quizzes') {
@@ -379,7 +382,17 @@ export default function QuizListPage() {
   // Load data on mount
   useEffect(() => {
     loadMyQuizzes();
+    loadEngagementStats();
   }, []);
+
+  const loadEngagementStats = async () => {
+    try {
+      const stats = await fetchLecturerDashboardStats();
+      setEngagementStats(stats);
+    } catch (err) {
+      console.error('Failed to load engagement stats:', err);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'my-quizzes') {
@@ -792,11 +805,17 @@ export default function QuizListPage() {
             <div className="relative col-span-2 flex flex-col justify-between overflow-hidden rounded-[2rem] bg-[#1a2332] p-10">
               <div className="relative z-10">
                 <h4 className="font-['Manrope',sans-serif] text-2xl font-bold text-white">Quiz Engagement Insights</h4>
-                <p className="mt-4 max-w-md text-sm text-slate-400">Student participation is up 22% this semester.</p>
+                <p className="mt-4 max-w-md text-sm text-slate-400">
+                  {engagementStats?.participationTrendPercent != null && engagementStats.participationTrendPercent > 0
+                    ? `Student participation is up ${engagementStats.participationTrendPercent}% this semester.`
+                    : engagementStats?.participationTrendPercent != null && engagementStats.participationTrendPercent < 0
+                    ? `Student participation is down ${Math.abs(engagementStats.participationTrendPercent)}% this semester.`
+                    : 'Student participation trend over the past semester.'}
+                </p>
                 <div className="mt-8 flex items-center gap-8">
-                  <div><p className="font-black text-3xl text-primary-fixed-dim">4.8k</p><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">Total Attempts</p></div>
+                  <div><p className="font-black text-3xl text-primary-fixed-dim">{engagementStats?.totalQuizAttempts?.toLocaleString() ?? '—'}</p><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">Total Attempts</p></div>
                   <div className="h-10 w-px bg-white/10" />
-                  <div><p className="font-black text-3xl text-secondary-fixed">12m</p><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">Avg. Time</p></div>
+                  <div><p className="font-black text-3xl text-secondary-fixed">{engagementStats?.averageTimeMinutes != null ? `${engagementStats.averageTimeMinutes}m` : '—'}</p><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">Avg. Time</p></div>
                 </div>
               </div>
               <div aria-hidden className="pointer-events-none absolute right-0 top-0 h-full w-1/2 opacity-20"><div className="h-full w-full bg-gradient-to-l from-primary/30 to-transparent" /></div>

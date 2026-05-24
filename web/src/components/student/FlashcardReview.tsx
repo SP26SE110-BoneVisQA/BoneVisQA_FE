@@ -53,6 +53,11 @@ import {
   Shuffle,
   RotateCcw,
   Maximize2,
+  Search,
+  Filter,
+  X,
+  SortAsc,
+  ChevronDown,
 } from 'lucide-react';
 
 export default function FlashcardReviewPage() {
@@ -96,6 +101,69 @@ export default function FlashcardReviewPage() {
   const [singleCardFlipped, setSingleCardFlipped] = useState(false);
   const [expandedCard, setExpandedCard] = useState<FlashcardDto | null>(null);
   const [expandedCardFlipped, setExpandedCardFlipped] = useState(false);
+
+  // Search & Filter states for decks
+  const [deckSearchQuery, setDeckSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'cards'>('newest');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+
+  // Card search state in deck detail
+  const [cardSearchQuery, setCardSearchQuery] = useState('');
+  const [cardCurrentPage, setCardCurrentPage] = useState(1);
+
+  // Category definitions
+  const categories = [
+    { value: 'all', label: 'Tất cả', icon: Layers },
+    { value: 'quiz', label: 'Bài Quiz', icon: BookOpen },
+    { value: 'ai', label: 'AI Tạo', icon: Sparkles },
+    { value: 'manual', label: 'Tự tạo', icon: Plus },
+  ];
+
+  const sortOptions = [
+    { value: 'newest', label: 'Mới nhất' },
+    { value: 'oldest', label: 'Cũ nhất' },
+    { value: 'name', label: 'A - Z' },
+    { value: 'cards', label: 'Nhiều thẻ nhất' },
+  ];
+
+  // Constants
+  const ITEMS_PER_PAGE = 6;
+  const CARDS_PER_PAGE = 9;
+
+  // Filter and sort decks
+  const filteredDecks = decks
+    .filter((deck) => {
+      // Search filter
+      const matchesSearch = deck.deckName.toLowerCase().includes(deckSearchQuery.toLowerCase());
+      // Category filter (based on deck name patterns)
+      if (selectedCategory === 'all') return matchesSearch;
+      if (selectedCategory === 'quiz') return matchesSearch && (deck.deckName.includes('Quiz') || deck.deckName.includes('quiz'));
+      if (selectedCategory === 'ai') return matchesSearch && (deck.deckName.includes('AI'));
+      if (selectedCategory === 'manual') return matchesSearch && !(deck.deckName.includes('Quiz') || deck.deckName.includes('quiz') || deck.deckName.includes('AI'));
+      return matchesSearch;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'newest') return 0; // Keep original order (by creation date desc)
+      if (sortBy === 'oldest') return 0;
+      if (sortBy === 'name') return a.deckName.localeCompare(b.deckName);
+      if (sortBy === 'cards') return (b.cardCount || 0) - (a.cardCount || 0);
+      return 0;
+    });
+
+  // Pagination for decks
+  const totalPages = Math.ceil(filteredDecks.length / ITEMS_PER_PAGE);
+  const paginatedDecks = filteredDecks.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deckSearchQuery, selectedCategory, sortBy]);
 
   useEffect(() => {
     fetchData();
@@ -177,6 +245,8 @@ export default function FlashcardReviewPage() {
     setLoadingDeckCards(true);
     setCurrentCardIndex(0);
     setSingleCardFlipped(false);
+    setCardSearchQuery('');
+    setCardCurrentPage(1);
     try {
       const cards = await fetchFlashcardsByDeck(deck.id);
       setDeckCards(cards);
@@ -290,8 +360,32 @@ export default function FlashcardReviewPage() {
 
   // ========== DECK DETAIL ==========
   if (selectedDeck) {
-    const currentCard = deckCards[currentCardIndex];
-    const progress = deckCards.length > 0 ? ((currentCardIndex + 1) / deckCards.length) * 100 : 0;
+    // Filter cards based on search
+    const filteredCards = deckCards.filter(card =>
+      card.frontContent.toLowerCase().includes(cardSearchQuery.toLowerCase()) ||
+      card.backContent.toLowerCase().includes(cardSearchQuery.toLowerCase())
+    );
+
+    // Pagination for cards
+    const totalCardPages = Math.ceil(filteredCards.length / CARDS_PER_PAGE);
+    const paginatedCards = filteredCards.slice(
+      (cardCurrentPage - 1) * CARDS_PER_PAGE,
+      cardCurrentPage * CARDS_PER_PAGE
+    );
+
+    // Reset card page when search changes
+    useEffect(() => {
+      setCardCurrentPage(1);
+    }, [cardSearchQuery]);
+
+    // Single card view uses full filtered list
+    const currentCardIndexInFiltered = deckCards.findIndex(c => c.id === paginatedCards[0]?.id);
+    const currentCard = viewMode === 'single' && paginatedCards.length > 0
+      ? paginatedCards[cardCurrentPage - 1] || paginatedCards[0]
+      : paginatedCards[0];
+    const progress = filteredCards.length > 0
+      ? ((filteredCards.findIndex(c => c.id === currentCard?.id) + 1) / filteredCards.length) * 100
+      : 0;
 
     return (
       <div className="min-h-screen bg-slate-50">
@@ -310,11 +404,34 @@ export default function FlashcardReviewPage() {
                   </div>
                   <div>
                     <h1 className="font-bold text-lg text-slate-900">{selectedDeck.deckName}</h1>
-                    <p className="text-sm text-slate-500">{deckCards.length} thẻ</p>
+                    <p className="text-sm text-slate-500">
+                      {cardSearchQuery
+                        ? `${filteredCards.length} / ${deckCards.length} thẻ`
+                        : `${deckCards.length} thẻ`}
+                    </p>
                   </div>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                {/* Card Search Bar */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm thẻ..."
+                    value={cardSearchQuery}
+                    onChange={(e) => setCardSearchQuery(e.target.value)}
+                    className="pl-9 pr-8 py-2 w-48 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                  {cardSearchQuery && (
+                    <button
+                      onClick={() => setCardSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded"
+                    >
+                      <X className="h-3.5 w-3.5 text-slate-400" />
+                    </button>
+                  )}
+                </div>
                 <Dialog open={showCreateCard} onOpenChange={setShowCreateCard}>
                   <DialogTrigger asChild>
                     <Button variant="outline" onClick={() => setSelectedDeckId(selectedDeck.id)} className="gap-2">
@@ -401,17 +518,20 @@ export default function FlashcardReviewPage() {
               {/* Progress Info */}
               <div className="flex items-center justify-between px-2">
                 <span className="text-sm font-medium text-slate-600">
-                  {currentCardIndex + 1}/{deckCards.length}
+                  {filteredCards.length > 0 ? filteredCards.findIndex(c => c.id === currentCard?.id) + 1 : 0}/{filteredCards.length}
+                  {cardSearchQuery && <span className="text-slate-400"> (tìm thấy)</span>}
                 </span>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={shuffleCards} 
-                  className="gap-1.5 text-slate-500 hover:text-slate-700 h-8 px-2"
-                >
-                  <Shuffle className="h-3.5 w-3.5" />
-                  <span className="text-xs">Xáo trộn</span>
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={shuffleCards}
+                    className="gap-1.5 text-slate-500 hover:text-slate-700 h-8 px-2"
+                  >
+                    <Shuffle className="h-3.5 w-3.5" />
+                    <span className="text-xs">Xáo trộn</span>
+                  </Button>
+                </div>
               </div>
 
               {/* Progress Bar */}
@@ -474,40 +594,29 @@ export default function FlashcardReviewPage() {
               {/* Navigation Dots */}
               <div className="flex items-center justify-center gap-2 pt-2">
                 <button
-                  onClick={prevCard}
-                  disabled={currentCardIndex === 0}
+                  onClick={() => setCardCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={cardCurrentPage === 1 || filteredCards.length === 0}
                   className={cn(
                     "w-9 h-9 rounded-lg flex items-center justify-center transition-all border",
-                    currentCardIndex === 0 
-                      ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed" 
+                    cardCurrentPage === 1
+                      ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed"
                       : "bg-white hover:bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
                   )}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                
-                <div className="flex gap-1.5 px-2">
-                  {deckCards.map((_, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => { setCurrentCardIndex(idx); setSingleCardFlipped(false); }}
-                      className={cn(
-                        "rounded-full transition-all",
-                        idx === currentCardIndex 
-                          ? "w-6 h-2 bg-slate-800" 
-                          : "w-2 h-2 bg-slate-300 hover:bg-slate-400"
-                      )}
-                    />
-                  ))}
-                </div>
+
+                <span className="px-3 text-sm text-slate-600 font-medium">
+                  {cardCurrentPage} / {Math.max(1, totalCardPages)}
+                </span>
 
                 <button
-                  onClick={nextCard}
-                  disabled={currentCardIndex === deckCards.length - 1}
+                  onClick={() => setCardCurrentPage(p => Math.min(totalCardPages, p + 1))}
+                  disabled={cardCurrentPage >= totalCardPages || filteredCards.length === 0}
                   className={cn(
                     "w-9 h-9 rounded-lg flex items-center justify-center transition-all border",
-                    currentCardIndex === deckCards.length - 1 
-                      ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed" 
+                    cardCurrentPage >= totalCardPages
+                      ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed"
                       : "bg-white hover:bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
                   )}
                 >
@@ -517,10 +626,62 @@ export default function FlashcardReviewPage() {
             </div>
           ) : (
             // ========== GRID VIEW ==========
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {deckCards.map((card, idx) => (
-                <FlipCard key={card.id} card={card} index={idx} onDelete={() => handleDeleteCard(card.id)} onExpand={() => setExpandedCard(card)} />
-              ))}
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {paginatedCards.map((card) => (
+                  <FlipCard key={card.id} card={card} index={deckCards.findIndex(c => c.id === card.id)} onDelete={() => handleDeleteCard(card.id)} onExpand={() => setExpandedCard(card)} />
+                ))}
+              </div>
+
+              {/* Card Pagination */}
+              {totalCardPages > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-4">
+                  <button
+                    onClick={() => setCardCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={cardCurrentPage === 1}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                      cardCurrentPage === 1
+                        ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                        : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                    )}
+                  >
+                    <ChevronLeft className="h-4 w-4 inline mr-1" />
+                    Trước
+                  </button>
+
+                  <div className="flex gap-1">
+                    {Array.from({ length: totalCardPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => setCardCurrentPage(page)}
+                        className={cn(
+                          "w-9 h-9 rounded-lg text-sm font-medium transition-all",
+                          page === cardCurrentPage
+                            ? "bg-slate-800 text-white"
+                            : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                        )}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setCardCurrentPage(p => Math.min(totalCardPages, p + 1))}
+                    disabled={cardCurrentPage >= totalCardPages}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                      cardCurrentPage >= totalCardPages
+                        ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                        : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                    )}
+                  >
+                    Sau
+                    <ChevronRight className="h-4 w-4 inline ml-1" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -695,72 +856,183 @@ export default function FlashcardReviewPage() {
 
           {/* Decks List */}
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-lg font-semibold flex items-center gap-3 text-slate-900">
-                <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center">
-                  <BookMarked className="h-5 w-5 text-slate-600" />
+            {/* Header with Search & Filter */}
+            <div className="p-6 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center">
+                    <BookMarked className="h-5 w-5 text-slate-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Bộ Flashcard Của Tôi</h2>
+                    <p className="text-sm text-slate-500">
+                      {deckSearchQuery || selectedCategory !== 'all'
+                        ? `${filteredDecks.length} / ${decks.length} bộ`
+                        : `${decks.length} bộ`}
+                    </p>
+                  </div>
                 </div>
-                Bộ Flashcard Của Tôi
-              </h2>
-              <Dialog open={showCreateDeck} onOpenChange={setShowCreateDeck}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Tạo Bộ Mới
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Tạo Bộ Flashcard Mới</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Tên bộ thẻ</label>
-                      <Input value={newDeckName} onChange={(e) => setNewDeckName(e.target.value)} placeholder="VD: Gãy xương" />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Mô tả (tùy chọn)</label>
-                      <Textarea value={newDeckDescription} onChange={(e) => setNewDeckDescription(e.target.value)} placeholder="Mô tả ngắn..." rows={2} />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setShowCreateDeck(false)}>Hủy</Button>
-                      <Button onClick={handleCreateDeck} disabled={!newDeckName.trim() || creatingDeck}>
-                        {creatingDeck ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                        Tạo Bộ
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
 
-              {/* Delete Confirmation Dialog */}
-              <Dialog open={!!deckToDelete} onOpenChange={(open) => !open && setDeckToDelete(null)}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Xóa Bộ Flashcard</DialogTitle>
-                    <DialogDescription asChild>
-                      <div className="space-y-2">
-                        <p>Bạn có chắc chắn muốn xóa bộ flashcard này?</p>
-                        <div className="rounded-lg bg-slate-100 p-3">
-                          <p className="font-semibold text-slate-900">{deckToDelete?.deckName}</p>
-                          <p className="text-sm text-slate-500">{deckToDelete?.cardCount} thẻ</p>
-                        </div>
-                        <p className="text-sm text-red-600 font-medium">Hành động này không thể hoàn tác.</p>
+                <Dialog open={showCreateDeck} onOpenChange={setShowCreateDeck}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      Tạo Bộ Mới
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Tạo Bộ Flashcard Mới</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Tên bộ thẻ</label>
+                        <Input value={newDeckName} onChange={(e) => setNewDeckName(e.target.value)} placeholder="VD: Gãy xương" />
                       </div>
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="flex justify-end gap-2 pt-4">
-                    <Button variant="outline" onClick={() => setDeckToDelete(null)} disabled={deletingDeck}>
-                      Hủy
-                    </Button>
-                    <Button variant="destructive" onClick={handleDeleteDeck} disabled={deletingDeck}>
-                      {deletingDeck ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                      Xóa
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">Mô tả (tùy chọn)</label>
+                        <Textarea value={newDeckDescription} onChange={(e) => setNewDeckDescription(e.target.value)} placeholder="Mô tả ngắn..." rows={2} />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setShowCreateDeck(false)}>Hủy</Button>
+                        <Button onClick={handleCreateDeck} disabled={!newDeckName.trim() || creatingDeck}>
+                          {creatingDeck ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                          Tạo Bộ
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {/* Search & Filter Row */}
+              <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm bộ flashcard..."
+                    value={deckSearchQuery}
+                    onChange={(e) => setDeckSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
+                  />
+                  {deckSearchQuery && (
+                    <button
+                      onClick={() => setDeckSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded-full"
+                    >
+                      <X className="h-4 w-4 text-slate-400" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Filter */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all",
+                      selectedCategory !== 'all'
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    )}
+                  >
+                    <Filter className="h-4 w-4" />
+                    {categories.find(c => c.value === selectedCategory)?.label || 'Tất cả'}
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", showCategoryDropdown && "rotate-180")} />
+                  </button>
+
+                  {showCategoryDropdown && (
+                    <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl border border-slate-200 shadow-lg z-10 overflow-hidden">
+                      {categories.map((cat) => {
+                        const Icon = cat.icon;
+                        return (
+                          <button
+                            key={cat.value}
+                            onClick={() => {
+                              setSelectedCategory(cat.value);
+                              setShowCategoryDropdown(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors",
+                              selectedCategory === cat.value
+                                ? "bg-primary/10 text-primary font-medium"
+                                : "text-slate-600 hover:bg-slate-50"
+                            )}
+                          >
+                            <Icon className="h-4 w-4" />
+                            {cat.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Sort Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSortDropdown(!showSortDropdown)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:border-slate-300 transition-all"
+                  >
+                    <SortAsc className="h-4 w-4" />
+                    {sortOptions.find(s => s.value === sortBy)?.label}
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", showSortDropdown && "rotate-180")} />
+                  </button>
+
+                  {showSortDropdown && (
+                    <div className="absolute top-full right-0 mt-2 w-40 bg-white rounded-xl border border-slate-200 shadow-lg z-10 overflow-hidden">
+                      {sortOptions.map((sort) => (
+                        <button
+                          key={sort.value}
+                          onClick={() => {
+                            setSortBy(sort.value as typeof sortBy);
+                            setShowSortDropdown(false);
+                          }}
+                          className={cn(
+                            "w-full px-4 py-2.5 text-sm text-left transition-colors",
+                            sortBy === sort.value
+                              ? "bg-primary/10 text-primary font-medium"
+                              : "text-slate-600 hover:bg-slate-50"
+                          )}
+                        >
+                          {sort.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={!!deckToDelete} onOpenChange={(open) => !open && setDeckToDelete(null)}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Xóa Bộ Flashcard</DialogTitle>
+                  <DialogDescription asChild>
+                    <div className="space-y-2">
+                      <p>Bạn có chắc chắn muốn xóa bộ flashcard này?</p>
+                      <div className="rounded-lg bg-slate-100 p-3">
+                        <p className="font-semibold text-slate-900">{deckToDelete?.deckName}</p>
+                        <p className="text-sm text-slate-500">{deckToDelete?.cardCount} thẻ</p>
+                      </div>
+                      <p className="text-sm text-red-600 font-medium">Hành động này không thể hoàn tác.</p>
+                    </div>
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button variant="outline" onClick={() => setDeckToDelete(null)} disabled={deletingDeck}>
+                    Hủy
+                  </Button>
+                  <Button variant="destructive" onClick={handleDeleteDeck} disabled={deletingDeck}>
+                    {deletingDeck ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                    Xóa
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <div className="p-6">
               {loadingDecks ? (
@@ -778,11 +1050,23 @@ export default function FlashcardReviewPage() {
                     Tạo Bộ Đầu Tiên
                   </Button>
                 </div>
+              ) : filteredDecks.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center">
+                    <Search className="h-8 w-8 text-slate-400" />
+                  </div>
+                  <p className="text-lg text-slate-600 mb-2">Không tìm thấy bộ flashcard</p>
+                  <p className="text-sm text-slate-500 mb-4">Thử từ khóa khác hoặc xóa bộ lọc</p>
+                  <Button variant="outline" onClick={() => { setDeckSearchQuery(''); setSelectedCategory('all'); }} className="gap-2">
+                    <X className="h-4 w-4" />
+                    Xóa bộ lọc
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {decks.map((deck) => (
-                    <div 
-                      key={deck.id} 
+                  {paginatedDecks.map((deck) => (
+                    <div
+                      key={deck.id}
                       className="group flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all cursor-pointer"
                       onClick={() => handleViewDeck(deck)}
                     >
@@ -797,10 +1081,10 @@ export default function FlashcardReviewPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         {/* Visible Delete Button */}
-                        <Button 
+                        <Button
                           variant="outline"
-                          size="sm" 
-                          onClick={(e) => { e.stopPropagation(); setDeckToDelete(deck); }} 
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); setDeckToDelete(deck); }}
                           className="text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200 hover:border-red-300"
                         >
                           <Trash2 className="h-4 w-4 mr-1" />
@@ -809,6 +1093,56 @@ export default function FlashcardReviewPage() {
                       </div>
                     </div>
                   ))}
+
+                  {/* Deck Pagination */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 pt-6">
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className={cn(
+                          "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1",
+                          currentPage === 1
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                        )}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Trước
+                      </button>
+
+                      <div className="flex gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page)}
+                            className={cn(
+                              "w-10 h-10 rounded-lg text-sm font-medium transition-all",
+                              page === currentPage
+                                ? "bg-slate-800 text-white shadow-md"
+                                : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                            )}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage >= totalPages}
+                        className={cn(
+                          "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1",
+                          currentPage >= totalPages
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                        )}
+                      >
+                        Sau
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

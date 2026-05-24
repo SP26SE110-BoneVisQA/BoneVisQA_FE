@@ -44,22 +44,6 @@ interface EnrichedQuiz extends ExpertQuizForLecturer {
   formattedCreatedAt: string;
 }
 
-function utcToLocalDatetimeLocal(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function localDatetimeLocalToIso(local: string): string {
-  const t = local.trim();
-  if (!t) return '';
-  const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString();
-}
-
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -456,12 +440,6 @@ function AssignModal({ quiz, onClose, onAssigned }: AssignModalProps) {
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
-  const [openTime, setOpenTime] = useState<string | ''>(
-    utcToLocalDatetimeLocal(quiz.openTime)
-  );
-  const [closeTime, setCloseTime] = useState<string | ''>(
-    utcToLocalDatetimeLocal(quiz.closeTime)
-  );
   const [timeLimit, setTimeLimit] = useState<number | ''>(quiz.timeLimit ?? '');
   const [passingScore, setPassingScore] = useState<number | ''>(quiz.passingScore ?? '');
 
@@ -499,29 +477,12 @@ function AssignModal({ quiz, onClose, onAssigned }: AssignModalProps) {
       return;
     }
 
-    const warnings: string[] = [];
-    if (openTime && closeTime && new Date(openTime) >= new Date(closeTime)) {
-      warnings.push('Open time must be before close time.');
-    }
-
-    if (warnings.length > 0) {
-      const confirmed = window.confirm(
-        'There are some warnings:\n\n' + warnings.join('\n') + '\n\nDo you want to continue?'
-      );
-      if (!confirmed) return;
-    }
-
     setAssigning(true);
     try {
-      const isoOpen = openTime ? localDatetimeLocalToIso(openTime) : null;
-      const isoClose = closeTime ? localDatetimeLocalToIso(closeTime) : null;
-
       const results = await Promise.all(
         selectedClassIds.map(async (classId) => {
           try {
             const result = await assignExpertQuizToClass(classId, quiz.id, {
-              openTime: isoOpen,
-              closeTime: isoClose,
               timeLimitMinutes: timeLimit === '' ? null : (typeof timeLimit === 'number' ? timeLimit : null),
               passingScore: passingScore === '' ? null : (typeof passingScore === 'number' ? passingScore : null),
             });
@@ -648,30 +609,6 @@ function AssignModal({ quiz, onClose, onAssigned }: AssignModalProps) {
                 <span className="font-medium">Topic:</span> {quiz.topic ?? '—'}
               </div>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-card-foreground mb-2">
-              Open Time (optional)
-            </label>
-            <input
-              type="datetime-local"
-              value={openTime}
-              onChange={(e) => setOpenTime(e.target.value)}
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-card-foreground mb-2">
-              Close Time (optional)
-            </label>
-            <input
-              type="datetime-local"
-              value={closeTime}
-              onChange={(e) => setCloseTime(e.target.value)}
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
           </div>
 
           <div>

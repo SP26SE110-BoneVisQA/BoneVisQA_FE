@@ -170,6 +170,9 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [savingToFlashcard, setSavingToFlashcard] = useState(false);
 
+  // MultiSelect answers: Record<questionId, Set of selected keys>
+  const [multiSelectAnswers, setMultiSelectAnswers] = useState<Record<string, Set<string>>>({});
+
   // Load classification options
   useEffect(() => {
     const loadFilters = async () => {
@@ -302,9 +305,18 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
 
     setSubmitting(true);
     try {
-      const correctCount = aiQuestions.filter((q, index) =>
-        answers[`ai-${index}`]?.toUpperCase() === q.correctAnswer?.toUpperCase()
-      ).length;
+      const correctCount = aiQuestions.filter((q, index) => {
+        const studentAnswer = answers[`ai-${index}`] || '';
+        const correct = q.correctAnswer || '';
+        // MultiSelect: sort both before comparing
+        if (q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select') {
+          return (
+            studentAnswer.split(',').map(k => k.trim()).filter(Boolean).sort().join(',') ===
+            correct.split(',').map(k => k.trim()).filter(Boolean).sort().join(',')
+          );
+        }
+        return studentAnswer.toUpperCase() === correct.toUpperCase();
+      }).length;
       const score = (correctCount / aiQuestions.length) * 100;
 
       setResult({
@@ -351,6 +363,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
     setQuiz(null);
     setAiQuestions([]);
     setAnswers({});
+    setMultiSelectAnswers({});
     setResult(null);
     setPage(1);
     setSelectedCases(new Set());
@@ -368,6 +381,22 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
         newSet.add(questionId);
       }
       return newSet;
+    });
+  };
+
+  // Toggle MultiSelect option
+  const handleMultiSelectToggle = (questionId: string, key: string) => {
+    setMultiSelectAnswers(prev => {
+      const prevKeys = prev[questionId] ?? new Set<string>();
+      const next = new Set(prevKeys);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      const nextKeys = Array.from(next).sort().join(',');
+      setAnswers(a => ({ ...a, [questionId]: nextKeys }));
+      return { ...prev, [questionId]: next };
     });
   };
 
@@ -990,6 +1019,8 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
               <div className="space-y-4">
                 {quiz.questions.map((question, index) => {
                   const isTrueFalse = question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
+                  const isMultiSelect = question.type?.toLowerCase() === 'multiselect' || question.type?.toLowerCase() === 'multi-select';
+                  const quizMultiSelectedKeys = multiSelectAnswers[question.questionId];
                   return (
                     <div key={question.questionId} className="rounded-2xl border border-border bg-background p-6 shadow-sm">
                       <div className="mb-4 flex items-start justify-between gap-3">
@@ -1025,6 +1056,27 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                             );
                           })}
                         </div>
+                      ) : isMultiSelect ? (
+                        <div className="space-y-3">
+                          <p className="text-xs font-medium text-muted-foreground">Chọn tất cả đáp án đúng (có thể chọn nhiều hơn 1)</p>
+                          {(['A', 'B', 'C', 'D'] as const).map((key) => {
+                            const text = question[`option${key}` as keyof typeof question];
+                            if (!text) return null;
+                            const isSelected = quizMultiSelectedKeys?.has(key) ?? false;
+                            return (
+                              <button key={key} type="button"
+                                onClick={() => handleMultiSelectToggle(question.questionId, key)}
+                                className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${isSelected ? 'border-primary bg-primary/10 text-card-foreground ring-1 ring-primary/30' : 'border-border bg-background/70 text-muted-foreground hover:bg-muted'}`}>
+                                <span className={`mr-2 font-bold ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>{key}.</span>{text}
+                              </button>
+                            );
+                          })}
+                          {quizMultiSelectedKeys && quizMultiSelectedKeys.size > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Đã chọn: {Array.from(quizMultiSelectedKeys).sort().join(', ')}
+                            </p>
+                          )}
+                        </div>
                       ) : (
                         <div className="grid gap-3 md:grid-cols-2">
                           {[{ key: 'A', value: question.optionA }, { key: 'B', value: question.optionB }, { key: 'C', value: question.optionC }, { key: 'D', value: question.optionD }].map((option) => {
@@ -1051,7 +1103,9 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                 </div>
                 {aiQuestions.map((question, index) => {
                   const isTrueFalse = question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
+                  const isMultiSelect = question.type?.toLowerCase() === 'multiselect' || question.type?.toLowerCase() === 'multi-select';
                   const questionId = `ai-${index}`;
+                  const aiMultiSelectedKeys = multiSelectAnswers[questionId];
                   return (
                     <div key={questionId} className="rounded-2xl border border-purple-200 bg-background p-6 shadow-sm">
                       <div className="mb-4 flex items-start justify-between gap-3">
@@ -1073,6 +1127,27 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                               </button>
                             );
                           })}
+                        </div>
+                      ) : isMultiSelect ? (
+                        <div className="space-y-3">
+                          <p className="text-xs font-medium text-muted-foreground">Chọn tất cả đáp án đúng (có thể chọn nhiều hơn 1)</p>
+                          {(['A', 'B', 'C', 'D'] as const).map((key) => {
+                            const text = question[`option${key}` as keyof typeof question];
+                            if (!text) return null;
+                            const isSelected = aiMultiSelectedKeys?.has(key) ?? false;
+                            return (
+                              <button key={key} type="button"
+                                onClick={() => handleMultiSelectToggle(questionId, key)}
+                                className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${isSelected ? 'border-purple-500 bg-purple-100 text-purple-700 ring-1 ring-purple-500/30' : 'border-border bg-background/70 text-muted-foreground hover:bg-muted'}`}>
+                                <span className={`mr-2 font-bold ${isSelected ? 'text-purple-600' : 'text-muted-foreground'}`}>{key}.</span>{text}
+                              </button>
+                            );
+                          })}
+                          {aiMultiSelectedKeys && aiMultiSelectedKeys.size > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Đã chọn: {Array.from(aiMultiSelectedKeys).sort().join(', ')}
+                            </p>
+                          )}
                         </div>
                       ) : (
                         <div className="grid gap-3 md:grid-cols-2">
@@ -1349,9 +1424,15 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                 {aiQuestions.map((question, index) => {
                   const questionId = `ai-${index}`;
                   const studentAnswer = answers[questionId];
-                  const isCorrect = studentAnswer?.toUpperCase() === question.correctAnswer?.toUpperCase();
+                  const isCorrect =
+                    question.type?.toLowerCase() === 'multiselect' || question.type?.toLowerCase() === 'multi-select'
+                      ? (studentAnswer || '').split(',').map((k) => k.trim()).filter(Boolean).sort().join(',') ===
+                        (question.correctAnswer || '').split(',').map((k) => k.trim()).filter(Boolean).sort().join(',')
+                      : (studentAnswer || '').toUpperCase() === (question.correctAnswer || '').toUpperCase();
                   const isTrueFalse =
                     question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
+                  const isMultiSelect =
+                    question.type?.toLowerCase() === 'multiselect' || question.type?.toLowerCase() === 'multi-select';
 
                   return (
                     <div
@@ -1440,8 +1521,48 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                               );
                             })}
                           </div>
+                        ) : isMultiSelect ? (
+                          // MultiSelect review
+                          <div className="space-y-2">
+                            {(['A', 'B', 'C', 'D'] as const).map((key) => {
+                              const text = question[`option${key}` as keyof typeof question];
+                              if (!text) return null;
+                              const isStudentSelected = (studentAnswer || '')
+                                .split(',')
+                                .map((k) => k.trim().toUpperCase())
+                                .includes(key);
+                              const isCorrectOption = (question.correctAnswer || '')
+                                .split(',')
+                                .map((k) => k.trim().toUpperCase())
+                                .includes(key);
+
+                              let optionClass = 'border-border bg-white/70 text-muted-foreground';
+                              if (isCorrectOption) {
+                                optionClass = 'border-emerald-500 bg-emerald-100 text-emerald-800 font-semibold';
+                              } else if (isStudentSelected && !isCorrectOption) {
+                                optionClass = 'border-red-400 bg-red-100 text-red-700';
+                              }
+
+                              return (
+                                <div
+                                  key={key}
+                                  className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 ${optionClass}`}
+                                >
+                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 font-bold text-sm">
+                                    {key}
+                                  </span>
+                                  <span className="flex-1">{text}</span>
+                                  {isCorrectOption && (
+                                    <CheckCircle className="h-5 w-5 shrink-0 text-emerald-600" />
+                                  )}
+                                  {isStudentSelected && !isCorrectOption && (
+                                    <X className="h-5 w-5 shrink-0 text-red-500" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         ) : (
-                          // Standard ABCD review
                           <>
                             {[
                               { key: 'A', value: question.optionA },
@@ -1493,6 +1614,8 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                           <span className="font-medium text-emerald-700">Correct: </span>
                           <span className="font-bold text-emerald-800">
                             {isTrueFalse
+                              ? question.correctAnswer
+                              : isMultiSelect
                               ? question.correctAnswer
                               : `${question.correctAnswer}. ${question[`option${question.correctAnswer}` as keyof typeof question] || ''}`}
                           </span>

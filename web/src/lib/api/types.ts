@@ -464,6 +464,9 @@ export interface LecturerDashboardStats {
   pendingReviews: number;
   /** Backend may return null when no quiz attempts exist. */
   averageQuizScore: number | null;
+  totalQuizAttempts: number;
+  averageTimeMinutes: number | null;
+  participationTrendPercent: number | null;
 }
 
 export interface LecturerLeaderboardEntry {
