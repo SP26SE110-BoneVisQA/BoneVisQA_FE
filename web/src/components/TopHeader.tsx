@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowLeft, Bell, ChevronDown, LogOut, Settings, User } from 'lucide-react';
+import { ArrowLeft, Bell, ChevronDown, LogOut, User } from 'lucide-react';
 import { useAuth, type BackendRole } from '@/lib/useAuth';
 import { useLogout } from '@/lib/useLogout';
 import { resolveApiAssetUrl } from '@/lib/api/client';
@@ -295,12 +295,7 @@ export default function TopHeader({ title, subtitle }: TopHeaderProps) {
                   Profile
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild className="cursor-pointer">
-                <Link href="/settings" className="flex items-center gap-2">
-                  <Settings className="h-4 w-4 text-[var(--text-muted)]" />
-                  Settings
-                </Link>
-              </DropdownMenuItem>
+
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 destructive

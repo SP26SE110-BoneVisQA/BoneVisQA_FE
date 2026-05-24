@@ -10,9 +10,6 @@ import QuickStatsCard from '@/components/expert/QuickStatsCard';
 import ReviewCard from '@/components/expert/ReviewCard';
 import CaseManagementCard from '@/components/expert/CaseManagementCard';
 import ExpertActivityPanel from '@/components/expert/dashboard/ExpertActivityPanel';
-import ExpertBottomStats from '@/components/expert/dashboard/ExpertBottomStats';
-import ComparativeAnalyticsPanel from '@/components/expert/dashboard/ComparativeAnalyticsPanel';
-import ExpertTeachingObjectives from '@/components/expert/ExpertTeachingObjectives';
 import {
   FolderOpen,
   CheckCircle,
@@ -24,9 +21,6 @@ import {
 import {
   EXPERT_DASHBOARD_QUERY_KEY,
   fetchExpertDashboardBundle,
-  fetchExpertPerformanceMetrics,
-  fetchExpertComparativeAnalytics,
-  fetchExpertAiConfidenceInsights,
 } from '@/lib/api/expert-dashboard';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -41,21 +35,6 @@ export default function ExpertDashboardPage() {
   const { data: bundle, error, isPending } = useQuery({
     queryKey: EXPERT_DASHBOARD_QUERY_KEY,
     queryFn: fetchExpertDashboardBundle,
-  });
-
-  const { data: performanceMetrics } = useQuery({
-    queryKey: [...EXPERT_DASHBOARD_QUERY_KEY, 'performance'],
-    queryFn: fetchExpertPerformanceMetrics,
-  });
-
-  const { data: comparativeAnalytics } = useQuery({
-    queryKey: [...EXPERT_DASHBOARD_QUERY_KEY, 'analytics'],
-    queryFn: fetchExpertComparativeAnalytics,
-  });
-
-  const { data: aiConfidenceInsights } = useQuery({
-    queryKey: [...EXPERT_DASHBOARD_QUERY_KEY, 'confidence'],
-    queryFn: fetchExpertAiConfidenceInsights,
   });
 
   const errorMessage = error
@@ -76,7 +55,7 @@ export default function ExpertDashboardPage() {
 
   const stats = bundle?.stats ?? null;
   const pendingReviews = bundle?.pendingReviews ?? [];
-  const recentCases = bundle?.recentCases ?? [];
+  const recentCases = useMemo(() => bundle?.recentCases ?? [], [bundle?.recentCases]);
   const activity = bundle?.activity ?? null;
 
   const expertStats = useMemo(() => {
@@ -268,20 +247,6 @@ export default function ExpertDashboardPage() {
                     <Skeleton className="mt-3 h-12 w-full rounded-lg" />
                   </div>
                   <div className="rounded-xl border border-border bg-card p-5">
-                    <Skeleton className="mb-4 h-7 w-48" />
-                    <div className="space-y-4">
-                      {[0, 1, 2, 3].map((i) => (
-                        <div key={i} className="flex items-center justify-between gap-3">
-                          <div className="min-w-0 flex-1 space-y-2">
-                            <Skeleton className="h-4 w-32" />
-                            <Skeleton className="h-8 w-16" />
-                          </div>
-                          <Skeleton className="h-12 w-12 shrink-0 rounded-lg" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-border bg-card p-5">
                     <Skeleton className="mb-4 h-7 w-44" />
                     <div className="space-y-3">
                       {[0, 1, 2].map((i) => (
@@ -290,16 +255,6 @@ export default function ExpertDashboardPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
-                {[0, 1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="rounded-xl border border-border bg-card p-4 text-center">
-                    <Skeleton className="mx-auto mb-2 h-12 w-12 rounded-lg" />
-                    <Skeleton className="mx-auto mb-2 h-8 w-14" />
-                    <Skeleton className="mx-auto h-4 w-28" />
-                  </div>
-                ))}
               </div>
             </div>
           </PageLoadingSkeleton>
@@ -450,24 +405,10 @@ export default function ExpertDashboardPage() {
                 <ExpertActivityPanel
                   weeklyActivity={activity?.weeklyActivity ?? []}
                   avgDailyReviews={avgDailyReviews}
-                  performanceMetrics={performanceMetrics ?? null}
-                  aiConfidenceInsights={aiConfidenceInsights ?? null}
                 />
-                <ComparativeAnalyticsPanel analytics={comparativeAnalytics ?? null} />
               </div>
             </div>
 
-            <ExpertBottomStats
-              totalReviews={stats?.totalReviews ?? 0}
-              casesApproved={stats?.approvedThisMonth ?? 0}
-              performanceMetrics={performanceMetrics ?? null}
-              aiConfidenceInsights={aiConfidenceInsights ?? null}
-            />
-
-            {/* Teaching Objectives Section */}
-            <div className="mt-6">
-              <ExpertTeachingObjectives onError={(error) => toast.error(error)} />
-            </div>
           </>
         )}
       </div>

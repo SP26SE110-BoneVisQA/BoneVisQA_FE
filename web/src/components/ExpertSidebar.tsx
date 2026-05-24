@@ -11,15 +11,12 @@ import {
   FileText,
   LogOut,
   Stethoscope,
-  Award,
 } from 'lucide-react';
 
 const expertMenuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/expert/dashboard' },
-  { icon: FileText, label: 'Quiz', href: '/expert/quizzes' },
   { icon: MessageSquareText, label: 'Reviews', href: '/expert/reviews' },
   { icon: FolderOpen, label: 'Medical case', href: '/expert/cases' },
-  { icon: Award, label: 'My Specialties', href: '/expert/specialties' },
 ];
 
 export default function ExpertSidebar() {
