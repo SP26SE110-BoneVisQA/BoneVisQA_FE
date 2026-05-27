@@ -110,6 +110,7 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [gsiScriptReady, setGsiScriptReady] = useState(false);
+  const [gsiError, setGsiError] = useState<string | null>(null);
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
   const isGsiInitialized = useRef(false);
 
@@ -118,6 +119,28 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
     if (savedEmail) {
       setEmail(savedEmail);
     }
+  }, []);
+
+  // Listen for GSI timeout event
+  useEffect(() => {
+    if (!googleEnabled) return;
+
+    const handleGsiTimeout = () => {
+      setGsiError("Google Sign-In failed to load. Please check your internet connection and disable any ad blockers, then refresh the page.");
+    };
+
+    document.addEventListener("gsi-timeout", handleGsiTimeout);
+    return () => document.removeEventListener("gsi-timeout", handleGsiTimeout);
+  }, [googleEnabled]);
+
+  useEffect(() => {
+    // Fallback: if GSI doesn't load after 3 seconds and there's no error, try to proceed
+    const timeout = setTimeout(() => {
+      if (window.google?.accounts?.id) {
+        setGsiScriptReady(true);
+      }
+    }, 3000);
+    return () => clearTimeout(timeout);
   }, []);
 
   const handleLoginSuccess = useCallback(
@@ -228,25 +251,40 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   }, [handleLoginSuccess, router, toast]);
 
   const triggerGoogleSignIn = useCallback(() => {
-    const tryClick = (attempt: number) => {
-      const root = googleButtonRef.current;
-      if (!root) {
+    // If GSI is ready, use it
+    if (window.google?.accounts?.id) {
+      const tryClick = (attempt: number) => {
+        const root = googleButtonRef.current;
+        if (!root) {
+          toast.error("Google sign-in is still loading. Please try again.");
+          return;
+        }
+        const el = root.querySelector<HTMLElement>('[role="button"]');
+        if (el) {
+          el.click();
+          return;
+        }
+        if (attempt < 15) {
+          window.setTimeout(() => tryClick(attempt + 1), 50);
+          return;
+        }
         toast.error("Google sign-in is still loading. Please try again.");
-        return;
-      }
-      const el = root.querySelector<HTMLElement>('[role="button"]');
-      if (el) {
-        el.click();
-        return;
-      }
-      if (attempt < 15) {
-        window.setTimeout(() => tryClick(attempt + 1), 50);
-        return;
-      }
-      toast.error("Google sign-in is still loading. Please try again.");
-    };
-    tryClick(0);
-  }, [toast]);
+      };
+      tryClick(0);
+    } else {
+      // Fallback: Open Google OAuth in a new tab/redirect
+      const clientId = googleClientId;
+      const redirectUri = `${window.location.origin}/auth/sign-in`;
+      const scope = encodeURIComponent("openid email profile");
+      const responseType = "id_token";
+      const nonce = Math.random().toString(36).substring(2, 15);
+
+      const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=${responseType}&scope=${scope}&nonce=${nonce}&prompt=select_account`;
+
+      // Try to open in current window (redirect)
+      window.location.href = oauthUrl;
+    }
+  }, [googleClientId, toast]);
 
   useEffect(() => {
     if (window.google?.accounts?.id) {
@@ -278,6 +316,7 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
       text: "signin_with",
       logo_alignment: "left",
       width: 300,
+      ux_mode: "redirect",
     });
 
     isGsiInitialized.current = true;
@@ -286,11 +325,27 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   return (
     <div className="min-h-[100dvh] w-full bg-slate-950">
       {googleEnabled ? (
-        <Script
-          src="https://accounts.google.com/gsi/client"
-          strategy="afterInteractive"
-          onLoad={() => setGsiScriptReady(true)}
-        />
+        <>
+          <Script
+            src="https://accounts.google.com/gsi/client"
+            strategy="afterInteractive"
+            onLoad={() => {
+              setGsiScriptReady(true);
+            }}
+            onError={() => {
+              console.error("Failed to load GSI script");
+              setError("Failed to load Google Sign-In. Please check your internet connection.");
+            }}
+          />
+          <Script id="gsi-timeout-check" strategy="afterInteractive">{`
+            setTimeout(function() {
+              if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+                console.warn("GSI script did not load in time");
+                document.dispatchEvent(new CustomEvent("gsi-timeout"));
+              }
+            }, 10000);
+          `}</Script>
+        </>
       ) : null}
       {/*
         dir="ltr" keeps hero on the left and form on the right regardless of browser locale.
@@ -492,6 +547,23 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
                 <div className="w-full rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
                   Google sign-in is disabled: set NEXT_PUBLIC_GOOGLE_CLIENT_ID in your environment file.
                 </div>
+              ) : gsiError ? (
+                <div className="rounded-xl border border-danger/30 bg-danger/10 p-4">
+                  <p className="mb-3 text-sm text-danger">{gsiError}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setGsiError(null);
+                      setGsiScriptReady(false);
+                      // Force reload the page to re-attempt GSI loading
+                      window.location.reload();
+                    }}
+                  >
+                    Retry Loading Google Sign-In
+                  </Button>
+                </div>
               ) : (
                 <div className="rounded-xl border border-border-color bg-background p-3">
                   <div className="mb-3 flex items-center gap-3 text-sm text-text-muted">
@@ -499,6 +571,9 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
                       <span className="text-sm font-bold text-[#4285F4]">G</span>
                     </div>
                     <span>Google Login</span>
+                    {!gsiScriptReady && (
+                      <span className="ml-auto text-xs text-text-muted">Loading...</span>
+                    )}
                   </div>
                   <div className="relative w-full">
                     <div
@@ -512,8 +587,9 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
                       variant="outline"
                       className="w-full"
                       onClick={triggerGoogleSignIn}
+                      disabled={!gsiScriptReady}
                     >
-                      Google Login
+                      {gsiScriptReady ? "Google Login" : "Loading..."}
                     </Button>
                   </div>
                 </div>
