@@ -319,7 +319,7 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
       });
       setQuizResultDetails(details);
       setQuizState('result');
-      toast.success('Đã nộp bài thành công!');
+      toast.success('Quiz submitted successfully!');
     } catch (e) {
       toast.error(getApiErrorMessage(e));
     } finally {
@@ -611,7 +611,7 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
               <div className="flex items-center gap-3">
                 <span className="text-sm text-muted-foreground">
                   <span className="font-bold text-primary">{answeredCount}</span> / {totalQ}{' '}
-                  đã trả lời
+                  answered
                 </span>
                 <Button
                   variant="outline"
