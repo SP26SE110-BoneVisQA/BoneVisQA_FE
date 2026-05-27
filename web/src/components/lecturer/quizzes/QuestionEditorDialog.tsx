@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   ZoomIn,
@@ -50,6 +50,8 @@ function getQuizModeDisplay(mode: number | null | undefined) {
   if (mode == null) return null;
   return QUIZ_MODE_LABELS[mode] ?? null;
 }
+
+type OptionKey = 'A' | 'B' | 'C' | 'D';
 
 export default function QuestionEditorDialog({
   open,
@@ -792,7 +794,7 @@ export default function QuestionEditorDialog({
                     </div>
                     <div className="space-y-3">
                       {mcKeys.map((key) => {
-                        const isCorrect = multiSelectCorrect.includes(key);
+                        const isCorrect = multiSelectCorrect.includes(key as OptionKey);
                         const field = `option${key}` as keyof typeof formData;
                         return (
                           <div
@@ -806,7 +808,7 @@ export default function QuestionEditorDialog({
                             <input
                               type="checkbox"
                               checked={isCorrect}
-                              onChange={() => toggleMultiSelect(key)}
+                              onChange={() => toggleMultiSelect(key as OptionKey)}
                               className="h-5 w-5 shrink-0 rounded border-[#c2c6d4] text-[#00478d] focus:ring-[#00478d]"
                             />
                             <input

@@ -13,6 +13,7 @@ import {
   GraduationCap,
   Sparkles,
   UserCheck,
+  Stethoscope,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';

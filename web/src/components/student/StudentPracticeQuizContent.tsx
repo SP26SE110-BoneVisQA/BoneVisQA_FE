@@ -178,9 +178,6 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [savingToFlashcard, setSavingToFlashcard] = useState(false);
 
-  // MultiSelect answers: Record<questionId, Set of selected keys>
-  const [multiSelectAnswers, setMultiSelectAnswers] = useState<Record<string, Set<string>>>({});
-
   // Load classification options
   useEffect(() => {
     const loadFilters = async () => {
@@ -397,15 +394,15 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
   // Toggle MultiSelect option
   const handleMultiSelectToggle = (questionId: string, key: string) => {
     setMultiSelectAnswers(prev => {
-      const prevKeys = prev[questionId] ?? new Set<string>();
-      const next = new Set(prevKeys);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      const nextKeys = Array.from(next).sort().join(',');
-      setAnswers(a => ({ ...a, [questionId]: nextKeys }));
+      const prevKeys = prev[questionId] ?? [];
+      const next = prevKeys.includes(key)
+        ? prevKeys.filter(k => k !== key)
+        : [...prevKeys, key];
+      setAnswers(a => {
+        const updated = { ...a };
+        updated[questionId] = next.join(',');
+        return updated;
+      });
       return { ...prev, [questionId]: next };
     });
   };
@@ -1074,7 +1071,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                           {(['A', 'B', 'C', 'D'] as const).map((key) => {
                             const text = question[`option${key}` as keyof typeof question];
                             if (!text) return null;
-                            const isSelected = quizMultiSelectedKeys?.has(key) ?? false;
+                            const isSelected = quizMultiSelectedKeys?.includes(key) ?? false;
                             return (
                               <button key={key} type="button"
                                 onClick={() => handleMultiSelectToggle(question.questionId, key)}
@@ -1083,7 +1080,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                               </button>
                             );
                           })}
-                          {quizMultiSelectedKeys && quizMultiSelectedKeys.size > 0 && (
+                          {quizMultiSelectedKeys && quizMultiSelectedKeys.length > 0 && (
                             <p className="text-xs text-muted-foreground">
                               Đã chọn: {Array.from(quizMultiSelectedKeys).sort().join(', ')}
                             </p>
@@ -1146,7 +1143,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                           {(['A', 'B', 'C', 'D'] as const).map((key) => {
                             const text = question[`option${key}` as keyof typeof question];
                             if (!text) return null;
-                            const isSelected = aiMultiSelectedKeys?.has(key) ?? false;
+                            const isSelected = aiMultiSelectedKeys?.includes(key) ?? false;
                             return (
                               <button key={key} type="button"
                                 onClick={() => handleMultiSelectToggle(questionId, key)}
@@ -1155,7 +1152,7 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
                               </button>
                             );
                           })}
-                          {aiMultiSelectedKeys && aiMultiSelectedKeys.size > 0 && (
+                          {aiMultiSelectedKeys && aiMultiSelectedKeys.length > 0 && (
                             <p className="text-xs text-muted-foreground">
                               Đã chọn: {Array.from(aiMultiSelectedKeys).sort().join(', ')}
                             </p>

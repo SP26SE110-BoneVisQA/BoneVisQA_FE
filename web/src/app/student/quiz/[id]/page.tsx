@@ -1642,31 +1642,30 @@ export default function QuizSessionPage({
             })}
           </div>
         )}
-
+        {/* Reference material */}
+        <div>
+          <h4 className="mb-4 flex items-center gap-2 font-headline text-base font-bold text-on-surface">
+            <span className="h-1 w-6 rounded-full bg-primary" />
+            Reference material
+          </h4>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
+              <BookOpen className="mb-3 h-7 w-7 text-primary" />
+              <p className="text-sm font-bold text-on-surface">Classification atlas</p>
+              <p className="mt-1 text-xs text-on-surface-variant">AO/OTA fracture classification systems</p>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
+              <PlayCircle className="mb-3 h-7 w-7 text-primary" />
+              <p className="text-sm font-bold text-on-surface">Diagnostic video</p>
+              <p className="mt-1 text-xs text-on-surface-variant">Clinical signs in emergency radiography</p>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
+              <TrendingUp className="mb-3 h-7 w-7 text-primary" />
+              <p className="text-sm font-bold text-on-surface">Success rate</p>
+              <p className="mt-1 text-xs text-on-surface-variant">Track your progress after each attempt</p>
+            </div>
+          </div>
         </div>
-         <div>
-                <h4 className="mb-4 flex items-center gap-2 font-headline text-base font-bold text-on-surface">
-                  <span className="h-1 w-6 rounded-full bg-primary" />
-                  Reference material
-                </h4>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
-                    <BookOpen className="mb-3 h-7 w-7 text-primary" />
-                    <p className="text-sm font-bold text-on-surface">Classification atlas</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">AO/OTA fracture classification systems</p>
-                  </div>
-                  <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
-                    <PlayCircle className="mb-3 h-7 w-7 text-primary" />
-                    <p className="text-sm font-bold text-on-surface">Diagnostic video</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">Clinical signs in emergency radiography</p>
-                  </div>
-                  <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-low p-5 transition-transform hover:-translate-y-0.5">
-                    <TrendingUp className="mb-3 h-7 w-7 text-primary" />
-                    <p className="text-sm font-bold text-on-surface">Success rate</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">Track your progress after each attempt</p>
-                  </div>
-                </div>
-              </div>
       </div>
 
       {/* Save to Flashcards Modal */}
