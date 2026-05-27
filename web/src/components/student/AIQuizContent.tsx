@@ -1005,19 +1005,41 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
                         </div>
                       )}
 
-                      {!resultDetail.isCorrect && resultDetail.correctAnswer && (
-                        <p className="text-sm font-semibold text-gray-700">
-                          Đáp án đúng:{' '}
-                          <span className="font-bold text-green-600">
-                            {resultDetail.correctAnswer}.{' '}
-                            {
-                              currentQ[
-                                `option${resultDetail.correctAnswer}` as keyof typeof currentQ
-                              ]
-                            }
-                          </span>
-                        </p>
-                      )}
+                      {!resultDetail.isCorrect && resultDetail.correctAnswer && (() => {
+                        const isMultiSelectResult = resultDetail.type?.toLowerCase() === 'multiselect' || resultDetail.type?.toLowerCase() === 'multi-select';
+                        if (isMultiSelectResult) {
+                          // MULTI-SELECT: correctAnswer is "A,B,C" format, need to show each option's text
+                          const correctKeys = resultDetail.correctAnswer.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+                          return (
+                            <p className="text-sm font-semibold text-gray-700">
+                              Đáp án đúng:{' '}
+                              <span className="font-bold text-green-600">
+                                {correctKeys.join(', ')}
+                              </span>
+                              <br />
+                              <span className="text-xs text-muted-foreground">
+                                {correctKeys.map((key) => {
+                                  const optionText = currentQ[`option${key}` as keyof typeof currentQ];
+                                  return optionText ? `${key}. ${optionText}` : null;
+                                }).filter(Boolean).join('; ')}
+                              </span>
+                            </p>
+                          );
+                        }
+                        return (
+                          <p className="text-sm font-semibold text-gray-700">
+                            Đáp án đúng:{' '}
+                            <span className="font-bold text-green-600">
+                              {resultDetail.correctAnswer}.{' '}
+                              {
+                                currentQ[
+                                  `option${resultDetail.correctAnswer}` as keyof typeof currentQ
+                                ]
+                              }
+                            </span>
+                          </p>
+                        );
+                      })()}
                     </div>
                   );
                 })()}

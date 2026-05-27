@@ -337,7 +337,7 @@ interface TopicChatInnerProps {
   showTopicSelector: boolean;
   searchQuery: string;
   filteredCategories: TopicCategory[];
-  conversationRef: React.RefObject<HTMLDivElement | null>;
+  conversationRef: React.RefObject<HTMLDivElement>;
   onSelectTopic: (topic: Topic) => void;
   onSendMessage: () => void;
   onInputChange: (value: string) => void;
