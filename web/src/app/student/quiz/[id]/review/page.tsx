@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/toast';
@@ -45,6 +45,41 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
   const [reviewData, setReviewData] = useState<DetailedReview | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [generating, setGenerating] = useState(false);
+
+  // Auto-refresh mechanism: detect when score changes (e.g., after lecturer edits)
+  const lastScoreRef = useRef<number | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Poll for score updates every 5 seconds when on review page
+  useEffect(() => {
+    if (!quizInfo?.attemptId || loading) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        setIsRefreshing(true);
+        const quizzes = await getAssignedQuizzes();
+        const quiz = quizzes.find((q) => q.quizId === quizId);
+        
+        if (quiz?.attemptId && quiz.score !== lastScoreRef.current) {
+          // Score has been updated! Refresh the detailed review data
+          lastScoreRef.current = quiz.score ?? null;
+          setQuizInfo(prev => prev ? { ...prev, score: quiz.score } : null);
+          
+          const detailed = await quizExtensionsApi.getDetailedReview(quiz.attemptId);
+          setReviewData(detailed);
+          
+          // Show notification about the score change
+          toast.success('Score has been updated! Review has been refreshed.');
+        }
+      } catch (error) {
+        console.error('Auto-refresh error:', error);
+      } finally {
+        setIsRefreshing(false);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [quizId, quizInfo?.attemptId, loading]);
 
   useEffect(() => {
     fetchData();
@@ -175,6 +210,21 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
                 <p className="text-xs text-muted-foreground">Your Score</p>
               </div>
             )}
+            {isRefreshing && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Checking for updates...</span>
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void fetchData()}
+              className="gap-1.5"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </Button>
           </div>
         </div>
       </header>

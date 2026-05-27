@@ -203,6 +203,34 @@ export default function QuizSessionPage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submitted]);
 
+  // Auto-refresh mechanism: detect when score changes (e.g., after lecturer edits)
+  const lastScoreRef = useRef<number | null>(null);
+
+  // Poll for score updates every 5 seconds when quiz is completed
+  useEffect(() => {
+    if (!quizInfo?.isCompleted || loadingInfo) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const list = await getAssignedQuizzes();
+        const quiz = list.find((q) => q.quizId === quizId);
+        
+        if (quiz && quiz.score !== lastScoreRef.current) {
+          // Score has been updated! Refresh the quiz info
+          lastScoreRef.current = quiz.score ?? null;
+          setQuizInfo(quiz);
+          
+          // Show notification about the score change
+          toast.success('Score has been updated by your lecturer!');
+        }
+      } catch (error) {
+        console.error('Auto-refresh error:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [quizId, quizInfo?.isCompleted, loadingInfo]);
+
   // Xử lý yêu cầu làm lại quiz từ tham số URL
   useEffect(() => {
     if (isRetakeRequested && quizInfo?.isCompleted && !retakeRequestedRef.current) {
@@ -345,9 +373,10 @@ export default function QuizSessionPage({
   // ================================================================
   // HÀM SUBMIT QUIZ - XỬ LÝ NỘP BÀI VÀ NHẬN KẾT QUẢ
   // ================================================================
-  // 1. Build payload: chuẩn bị data từng câu hỏi và đáp án student
-  // 2. Gọi API submitQuizSession()
-  // 3. Nhận về quizResult chứa:
+  // 1. Validate: kiểm tra session và attemptId hợp lệ
+  // 2. Build payload: chuẩn bị data từng câu hỏi và đáp án student
+  // 3. Gọi API submitQuizSession()
+  // 4. Nhận về quizResult chứa:
   //    - score: điểm phần trăm (0-100)
   //    - passed: true/false
   //    - correctAnswers: số câu đúng
@@ -357,6 +386,15 @@ export default function QuizSessionPage({
   // ================================================================
   const handleSubmit = useCallback(async () => {
     if (!session) return;
+    
+    // Validate attemptId
+    const attemptId = session.attemptId;
+    if (!attemptId || attemptId === '00000000-0000-0000-0000-000000000000' || attemptId.length < 10) {
+      toast.error('Invalid quiz session. Please restart the quiz.');
+      setSubmitting(false);
+      return;
+    }
+    
     setSubmitting(true);
     try {
       // Build payload with proper essayAnswer field for Essay-type questions
@@ -371,12 +409,20 @@ export default function QuizSessionPage({
           selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : undefined,
         };
       });
-      const result = await submitQuizSession(session.attemptId, payload);
+      const result = await submitQuizSession(attemptId, payload);
       setQuizResult(result);
       setSubmitted(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`Failed to submit: ${msg}`);
+      // Show specific error from backend if available
+      if (msg.includes('already been submitted') || msg.includes('already submitted')) {
+        toast.error('This quiz has already been submitted.');
+        setSubmitted(true); // Mark as submitted to stop the session
+      } else if (msg.includes('not found') || msg.includes('Invalid attempt')) {
+        toast.error('Quiz session expired. Please restart the quiz.');
+      } else {
+        toast.error(`Failed to submit: ${msg}`);
+      }
     } finally {
       setSubmitting(false);
     }
