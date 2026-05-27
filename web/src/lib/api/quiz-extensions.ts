@@ -20,6 +20,14 @@ export interface QuestionReview {
   aiExplanation: string | null;
   topicTags: string[];
   relatedCases: RelatedCase[];
+  /** Lecturer feedback for this specific question answer */
+  lecturerFeedback?: string | null;
+  /** Reference answer provided by lecturer/expert */
+  referenceAnswer?: string | null;
+  /** Image URL for X-ray images associated with this question */
+  imageUrl?: string | null;
+  /** Case title associated with this question */
+  caseTitle?: string | null;
 }
 
 export interface RelatedCase {

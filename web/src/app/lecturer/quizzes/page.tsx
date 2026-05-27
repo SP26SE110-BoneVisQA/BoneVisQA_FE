@@ -35,19 +35,19 @@ import {
   FileText,
 } from 'lucide-react';
 import { deleteQuiz, removeQuizFromClass, getUnassignedLecturerQuizzes, getAssignedQuizzes, getLecturerQuizzes } from '@/lib/api/lecturer-quiz';
+import { fetchLecturerDashboardStats } from '@/lib/api/lecturer-dashboard';
+import type { LecturerDashboardStats } from '@/lib/api/types';
 import { getStoredUserId } from '@/lib/getStoredUserId';
 import { exportAllQuizResultsExcel } from '@/lib/api/lecturer';
 import type { ClassQuizDto, AssignedQuizDto, QuizDto } from '@/lib/api/types';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import ExpertQuizLibrary from '@/components/lecturer/quizzes/ExpertQuizLibrary';
-import { fetchExpertQuizQuestions, assignExpertQuizToClass } from '@/lib/api/lecturer-expert-quiz';
 import { fetchLecturerClasses } from '@/lib/api/lecturer-classes';
 import { resolveApiAssetUrl } from '@/lib/api/client';
 import { quizExtensionsApi } from '@/lib/api/quiz-extensions';
 
 type QuizStatus = 'Active' | 'Draft' | 'Completed';
-type TabType = 'my-quizzes' | 'expert-library' | 'assigned-quizzes';
+type TabType = 'my-quizzes' | 'assigned-quizzes';
 type QuizModeType = 'all' | '1' | '2' | '3';
 
 interface EnrichedQuiz {
@@ -155,9 +155,8 @@ export default function QuizListPage() {
   const [selectedQuizIds, setSelectedQuizIds] = useState<Set<string>>(new Set());
   const [bulkDeleteTarget, setBulkDeleteTarget] = useState<Set<string> | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [previewQuiz, setPreviewQuiz] = useState<EnrichedQuiz | null>(null);
-  const [assignQuiz, setAssignQuiz] = useState<EnrichedQuiz | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [engagementStats, setEngagementStats] = useState<LecturerDashboardStats | null>(null);
 
   const handleExportAllResults = async () => {
     if (activeTab !== 'assigned-quizzes') {
@@ -379,7 +378,17 @@ export default function QuizListPage() {
   // Load data on mount
   useEffect(() => {
     loadMyQuizzes();
+    loadEngagementStats();
   }, []);
+
+  const loadEngagementStats = async () => {
+    try {
+      const stats = await fetchLecturerDashboardStats();
+      setEngagementStats(stats);
+    } catch (err) {
+      console.error('Failed to load engagement stats:', err);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'my-quizzes') {
@@ -477,14 +486,6 @@ export default function QuizListPage() {
         </button>
         <button
           type="button"
-          onClick={() => handleTabChange('expert-library')}
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'expert-library' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-        >
-          <BookOpen className="h-4 w-4" />
-          Quiz Library
-        </button>
-        <button
-          type="button"
           onClick={() => handleTabChange('assigned-quizzes')}
           className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'assigned-quizzes' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
         >
@@ -493,13 +494,7 @@ export default function QuizListPage() {
         </button>
       </div>
 
-      {/* Quiz Library Tab */}
-      {activeTab === 'expert-library' ? (
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <ExpertQuizLibrary onAssignSuccess={() => handleTabChange('assigned-quizzes')} />
-        </div>
-      ) : (
-        <div className="space-y-8">
+      <div className="space-y-8">
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="rounded-3xl border border-border/10 bg-card p-6 shadow-sm">
@@ -792,11 +787,17 @@ export default function QuizListPage() {
             <div className="relative col-span-2 flex flex-col justify-between overflow-hidden rounded-[2rem] bg-[#1a2332] p-10">
               <div className="relative z-10">
                 <h4 className="font-['Manrope',sans-serif] text-2xl font-bold text-white">Quiz Engagement Insights</h4>
-                <p className="mt-4 max-w-md text-sm text-slate-400">Student participation is up 22% this semester.</p>
+                <p className="mt-4 max-w-md text-sm text-slate-400">
+                  {engagementStats?.participationTrendPercent != null && engagementStats.participationTrendPercent > 0
+                    ? `Student participation is up ${engagementStats.participationTrendPercent}% this semester.`
+                    : engagementStats?.participationTrendPercent != null && engagementStats.participationTrendPercent < 0
+                    ? `Student participation is down ${Math.abs(engagementStats.participationTrendPercent)}% this semester.`
+                    : 'Student participation trend over the past semester.'}
+                </p>
                 <div className="mt-8 flex items-center gap-8">
-                  <div><p className="font-black text-3xl text-primary-fixed-dim">4.8k</p><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">Total Attempts</p></div>
+                  <div><p className="font-black text-3xl text-primary-fixed-dim">{engagementStats?.totalQuizAttempts?.toLocaleString() ?? '—'}</p><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">Total Attempts</p></div>
                   <div className="h-10 w-px bg-white/10" />
-                  <div><p className="font-black text-3xl text-secondary-fixed">12m</p><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">Avg. Time</p></div>
+                  <div><p className="font-black text-3xl text-secondary-fixed">{engagementStats?.averageTimeMinutes != null ? `${engagementStats.averageTimeMinutes}m` : '—'}</p><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">Avg. Time</p></div>
                 </div>
               </div>
               <div aria-hidden className="pointer-events-none absolute right-0 top-0 h-full w-1/2 opacity-20"><div className="h-full w-full bg-gradient-to-l from-primary/30 to-transparent" /></div>
@@ -811,7 +812,6 @@ export default function QuizListPage() {
             </div>
           </div>
         </div>
-      )}
 
       {/* Footer */}
       <div className="mt-8 flex flex-col gap-4 border-t border-border pt-8 sm:flex-row sm:items-center sm:justify-between">
@@ -880,528 +880,6 @@ export default function QuizListPage() {
           </div>
         )}
       </Modal>
-
-      {/* Preview Modal for Expert Quizzes */}
-      {previewQuiz && (
-        <PreviewModal
-          quiz={previewQuiz}
-          onClose={() => setPreviewQuiz(null)}
-          onAssign={() => {
-            setPreviewQuiz(null);
-            setAssignQuiz(previewQuiz);
-          }}
-        />
-      )}
-
-      {/* Assign Modal for Expert Quizzes */}
-      {assignQuiz && (
-        <AssignModal
-          quiz={assignQuiz}
-          onClose={() => setAssignQuiz(null)}
-          onAssigned={() => {
-            setAssignQuiz(null);
-            // Reload both tabs so the assigned quiz moves from "My Quizzes" to "Assigned Quizzes"
-            Promise.all([loadMyQuizzes(), loadAssignedQuizzes()]);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// Helper function for time conversion
-function utcToLocalDatetimeLocal(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function localDatetimeLocalToIso(local: string): string {
-  const t = local.trim();
-  if (!t) return '';
-  const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString();
-}
-
-// ========== PREVIEW MODAL ==========
-
-interface PreviewModalProps {
-  quiz: EnrichedQuiz;
-  onClose: () => void;
-  onAssign: () => void;
-}
-
-function PreviewModal({ quiz, onClose, onAssign }: PreviewModalProps) {
-  const [questions, setQuestions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadQuestions();
-  }, [quiz.quizId]);
-
-  const loadQuestions = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchExpertQuizQuestions(quiz.quizId);
-      setQuestions(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load questions.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-card-foreground">{quiz.quizName || 'Untitled quiz'}</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                {quiz.questionCount || 0} questions • Difficulty: {quiz.difficulty || '—'}
-              </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted transition-colors cursor-pointer"
-          >
-            <X className="h-5 w-5 text-muted-foreground" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : error ? (
-            <div className="flex items-center gap-2 text-destructive py-8">
-              <AlertCircle className="h-5 w-5" />
-              <span>{error}</span>
-            </div>
-          ) : questions.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">This quiz has no questions yet.</p>
-          ) : (
-            <div className="space-y-6">
-              {questions.map((q: any, idx: number) => (
-                <div key={q.questionId} className="rounded-xl border border-border bg-input/20 overflow-hidden">
-                  {/* Question image */}
-                  {q.imageUrl && (
-                    <div className="bg-muted/50 p-4 border-b border-border">
-                      <img
-                        src={resolveApiAssetUrl(q.imageUrl)}
-                        alt={`Question ${idx + 1}`}
-                        className="max-h-64 mx-auto rounded-lg object-contain"
-                      />
-                    </div>
-                  )}
-
-                  {/* Question content */}
-                  <div className="p-4">
-                    <div className="flex items-start gap-3 mb-3">
-                      <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 text-primary font-bold text-sm shrink-0">
-                        {idx + 1}
-                      </span>
-                      <p className="text-base font-medium text-card-foreground leading-relaxed">
-                        {q.questionText}
-                      </p>
-                    </div>
-
-                    {/* Options */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 ml-11">
-                      {[
-                        { key: 'A', value: q.optionA },
-                        { key: 'B', value: q.optionB },
-                        { key: 'C', value: q.optionC },
-                        { key: 'D', value: q.optionD },
-                      ].map(
-                        (opt) =>
-                          opt.value && (
-                            <div
-                              key={opt.key}
-                              className={`flex items-center gap-2 p-3 rounded-lg border ${
-                                q.correctAnswer?.toUpperCase() === opt.key
-                                  ? 'border-secondary bg-secondary/10'
-                                  : 'border-border bg-card'
-                              }`}
-                            >
-                              <span
-                                className={`font-bold text-sm w-6 h-6 flex items-center justify-center rounded ${
-                                  q.correctAnswer?.toUpperCase() === opt.key
-                                    ? 'bg-secondary text-white'
-                                    : 'bg-muted text-muted-foreground'
-                                }`}
-                              >
-                                {opt.key}
-                              </span>
-                              <span className="text-sm text-card-foreground">{opt.value}</span>
-                              {q.correctAnswer?.toUpperCase() === opt.key && (
-                                <CheckCircle className="h-4 w-4 text-secondary ml-auto" />
-                              )}
-                            </div>
-                          )
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-border shrink-0">
-          <button
-            onClick={onClose}
-            className="px-6 py-2.5 rounded-lg border border-border text-sm font-medium text-card-foreground hover:bg-muted transition-colors cursor-pointer"
-          >
-            Close
-          </button>
-          <button
-            onClick={onAssign}
-            className="px-6 py-2.5 rounded-lg bg-primary text-sm font-medium text-white hover:bg-primary/90 transition-colors cursor-pointer"
-          >
-            Assign to class
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ========== ASSIGN MODAL ==========
-
-interface AssignModalProps {
-  quiz: EnrichedQuiz;
-  onClose: () => void;
-  onAssigned: () => void;
-}
-
-function AssignModal({ quiz, onClose, onAssigned }: AssignModalProps) {
-  const toast = useToast();
-  const [classes, setClasses] = useState<{ id: string; className: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [assigning, setAssigning] = useState(false);
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
-  const [showClassDropdown, setShowClassDropdown] = useState(false);
-  const [openTime, setOpenTime] = useState<string | ''>(
-    utcToLocalDatetimeLocal(quiz.openTime)
-  );
-  const [closeTime, setCloseTime] = useState<string | ''>(
-    utcToLocalDatetimeLocal(quiz.closeTime)
-  );
-  const [timeLimit, setTimeLimit] = useState<number | ''>(quiz.timeLimit ?? '');
-  const [passingScore, setPassingScore] = useState<number | ''>(quiz.passingScore ?? '');
-  const [adaptiveMode, setAdaptiveMode] = useState(false);
-  const [spacedRepetition, setSpacedRepetition] = useState(false);
-
-  const toggleClass = (classId: string) => {
-    setSelectedClassIds((prev) =>
-      prev.includes(classId)
-        ? prev.filter((id) => id !== classId)
-        : [...prev, classId]
-    );
-  };
-
-  const removeClass = (classId: string) => {
-    setSelectedClassIds((prev) => prev.filter((id) => id !== classId));
-  };
-
-  useEffect(() => {
-    loadClasses();
-  }, []);
-
-  const loadClasses = async () => {
-    setLoading(true);
-    try {
-      const data = await fetchLecturerClasses();
-      setClasses(data);
-      // Do not preset any class, let the user choose
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load classes.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAssign = async () => {
-    if (selectedClassIds.length === 0) {
-      toast.error('Please select at least one class.');
-      return;
-    }
-    setAssigning(true);
-
-    // CLAMP LOGIC
-    let effectiveTimeLimit = typeof timeLimit === 'number' ? timeLimit : null;
-    let effectivePassingScore = typeof passingScore === 'number' ? passingScore : null;
-    const warnings: string[] = [];
-
-    if (quiz.timeLimit != null && effectiveTimeLimit != null) {
-      const minTimeLimit = Math.max(5, Math.floor(quiz.timeLimit * 0.5));
-      if (effectiveTimeLimit < minTimeLimit) {
-        warnings.push(`Time limit is below the minimum (${minTimeLimit} minutes).`);
-      }
-      if (effectiveTimeLimit > quiz.timeLimit) {
-        warnings.push(`Time limit exceeds the original quiz limit (${quiz.timeLimit} minutes).`);
-      }
-    }
-
-    if (quiz.passingScore != null && effectivePassingScore != null) {
-      if (effectivePassingScore < 0) warnings.push('Passing score cannot be negative.');
-      if (effectivePassingScore > 100) warnings.push('Passing score cannot exceed 100.');
-    }
-
-    const isoOpen = localDatetimeLocalToIso(openTime);
-    const isoClose = localDatetimeLocalToIso(closeTime);
-    if (isoOpen && isoClose && new Date(isoOpen) >= new Date(isoClose)) {
-      warnings.push('Open time must be before close time.');
-    }
-
-    if (warnings.length > 0) {
-      const confirmed = window.confirm(
-        'There are some warnings:\n\n' + warnings.join('\n') + '\n\nDo you still want to continue?'
-      );
-      if (!confirmed) {
-        setAssigning(false);
-        return;
-      }
-    }
-
-    try {
-      for (const classId of selectedClassIds) {
-        await assignExpertQuizToClass(
-          classId,
-          quiz.quizId,
-          {
-            openTime: isoOpen || undefined,
-            closeTime: isoClose || undefined,
-            timeLimitMinutes: effectiveTimeLimit,
-            passingScore: effectivePassingScore,
-          }
-        );
-      }
-
-      // Enable Adaptive Mode / Spaced Repetition if selected
-      if (adaptiveMode) {
-        try {
-          await quizExtensionsApi.enableAdaptiveMode(quiz.quizId);
-        } catch (e) {
-          console.warn('Failed to enable adaptive mode:', e);
-        }
-      }
-      if (spacedRepetition) {
-        try {
-          await quizExtensionsApi.enableSpacedRepetition(quiz.quizId);
-        } catch (e) {
-          console.warn('Failed to enable spaced repetition:', e);
-        }
-      }
-
-      toast.success(`Successfully assigned quiz to ${selectedClassIds.length} class(es)!`);
-      onAssigned();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to assign quiz.');
-    } finally {
-      setAssigning(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-card rounded-2xl border border-border shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-card-foreground">Assign Quiz to Class</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              {quiz.quizName || 'Untitled quiz'}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-muted transition-colors cursor-pointer"
-          >
-            <X className="h-5 w-5 text-muted-foreground" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Class Selection */}
-          <div>
-            <label className="block text-sm font-medium text-card-foreground mb-2">
-              Select class <span className="text-destructive">*</span>
-            </label>
-            {loading ? (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading classes...
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {classes.map((cls) => (
-                  <button
-                    key={cls.id}
-                    type="button"
-                    onClick={() => toggleClass(cls.id)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                      selectedClassIds.includes(cls.id)
-                        ? 'bg-primary text-white'
-                        : 'bg-muted text-card-foreground hover:bg-muted/80'
-                    }`}
-                  >
-                    {selectedClassIds.includes(cls.id) && <Check className="h-3.5 w-3.5" />}
-                    {cls.className}
-                  </button>
-                ))}
-                {classes.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No classes found.</p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Open Time */}
-          <div>
-            <label className="block text-sm font-medium text-card-foreground mb-2">
-              Open time (optional)
-            </label>
-            <input
-              type="datetime-local"
-              value={openTime}
-              onChange={(e) => setOpenTime(e.target.value)}
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          {/* Close Time */}
-          <div>
-            <label className="block text-sm font-medium text-card-foreground mb-2">
-              Close time (optional)
-            </label>
-            <input
-              type="datetime-local"
-              value={closeTime}
-              onChange={(e) => setCloseTime(e.target.value)}
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          {/* Time Limit */}
-          <div>
-            <label className="block text-sm font-medium text-card-foreground mb-2">
-              Time limit (minutes, optional)
-            </label>
-            <input
-              type="number"
-              min="5"
-              value={timeLimit}
-              onChange={(e) => setTimeLimit(e.target.value === '' ? '' : Number(e.target.value))}
-              placeholder={quiz.timeLimit?.toString() || ''}
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            {quiz.timeLimit != null && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Original quiz: {quiz.timeLimit} minutes
-              </p>
-            )}
-          </div>
-
-          {/* Passing Score */}
-          <div>
-            <label className="block text-sm font-medium text-card-foreground mb-2">
-              Passing score (optional)
-            </label>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={passingScore}
-              onChange={(e) => setPassingScore(e.target.value === '' ? '' : Number(e.target.value))}
-              placeholder={quiz.passingScore?.toString() || ''}
-              className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            {quiz.passingScore != null && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Original quiz: {quiz.passingScore} points
-              </p>
-            )}
-          </div>
-
-          {/* Advanced Options */}
-          <div className="border-t border-border pt-4">
-            <h3 className="text-sm font-medium text-card-foreground mb-3">Advanced Options</h3>
-            <div className="space-y-3">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  id="adaptiveMode"
-                  checked={adaptiveMode}
-                  onChange={(e) => setAdaptiveMode(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                />
-                <div>
-                  <span className="text-sm font-medium text-card-foreground">Adaptive Quiz Mode</span>
-                  <p className="text-xs text-muted-foreground">
-                    Automatically adjust question difficulty based on student performance
-                  </p>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  id="spacedRepetition"
-                  checked={spacedRepetition}
-                  onChange={(e) => setSpacedRepetition(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                />
-                <div>
-                  <span className="text-sm font-medium text-card-foreground">Spaced Repetition</span>
-                  <p className="text-xs text-muted-foreground">
-                    Enable intelligent review scheduling using SM-2 algorithm
-                  </p>
-                </div>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-border shrink-0">
-          <button
-            type="button"
-            disabled={assigning}
-            onClick={onClose}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={assigning || selectedClassIds.length === 0}
-            onClick={handleAssign}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
-          >
-            {assigning ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Assigning...
-              </>
-            ) : (
-              'Assign to class'
-            )}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

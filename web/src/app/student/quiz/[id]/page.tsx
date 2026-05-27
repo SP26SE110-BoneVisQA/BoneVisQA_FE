@@ -1426,18 +1426,12 @@ export default function QuizSessionPage({
                     <CheckCircle2 className="h-10 w-10 text-white" />
                   </div>
                   <h3 className="mb-2 font-headline text-2xl font-bold text-emerald-700 dark:text-emerald-400">
-                    Nộp bài thành công!
+                    Quiz submitted successfully!
                   </h3>
                   <p className="text-sm text-emerald-600/80 dark:text-emerald-400/70">
-                    Bài quiz của bạn đã được gửi thành công. Điểm sẽ được cập nhật sau khi giảng viên chấm điểm.
+                    Your quiz has been sent successfully. Score will be updated after the instructor grades.
                   </p>
-                </div> */}
-
-                {/* {(quizResult?.ungradedEssayCount ?? 0) > 0 && (
-                  <p className="mt-2 text-center text-xs text-amber-600 dark:text-amber-400">
-                    * {quizResult?.ungradedEssayCount} essay(s) pending grading. Score will update after grading.
-                  </p>
-                )} */}
+                </div>
 
                 <div className="flex flex-wrap justify-center gap-3">
                   {quizInfo?.answersReleased && !showFeedback && (
@@ -1501,7 +1495,7 @@ export default function QuizSessionPage({
                   <p className="mt-2 text-sm text-on-surface-variant">
                     Your answers have been recorded.
                   </p>
-                  <p className="mt-1 text-xs text-on-surface-variant">
+                  <p className="mt-2 text-xs text-emerald-600/70 dark:text-emerald-400/60">
                     {answeredCount}/{totalQ} questions answered
                   </p>
                   {quizResult?.ungradedEssayCount != null && quizResult.ungradedEssayCount > 0 && (

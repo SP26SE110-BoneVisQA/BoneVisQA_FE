@@ -1963,6 +1963,44 @@ export async function updateFlashcardDeck(deckId: string, deckName: string, desc
   }
 }
 
+export interface ImportFlashcardItem {
+  frontContent: string;
+  backContent: string;
+  imageUrl?: string;
+}
+
+export interface ImportFlashcardsResult {
+  success: boolean;
+  importedCount: number;
+  failedCount: number;
+  errors: string[];
+  importedCards: FlashcardDto[];
+}
+
+export async function importFlashcards(
+  deckId: string,
+  cards: ImportFlashcardItem[]
+): Promise<ImportFlashcardsResult> {
+  try {
+    const { data } = await http.post<unknown>('/api/student/flashcards/import', {
+      deckId,
+      cards,
+    });
+    const item = data as Record<string, unknown>;
+    return {
+      success: Boolean(item.success ?? item.Success ?? false),
+      importedCount: Number(item.importedCount ?? item.ImportedCount ?? 0),
+      failedCount: Number(item.failedCount ?? item.FailedCount ?? 0),
+      errors: Array.isArray(item.errors) ? item.errors.map(String) : [],
+      importedCards: Array.isArray(item.importedCards)
+        ? (item.importedCards as Record<string, unknown>[]).map(normalizeFlashcard)
+        : [],
+    };
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
 // ========== AI Flashcard Generator ==========
 
 export interface FlashcardGenerationResult {

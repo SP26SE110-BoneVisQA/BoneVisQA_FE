@@ -103,6 +103,9 @@ export default function AIQuizPage() {
   const [loadingHint, setLoadingHint] = useState(false);
   const [hintUsedCount, setHintUsedCount] = useState(0);
 
+  // MultiSelect answers: Record<questionId, Set of selected keys>
+  const [multiSelectAnswers, setMultiSelectAnswers] = useState<Record<string, Set<string>>>({});
+
   const questions = session?.questions ?? [];
   const currentQ = questions[currentIndex];
   const totalQ = questions.length;
@@ -134,6 +137,25 @@ export default function AIQuizPage() {
     (option: string) => {
       if (!currentQ || quizState !== 'active') return;
       setAnswers((prev) => ({ ...prev, [currentQ.questionId]: option }));
+    },
+    [currentQ, quizState],
+  );
+
+  const handleMultiSelectToggle = useCallback(
+    (questionId: string, key: string) => {
+      if (!currentQ || quizState !== 'active') return;
+      setMultiSelectAnswers((prev) => {
+        const prevKeys = prev[questionId] ?? new Set<string>();
+        const next = new Set(prevKeys);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        const nextKeys = Array.from(next).sort().join(',');
+        setAnswers((a) => ({ ...a, [questionId]: nextKeys }));
+        return { ...prev, [questionId]: next };
+      });
     },
     [currentQ, quizState],
   );
@@ -185,7 +207,11 @@ export default function AIQuizPage() {
       const details: QuizQuestionResult[] = session.questions.map((q) => {
         const studentAnswer = answers[q.questionId] || null;
         const correctAnswer = q.correctAnswer || null;
-        const isCorrect = studentAnswer === correctAnswer;
+        const isCorrect =
+          q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select'
+            ? (studentAnswer || '').split(',').map((k) => k.trim()).filter(Boolean).sort().join(',') ===
+              (correctAnswer || '').split(',').map((k) => k.trim()).filter(Boolean).sort().join(',')
+            : studentAnswer === correctAnswer;
         return {
           questionId: q.questionId,
           questionText: q.questionText,
@@ -202,7 +228,7 @@ export default function AIQuizPage() {
       });
       setQuizResultDetails(details);
       setQuizState('result');
-      toast.success('Đã nộp bài thành công!');
+      toast.success('Submission successful! Your quiz has been sent. Score will be updated after the instructor grades.');
     } catch (e) {
       toast.error(getApiErrorMessage(e));
     } finally {
@@ -216,14 +242,14 @@ export default function AIQuizPage() {
     try {
       const result = await saveQuizToFlashcards(session.attemptId, {
         deckName: session.title,
-        description: `Bộ flashcard từ quiz AI - ${selectedTopic}`,
+        description: `Flashcard set from AI quiz - ${selectedTopic}`,
       });
       if (result.success) {
         toast.success(
-          `Đã lưu ${result.cardCount} flashcards vào bộ "${result.deckName}"!`,
+          `Saved ${result.cardCount} flashcards to deck "${result.deckName}"!`,
         );
       } else {
-        toast.error(result.message || 'Không thể lưu flashcards.');
+        toast.error(result.message || 'Failed to save flashcards.');
       }
     } catch (e) {
       toast.error(getApiErrorMessage(e));
@@ -236,6 +262,7 @@ export default function AIQuizPage() {
     setQuizState('config');
     setSession(null);
     setAnswers({});
+    setMultiSelectAnswers({});
     setCurrentIndex(0);
     setQuizResult(null);
     setQuizResultDetails(null as unknown as QuizQuestionResult[]);
@@ -275,7 +302,7 @@ export default function AIQuizPage() {
             <div className="hidden shrink-0 text-right md:block">
               <div className="rounded-2xl bg-white/15 px-4 py-2 backdrop-blur-sm">
                 <p className="text-2xl font-black">{totalQ}</p>
-                <p className="text-xs text-white/70">Câu hỏi</p>
+                <p className="text-xs text-white/70">Questions</p>
               </div>
             </div>
           </div>
@@ -512,7 +539,7 @@ export default function AIQuizPage() {
                   </div>
                   <div>
                     <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700">
-                      Chế độ ôn luyện AI
+                      AI Practice Mode
                     </span>
                     <p className="mt-0.5 font-semibold text-card-foreground">{session?.title}</p>
                   </div>
@@ -520,7 +547,7 @@ export default function AIQuizPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-muted-foreground">
                     <span className="font-bold text-primary">{answeredCount}</span> / {totalQ}{' '}
-                    đã trả lời
+                    answered
                   </span>
                   <Button
                     variant="outline"
@@ -529,7 +556,7 @@ export default function AIQuizPage() {
                     className="gap-1.5 text-xs"
                   >
                     <ArrowLeft className="h-3.5 w-3.5" />
-                    Quiz mới
+                    New Quiz
                   </Button>
                 </div>
               </div>
@@ -538,9 +565,9 @@ export default function AIQuizPage() {
               <div className="px-6 py-4">
                 <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
                   <span className="font-medium">
-                    Câu hỏi {currentIndex + 1} / {totalQ}
+                    Question {currentIndex + 1} / {totalQ}
                   </span>
-                  <span>{Math.round(((currentIndex + 1) / totalQ) * 100)}% hoàn thành</span>
+                  <span>{Math.round(((currentIndex + 1) / totalQ) * 100)}% completed</span>
                 </div>
                 <div className="h-2.5 overflow-hidden rounded-full bg-muted">
                   <div
@@ -592,24 +619,27 @@ export default function AIQuizPage() {
               <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
                 <div className="border-b border-border bg-muted/20 px-6 py-4">
                   <p className="text-xs font-bold uppercase tracking-widest text-primary">
-                    Câu hỏi {currentIndex + 1}
+                    Question {currentIndex + 1}
                   </p>
                   <h2 className="mt-2 font-semibold leading-relaxed text-card-foreground">
                     {currentQ.questionText}
                   </h2>
                 </div>
 
-                <div className="p-6 space-y-3">
-                  {/* Answer Options */}
-                  {(() => {
-                    const isTrueFalse =
-                      currentQ.type?.toLowerCase() === 'truefalse' || currentQ.type?.toLowerCase() === 'true/false';
-                    const resultDetail = quizResultDetails.find(
-                      (r) => r.questionId === currentQ.questionId,
-                    );
-                    const showResult = quizState === 'result' && resultDetail;
+              <div className="p-6 space-y-3">
+                {/* Answer Options */}
+                {(() => {
+                  const isTrueFalse =
+                    currentQ.type?.toLowerCase() === 'truefalse' || currentQ.type?.toLowerCase() === 'true/false';
+                  const isMultiSelect =
+                    currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select';
+                  const resultDetail = quizResultDetails.find(
+                    (r) => r.questionId === currentQ.questionId,
+                  );
+                  const showResult = quizState === 'result' && resultDetail;
+                  const multiSelectedKeys = multiSelectAnswers[currentQ.questionId];
 
-                    if (isTrueFalse) {
+                  if (isTrueFalse) {
                       return (
                         <div className="flex gap-4">
                           {(['True', 'False'] as const).map((opt) => {
@@ -670,11 +700,100 @@ export default function AIQuizPage() {
                               </button>
                             );
                           })}
-                        </div>
-                      );
-                    }
+                      </div>
+                    );
+                  }
 
-                    // Standard ABCD options
+                  // MultiSelect: checkbox-style options
+                  if (isMultiSelect) {
+                    const optionKeys = (['A', 'B', 'C', 'D'] as const).filter((key) => {
+                      const text = currentQ[`option${key}` as keyof typeof currentQ];
+                      return !!text;
+                    });
+                    const correctKeys = new Set(
+                      (currentQ.correctAnswer || '')
+                        .split(',')
+                        .map((k) => k.trim().toUpperCase())
+                        .filter((k) => ['A', 'B', 'C', 'D'].includes(k)),
+                    );
+                    const hasAnySelected = !!multiSelectedKeys && multiSelectedKeys.size > 0;
+
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Select all correct answers (multiple choices allowed)
+                        </p>
+                        {optionKeys.map((key) => {
+                          const text = currentQ[`option${key}` as keyof typeof currentQ];
+                          const isSelected = multiSelectedKeys?.has(key) ?? false;
+                          const isCorrectOption = correctKeys.has(key);
+
+                          let bgColor = '';
+                          let borderColor = 'border-border';
+                          let badgeBg = 'bg-muted text-muted-foreground';
+
+                          if (showResult) {
+                            if (isCorrectOption) {
+                              bgColor = 'bg-green-50';
+                              borderColor = 'border-green-400';
+                              badgeBg = 'bg-green-500 text-white';
+                            } else if (isSelected) {
+                              bgColor = 'bg-red-50';
+                              borderColor = 'border-red-400';
+                              badgeBg = 'bg-red-500 text-white';
+                            }
+                          } else if (isSelected) {
+                            bgColor = 'bg-primary/5';
+                            borderColor = 'border-primary';
+                            badgeBg = 'bg-primary text-white';
+                          }
+
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              disabled={quizState !== 'active'}
+                              onClick={() => handleMultiSelectToggle(currentQ.questionId, key)}
+                              className={`w-full rounded-xl border-2 p-4 text-left transition-all ${bgColor} ${borderColor} ${
+                                !showResult && !isSelected
+                                  ? 'hover:border-primary/40 hover:bg-muted/30'
+                                  : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-sm ${badgeBg} ${
+                                    isSelected && !showResult ? 'ring-2 ring-primary ring-offset-1' : ''
+                                  }`}
+                                >
+                                  {key}
+                                </span>
+                                <span className="flex-1 text-sm font-medium text-card-foreground">
+                                  {text}
+                                </span>
+                                {isSelected && !showResult && (
+                                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                                )}
+                                {showResult && isCorrectOption && (
+                                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                )}
+                                {showResult && isSelected && !isCorrectOption && (
+                                  <XCircle className="h-5 w-5 text-red-500" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {hasAnySelected && !showResult && (
+                          <p className="text-xs text-muted-foreground">
+                            Đã chọn: {multiSelectedKeys ? Array.from(multiSelectedKeys).sort().join(', ') : ''}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Standard ABCD options
                     return (
                       <>
                         {(
@@ -767,12 +886,12 @@ export default function AIQuizPage() {
                           {resultDetail.isCorrect ? (
                             <>
                               <CheckCircle2 className="h-6 w-6 text-green-600" />
-                              <span className="font-bold text-green-800">Chính xác!</span>
+                              <span className="font-bold text-green-800">Correct!</span>
                             </>
                           ) : (
                             <>
                               <XCircle className="h-6 w-6 text-amber-600" />
-                              <span className="font-bold text-amber-800">Chưa chính xác</span>
+                              <span className="font-bold text-amber-800">Incorrect</span>
                             </>
                           )}
                         </div>
@@ -782,7 +901,7 @@ export default function AIQuizPage() {
                             <div className="mb-2 flex items-center gap-2">
                               <MessageSquare className="h-4 w-4 text-purple-600" />
                               <h4 className="text-xs font-bold uppercase tracking-wider text-purple-700">
-                                Giải thích
+                                Explanation
                               </h4>
                             </div>
                             <p className="text-sm leading-relaxed text-gray-700 whitespace-pre-wrap">
@@ -793,7 +912,7 @@ export default function AIQuizPage() {
 
                         {!resultDetail.isCorrect && resultDetail.correctAnswer && (
                           <p className="text-sm font-semibold text-gray-700">
-                            Đáp án đúng:{' '}
+                            Correct answer:{' '}
                             <span className="font-bold text-green-600">
                               {resultDetail.correctAnswer}.{' '}
                               {
@@ -818,10 +937,10 @@ export default function AIQuizPage() {
                     >
                       <div className="flex items-center gap-2">
                         <Lightbulb className="h-4 w-4 text-violet-600" />
-                        <span className="text-sm font-bold text-violet-700">Gợi ý AI</span>
+                        <span className="text-sm font-bold text-violet-700">AI Hint</span>
                         {hintUsedCount > 0 && (
                           <span className="text-xs text-violet-500">
-                            ({hintUsedCount} đã dùng)
+                            ({hintUsedCount} used)
                           </span>
                         )}
                       </div>
@@ -835,7 +954,7 @@ export default function AIQuizPage() {
                         {currentHint ? (
                           <div className="rounded-lg border border-violet-200 bg-white p-3 text-sm text-violet-800">
                             <p className="mb-1 font-medium">
-                              Gợi ý cấp độ {hintLevel > 1 ? hintLevel - 1 : hintLevel}:
+                              Hint level {hintLevel > 1 ? hintLevel - 1 : hintLevel}:
                             </p>
                             <p>{currentHint}</p>
                           </div>
@@ -859,12 +978,12 @@ export default function AIQuizPage() {
                             {loadingHint ? (
                               <>
                                 <Loader2 className="h-4 w-4 animate-spin" />
-                                Đang lấy gợi ý...
+                                Getting hint...
                               </>
                             ) : (
                               <>
                                 <Lightbulb className="h-4 w-4" />
-                                {currentHint ? 'Gợi ý cụ thể hơn' : 'Lấy gợi ý AI'}
+                                {currentHint ? 'More specific hint' : 'Get AI Hint'}
                               </>
                             )}
                           </button>
@@ -872,7 +991,7 @@ export default function AIQuizPage() {
 
                         {hintLevel > 3 && (
                           <p className="text-center text-xs text-violet-500">
-                            Đã đạt cấp độ gợi ý tối đa. Hãy thử trả lời câu hỏi!
+                            Maximum hint level reached. Try answering the question!
                           </p>
                         )}
                       </div>
@@ -891,7 +1010,7 @@ export default function AIQuizPage() {
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-card py-3.5 text-sm font-semibold text-card-foreground shadow-sm transition-all hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ArrowLeft className="h-4 w-4" />
-                Câu trước
+                Previous
               </button>
               <button
                 type="button"
@@ -899,7 +1018,7 @@ export default function AIQuizPage() {
                 disabled={currentIndex >= totalQ - 1}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 py-3.5 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Câu tiếp
+                Next
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
@@ -947,7 +1066,7 @@ export default function AIQuizPage() {
                     className="flex-1 gap-2 bg-gradient-to-r from-violet-600 to-purple-600 font-bold"
                   >
                     <Sparkles className="h-4 w-4" />
-                    Quiz Mới
+                    New Quiz
                   </Button>
                   <Button
                     onClick={() => void handleSaveToFlashcards()}
@@ -956,12 +1075,12 @@ export default function AIQuizPage() {
                     className="flex-1 gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 font-bold text-white"
                   >
                     <BookmarkPlus className="h-4 w-4" />
-                    Lưu Flashcards
+                    Save to Flashcards
                   </Button>
                   <Button variant="outline" asChild className="flex-1 gap-2">
                     <Link href="/student/flashcards">
                       <Play className="h-4 w-4" />
-                      Xem Flashcards
+                      View Flashcards
                     </Link>
                   </Button>
                 </div>
@@ -974,7 +1093,7 @@ export default function AIQuizPage() {
                 isLoading={submitting}
                 className="w-full gap-2 bg-gradient-to-r from-violet-600 to-purple-600 py-3.5 text-sm font-bold text-white shadow-lg hover:from-violet-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Nộp Quiz ({answeredCount}/{totalQ})
+                Submit Quiz ({answeredCount}/{totalQ})
               </Button>
             )}
           </div>

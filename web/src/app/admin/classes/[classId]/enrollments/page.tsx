@@ -13,7 +13,6 @@ import {
   GraduationCap,
   Sparkles,
   UserCheck,
-  Stethoscope,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -149,14 +148,6 @@ export default function ClassEnrollmentsPage() {
       users = users.filter((u) => {
         const nameMatch = u.fullName.toLowerCase().includes(term);
         const emailMatch = u.email.toLowerCase().includes(term);
-
-        // For experts, also search by specialty
-        if (selectedRoleToAssign === 'Expert') {
-          const specialties = getAllSpecialtyNames(u.id, expertSpecialties);
-          const specialtyMatch = specialties.some((s) => s.toLowerCase().includes(term));
-          return nameMatch || emailMatch || specialtyMatch;
-        }
-
         return nameMatch || emailMatch;
       });
     }
@@ -191,7 +182,6 @@ export default function ClassEnrollmentsPage() {
     lecturerEnrollment,
     expertEnrollment,
     studentEnrollments,
-    expertSpecialties,
   ]);
 
   const assignMutation = useMutation({
@@ -258,7 +248,6 @@ export default function ClassEnrollmentsPage() {
       />
 
       <div className="mx-auto max-w-[1600px] space-y-6 p-6">
-        {/* Back button */}
         <Button
           variant="ghost"
           onClick={() => router.push('/admin/classes')}
@@ -268,7 +257,6 @@ export default function ClassEnrollmentsPage() {
           Back to Classes
         </Button>
 
-        {/* Page header */}
         <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
             <GraduationCap className="h-6 w-6" />
@@ -290,9 +278,7 @@ export default function ClassEnrollmentsPage() {
           </div>
         </div>
 
-        {/* Main content - two columns */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Left column - Current Roster */}
           <div className="flex flex-col rounded-xl border border-border bg-card shadow-sm">
             <div className="border-b border-border px-6 py-4">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-card-foreground">
@@ -308,7 +294,6 @@ export default function ClassEnrollmentsPage() {
                 </div>
               ) : (
                 <>
-                  {/* Lecturer section */}
                   <div className="pb-6">
                     <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                       <UserCheck className="h-4 w-4 text-emerald-500" />
@@ -345,36 +330,20 @@ export default function ClassEnrollmentsPage() {
                     )}
                   </div>
 
-                  {/* Expert section */}
                   <div className="py-6">
                     <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                       <Sparkles className="h-4 w-4 text-violet-500" />
                       Expert (max 1)
                     </div>
                     {expertDisplayName ? (
-                      <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="min-w-0 flex-1 truncate">
-                            <div className="text-sm font-medium">{expertDisplayName}</div>
-                            {roster.expertEmail && (
-                              <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {roster.expertEmail}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleUnenroll(expertEnrollment?.id || roster.expertId || '', 'Expert')}
-                            disabled={assigningId === (expertEnrollment?.id || roster.expertId || '')}
-                            className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                            title="Remove Expert"
-                          >
-                            {assigningId === (expertEnrollment?.id || roster.expertId || '') ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </button>
+                      <div className="flex items-center justify-between rounded-xl border border-border bg-muted/30 p-4">
+                        <div className="min-w-0 flex-1 truncate">
+                          <div className="text-sm font-medium">{expertDisplayName}</div>
+                          {roster.expertEmail && (
+                            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                              {roster.expertEmail}
+                            </div>
+                          )}
                         </div>
                         {/* Show expert's specialties if available */}
                         {(expertEnrollment?.expertId || roster.expertId) && (
@@ -402,6 +371,19 @@ export default function ClassEnrollmentsPage() {
                             ) : null}
                           </div>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => handleUnenroll(expertEnrollment?.id || roster.expertId || '', 'Expert')}
+                          disabled={assigningId === (expertEnrollment?.id || roster.expertId || '')}
+                          className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                          title="Remove Expert"
+                        >
+                          {assigningId === (expertEnrollment?.id || roster.expertId || '') ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
                       </div>
                     ) : (
                       <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
@@ -410,7 +392,6 @@ export default function ClassEnrollmentsPage() {
                     )}
                   </div>
 
-                  {/* Students section */}
                   <div className="pt-6">
                     <div className="mb-3 flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -464,14 +445,12 @@ export default function ClassEnrollmentsPage() {
             </div>
           </div>
 
-          {/* Right column - Assign User */}
           <div className="flex flex-col rounded-xl border border-border bg-card shadow-sm">
             <div className="border-b border-border px-6 py-4">
               <h2 className="text-lg font-semibold text-card-foreground">Assign User</h2>
             </div>
 
             <div className="p-6">
-              {/* Role selector */}
               <div className="mb-4 flex overflow-hidden rounded-xl border border-border bg-muted/30 p-1 shadow-sm">
                 {(['Student', 'Lecturer', 'Expert'] as const).map((role) => (
                   <button
@@ -490,7 +469,6 @@ export default function ClassEnrollmentsPage() {
                 ))}
               </div>
 
-              {/* Search */}
               <div className="relative mb-4">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -502,7 +480,6 @@ export default function ClassEnrollmentsPage() {
                 />
               </div>
 
-              {/* User list */}
               <div className="space-y-2">
                 {usersQuery.isPending ? (
                   <div className="flex justify-center py-12">
@@ -516,56 +493,28 @@ export default function ClassEnrollmentsPage() {
                   availableUsers.map((user) => (
                     <div
                       key={user.id}
-                      className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-4 transition-colors hover:border-primary/30"
+                      className="flex items-center justify-between rounded-xl border border-border bg-muted/30 p-4 transition-colors hover:border-primary/30"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="min-w-0 flex-1 pr-3">
-                          <div className="truncate text-sm font-semibold text-card-foreground">
-                            {user.fullName}
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground">{user.email}</div>
+                      <div className="min-w-0 flex-1 pr-3">
+                        <div className="truncate text-sm font-semibold text-card-foreground">
+                          {user.fullName}
                         </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleAssign(user.id)}
-                          disabled={assigningId === user.id}
-                          className="group h-9 w-9 shrink-0 rounded-lg bg-primary/10 p-0 text-primary hover:bg-primary hover:text-primary-foreground"
-                        >
-                          {assigningId === user.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <PlusCircle className="h-4 w-4 text-primary transition-colors group-hover:text-primary-foreground" />
-                          )}
-                        </Button>
+                        <div className="truncate text-xs text-muted-foreground">{user.email}</div>
                       </div>
-                      {/* Expert specialty badges */}
-                      {selectedRoleToAssign === 'Expert' && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {getAllSpecialtyNames(user.id, expertSpecialties).length > 0 ? (
-                            getAllSpecialtyNames(user.id, expertSpecialties).map((specialty, idx) => {
-                              const specs = getExpertSpecialties(user.id, expertSpecialties);
-                              const isPrimary = specs[idx]?.isPrimary;
-                              return (
-                                <span
-                                  key={idx}
-                                  className={cn(
-                                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
-                                    isPrimary
-                                      ? 'bg-violet-100 text-violet-700'
-                                      : 'bg-muted text-muted-foreground'
-                                  )}
-                                >
-                                  <Stethoscope className="h-3 w-3" />
-                                  {specialty}
-                                  {isPrimary && ' (Primary)'}
-                                </span>
-                              );
-                            })
-                          ) : null}
-                        </div>
-                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleAssign(user.id)}
+                        disabled={assigningId === user.id}
+                        className="group h-9 w-9 shrink-0 rounded-lg bg-primary/10 p-0 text-primary hover:bg-primary hover:text-primary-foreground"
+                      >
+                        {assigningId === user.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <PlusCircle className="h-4 w-4 text-primary transition-colors group-hover:text-primary-foreground" />
+                        )}
+                      </Button>
                     </div>
                   ))
                 )}

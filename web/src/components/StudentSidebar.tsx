@@ -28,8 +28,6 @@ const studentMenuItems = [
   { icon: BrainCircuit, label: 'Spaced Review', href: '/student/review' },
   { icon: Trophy, label: 'Quizzes', href: '/student/quizzes' },
   { icon: Eye, label: 'My Flashcards', href: '/student/flashcards' },
-  // TODO: Uncomment when AI Quiz is ready for production
-  // { icon: Sparkles, label: 'AI Quiz', href: '/student/ai-quiz' },
   { icon: BarChart3, label: 'Analytics', href: '/student/analytics' },
   { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
   { icon: UserCircle, label: 'Profile', href: '/student/profile' },

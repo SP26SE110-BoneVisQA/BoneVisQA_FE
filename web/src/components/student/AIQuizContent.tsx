@@ -180,6 +180,9 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
   const [loadingHint, setLoadingHint] = useState(false);
   const [hintUsedCount, setHintUsedCount] = useState(0);
 
+  // MultiSelect answers: Record<questionId, Set of selected keys>
+  const [multiSelectAnswers, setMultiSelectAnswers] = useState<Record<string, Set<string>>>({});
+
   const questions = session?.questions ?? [];
   const currentQ = questions[currentIndex];
   const totalQ = questions.length;
@@ -226,6 +229,25 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
       return newSet;
     });
   }, []);
+
+  const handleMultiSelectToggle = useCallback(
+    (questionId: string, key: string) => {
+      if (!currentQ || quizState !== 'active') return;
+      setMultiSelectAnswers((prev) => {
+        const prevKeys = prev[questionId] ?? new Set<string>();
+        const next = new Set(prevKeys);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        const nextKeys = Array.from(next).sort().join(',');
+        setAnswers((a) => ({ ...a, [questionId]: nextKeys }));
+        return { ...prev, [questionId]: next };
+      });
+    },
+    [currentQ, quizState],
+  );
 
   const handleGenerate = async () => {
     if (!selectedTopic.trim()) {
@@ -275,7 +297,12 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
       const details: QuizQuestionResult[] = session.questions.map((q) => {
         const studentAnswer = answers[q.questionId] || null;
         const correctAnswer = q.correctAnswer || null;
-        const isCorrect = studentAnswer === correctAnswer;
+        // MultiSelect: sort both before comparing (e.g. "A,C" vs "C,A")
+        const isCorrect =
+          q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select'
+            ? (studentAnswer || '').split(',').map((k) => k.trim()).filter(Boolean).sort().join(',') ===
+              (correctAnswer || '').split(',').map((k) => k.trim()).filter(Boolean).sort().join(',')
+            : studentAnswer === correctAnswer;
         return {
           questionId: q.questionId,
           questionText: q.questionText,
@@ -292,7 +319,7 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
       });
       setQuizResultDetails(details);
       setQuizState('result');
-      toast.success('Đã nộp bài thành công!');
+      toast.success('Quiz submitted successfully!');
     } catch (e) {
       toast.error(getApiErrorMessage(e));
     } finally {
@@ -365,6 +392,7 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
     setQuizState('config');
     setSession(null);
     setAnswers({});
+    setMultiSelectAnswers({});
     setCurrentIndex(0);
     setQuizResult(null);
     setQuizResultDetails(null as unknown as QuizQuestionResult[]);
@@ -583,7 +611,7 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
               <div className="flex items-center gap-3">
                 <span className="text-sm text-muted-foreground">
                   <span className="font-bold text-primary">{answeredCount}</span> / {totalQ}{' '}
-                  đã trả lời
+                  answered
                 </span>
                 <Button
                   variant="outline"
@@ -698,10 +726,13 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
                 {(() => {
                   const isTrueFalse =
                     currentQ.type?.toLowerCase() === 'truefalse' || currentQ.type?.toLowerCase() === 'true/false';
+                  const isMultiSelect =
+                    currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select';
                   const resultDetail = quizResultDetails.find(
                     (r) => r.questionId === currentQ.questionId,
                   );
                   const showResult = quizState === 'result' && resultDetail;
+                  const multiSelectedKeys = multiSelectAnswers[currentQ.questionId];
 
                   if (isTrueFalse) {
                     return (
@@ -764,6 +795,95 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
                             </button>
                           );
                         })}
+                      </div>
+                    );
+                  }
+
+                  // MultiSelect: checkbox-style options
+                  if (isMultiSelect) {
+                    const optionKeys = (['A', 'B', 'C', 'D'] as const).filter((key) => {
+                      const text = currentQ[`option${key}` as keyof typeof currentQ];
+                      return !!text;
+                    });
+                    const correctKeys = new Set(
+                      (currentQ.correctAnswer || '')
+                        .split(',')
+                        .map((k) => k.trim().toUpperCase())
+                        .filter((k) => ['A', 'B', 'C', 'D'].includes(k)),
+                    );
+                    const hasAnySelected = !!multiSelectedKeys && multiSelectedKeys.size > 0;
+
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Chọn tất cả đáp án đúng (có thể chọn nhiều hơn 1)
+                        </p>
+                        {optionKeys.map((key) => {
+                          const text = currentQ[`option${key}` as keyof typeof currentQ];
+                          const isSelected = multiSelectedKeys?.has(key) ?? false;
+                          const isCorrectOption = correctKeys.has(key);
+
+                          let bgColor = '';
+                          let borderColor = 'border-border';
+                          let badgeBg = 'bg-muted text-muted-foreground';
+
+                          if (showResult) {
+                            if (isCorrectOption) {
+                              bgColor = 'bg-green-50';
+                              borderColor = 'border-green-400';
+                              badgeBg = 'bg-green-500 text-white';
+                            } else if (isSelected) {
+                              bgColor = 'bg-red-50';
+                              borderColor = 'border-red-400';
+                              badgeBg = 'bg-red-500 text-white';
+                            }
+                          } else if (isSelected) {
+                            bgColor = 'bg-primary/5';
+                            borderColor = 'border-primary';
+                            badgeBg = 'bg-primary text-white';
+                          }
+
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              disabled={quizState !== 'active'}
+                              onClick={() => handleMultiSelectToggle(currentQ.questionId, key)}
+                              className={`w-full rounded-xl border-2 p-4 text-left transition-all ${bgColor} ${borderColor} ${
+                                !showResult && !isSelected
+                                  ? 'hover:border-primary/40 hover:bg-muted/30'
+                                  : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-sm ${badgeBg} ${
+                                    isSelected && !showResult ? 'ring-2 ring-primary ring-offset-1' : ''
+                                  }`}
+                                >
+                                  {key}
+                                </span>
+                                <span className="flex-1 text-sm font-medium text-card-foreground">
+                                  {text}
+                                </span>
+                                {isSelected && !showResult && (
+                                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                                )}
+                                {showResult && isCorrectOption && (
+                                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                )}
+                                {showResult && isSelected && !isCorrectOption && (
+                                  <XCircle className="h-5 w-5 text-red-500" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {hasAnySelected && !showResult && (
+                          <p className="text-xs text-muted-foreground">
+                            Đã chọn: {multiSelectedKeys ? Array.from(multiSelectedKeys).sort().join(', ') : ''}
+                          </p>
+                        )}
                       </div>
                     );
                   }
@@ -885,19 +1005,41 @@ export function AIQuizContent({ className = '', embedded = false }: AIQuizConten
                         </div>
                       )}
 
-                      {!resultDetail.isCorrect && resultDetail.correctAnswer && (
-                        <p className="text-sm font-semibold text-gray-700">
-                          Đáp án đúng:{' '}
-                          <span className="font-bold text-green-600">
-                            {resultDetail.correctAnswer}.{' '}
-                            {
-                              currentQ[
-                                `option${resultDetail.correctAnswer}` as keyof typeof currentQ
-                              ]
-                            }
-                          </span>
-                        </p>
-                      )}
+                      {!resultDetail.isCorrect && resultDetail.correctAnswer && (() => {
+                        const isMultiSelectResult = resultDetail.type?.toLowerCase() === 'multiselect' || resultDetail.type?.toLowerCase() === 'multi-select';
+                        if (isMultiSelectResult) {
+                          // MULTI-SELECT: correctAnswer is "A,B,C" format, need to show each option's text
+                          const correctKeys = resultDetail.correctAnswer.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+                          return (
+                            <p className="text-sm font-semibold text-gray-700">
+                              Đáp án đúng:{' '}
+                              <span className="font-bold text-green-600">
+                                {correctKeys.join(', ')}
+                              </span>
+                              <br />
+                              <span className="text-xs text-muted-foreground">
+                                {correctKeys.map((key) => {
+                                  const optionText = currentQ[`option${key}` as keyof typeof currentQ];
+                                  return optionText ? `${key}. ${optionText}` : null;
+                                }).filter(Boolean).join('; ')}
+                              </span>
+                            </p>
+                          );
+                        }
+                        return (
+                          <p className="text-sm font-semibold text-gray-700">
+                            Đáp án đúng:{' '}
+                            <span className="font-bold text-green-600">
+                              {resultDetail.correctAnswer}.{' '}
+                              {
+                                currentQ[
+                                  `option${resultDetail.correctAnswer}` as keyof typeof currentQ
+                                ]
+                              }
+                            </span>
+                          </p>
+                        );
+                      })()}
                     </div>
                   );
                 })()}

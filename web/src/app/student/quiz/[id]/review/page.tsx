@@ -17,12 +17,14 @@ import {
   BrainCircuit,
   Lightbulb,
   RefreshCw,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { quizExtensionsApi, type DetailedReview, type RelatedCase } from '@/lib/api/quiz-extensions';
 import { getAssignedQuizzes } from '@/lib/api/student';
+import { resolveApiAssetUrl } from '@/lib/api/client';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -86,17 +88,22 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
   };
 
   const handleGenerateExplanations = async () => {
-    if (!quizInfo?.attemptId) return;
+    if (!quizInfo?.attemptId) {
+      toast.error('No attempt ID found. Please try refreshing the page.');
+      return;
+    }
     setGenerating(true);
     try {
       await quizExtensionsApi.generateReviewItems(quizInfo.attemptId);
-      toast.success('AI explanations are being generated. Please refresh in a moment.');
+      toast.success('AI explanations are being generated. Refreshing...');
       setTimeout(async () => {
         await fetchData();
       }, 2000);
     } catch (error) {
       console.error('Error generating explanations:', error);
-      toast.error('Failed to generate explanations');
+      const { getApiErrorMessage } = await import('@/lib/api/client');
+      const message = getApiErrorMessage(error);
+      toast.error(`Failed to generate explanations: ${message}`);
     } finally {
       setGenerating(false);
     }
@@ -219,19 +226,11 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
               <Button
                 onClick={handleGenerateExplanations}
                 disabled={generating}
-                className="bg-gradient-to-r from-primary to-[#007BFF]"
+                className="bg-gradient-to-r from-primary to-[#007BFF] min-w-[160px]"
               >
-                {generating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <BrainCircuit className="h-4 w-4 mr-2" />
-                    Generate with AI
-                  </>
-                )}
+                <Loader2 className={`h-4 w-4 mr-2 ${generating ? 'animate-spin' : 'hidden'}`} />
+                <BrainCircuit className={`h-4 w-4 mr-2 ${generating ? 'hidden' : ''}`} />
+                <span>{generating ? 'Generating...' : 'Generate with AI'}</span>
               </Button>
             </div>
           </CardContent>
@@ -286,6 +285,25 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Question Image - Hiển thị X-ray image nếu có */}
+              {currentQuestion.imageUrl && (
+                <div className="rounded-xl overflow-hidden border border-border bg-black/5">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 border-b border-border">
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {currentQuestion.caseTitle || 'Case Image'}
+                    </span>
+                  </div>
+                  <div className="p-4 flex justify-center">
+                    <img
+                      src={resolveApiAssetUrl(currentQuestion.imageUrl)}
+                      alt={currentQuestion.caseTitle || 'Case X-ray'}
+                      className="max-h-[400px] w-auto object-contain rounded-lg"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Question Text */}
               <div className="p-4 rounded-lg bg-muted/50">
                 <p className="text-lg font-medium">{currentQuestion.questionText}</p>
@@ -326,6 +344,36 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
                   </div>
                 )}
               </div>
+
+              {/* Lecturer Feedback - Hiển thị feedback từ lecturer */}
+              {currentQuestion.lecturerFeedback && (
+                <div className="rounded-lg border border-amber-200 bg-gradient-to-r from-amber-50 to-transparent p-5 dark:border-amber-800/50 dark:from-amber-950/30 dark:to-transparent">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/50">
+                      <span className="text-lg font-bold text-amber-600 dark:text-amber-400">L</span>
+                    </div>
+                    <h4 className="font-semibold text-amber-700 dark:text-amber-400">Lecturer Feedback</h4>
+                  </div>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap text-amber-900 dark:text-amber-200">
+                    {currentQuestion.lecturerFeedback}
+                  </p>
+                </div>
+              )}
+
+              {/* Reference Answer - Hiển thị đáp án mẫu từ lecturer/expert */}
+              {currentQuestion.referenceAnswer && (
+                <div className="rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-transparent p-5 dark:border-blue-800/50 dark:from-blue-950/30 dark:to-transparent">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50">
+                      <span className="text-lg font-bold text-blue-600 dark:text-blue-400">R</span>
+                    </div>
+                    <h4 className="font-semibold text-blue-700 dark:text-blue-400">Reference Answer</h4>
+                  </div>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap text-blue-900 dark:text-blue-200">
+                    {currentQuestion.referenceAnswer}
+                  </p>
+                </div>
+              )}
 
               {/* Topic Tags */}
               {currentQuestion.topicTags && currentQuestion.topicTags.length > 0 && (
