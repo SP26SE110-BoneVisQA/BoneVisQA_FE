@@ -12,7 +12,6 @@ import {
 } from '@/lib/api/lecturer-dashboard';
 import { fetchLecturerClasses, fetchLecturerTriageList } from '@/lib/api/lecturer-triage';
 import type { ClassItem, LecturerDashboardStats, LecturerLeaderboardEntry, LecturerTriageRow } from '@/lib/api/types';
-import TeachingObjectives from '@/components/lecturer/TeachingObjectives';
 import StudentProgress from '@/components/lecturer/StudentProgress';
 import {
   Users,
@@ -278,14 +277,6 @@ export default function LecturerDashboardPage() {
                 <p className="text-sm text-muted-foreground text-center py-4">No topic data</p>
               )}
             </Card>
-
-            {/* Teaching Objectives */}
-            {selectedClass && (
-              <TeachingObjectives
-                classId={selectedClass}
-                onError={(error) => toast.error(error)}
-              />
-            )}
 
             {/* Student Progress */}
             {selectedClass && (

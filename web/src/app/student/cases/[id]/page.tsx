@@ -11,9 +11,8 @@ import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { fetchCaseCatalogDetail } from '@/lib/api/student';
-import { generateFlashcardsFromCase } from '@/lib/api/flashcards';
 import type { StudentCaseCatalogDetail, StudentCatalogCaseImage } from '@/lib/api/types';
-import { AlertCircle, BookOpen, ChevronRight, Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, BookOpen, ChevronRight } from 'lucide-react';
 import { isNextImageRemoteOptimized } from '@/lib/images/remote-image';
 import { resolveApiAssetUrl } from '@/lib/api/client';
 import { isValidNormalizedBoundingBox } from '@/lib/utils/annotations';
@@ -34,8 +33,6 @@ export default function StudentCaseDetailPage() {
   const [item, setItem] = useState<StudentCaseCatalogDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFoundCase, setNotFoundCase] = useState(false);
-  const [generatingFlashcards, setGeneratingFlashcards] = useState(false);
-  const [cardCount, setCardCount] = useState(10);
 
   useEffect(() => {
     if (!caseId) {
@@ -81,22 +78,6 @@ export default function StudentCaseDetailPage() {
       item.title,
     )}&catalogContext=${encodeURIComponent(context)}&caseId=${encodeURIComponent(caseId)}`;
   }, [caseId, item, displayImages]);
-
-  const handleGenerateFlashcards = async () => {
-    setGeneratingFlashcards(true);
-    try {
-      const result = await generateFlashcardsFromCase(caseId, cardCount);
-      if (result.success) {
-        toast.success(`Created ${result.generatedCount} flashcards in "${result.deckName}"!`);
-      } else {
-        toast.error(result.errorMessage || 'Failed to generate flashcards');
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to generate flashcards');
-    } finally {
-      setGeneratingFlashcards(false);
-    }
-  };
 
   const lockAskAi = Boolean(item?.communityReferenceOnly);
   const originLabel =
@@ -251,43 +232,15 @@ export default function StudentCaseDetailPage() {
                     <p className="text-sm text-muted-foreground">
                       Open this case in Visual QA to draw ROI annotations and ask custom AI diagnostic questions.
                     </p>
-                    <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <div className="mt-4">
                       <Link href={qaHref}>
                         <Button>
                           Ask AI about this case
                           <ChevronRight className="h-4 w-4" />
                         </Button>
                       </Link>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={cardCount}
-                          onChange={(e) => setCardCount(Number(e.target.value))}
-                          className="h-10 rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <option value={5}>5 cards</option>
-                          <option value={10}>10 cards</option>
-                          <option value={15}>15 cards</option>
-                          <option value={20}>20 cards</option>
-                        </select>
-                        <Button
-                          variant="outline"
-                          onClick={handleGenerateFlashcards}
-                          disabled={generatingFlashcards}
-                        >
-                          {generatingFlashcards ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Sparkles className="mr-2 h-4 w-4" />
-                          )}
-                          Generate Flashcards
-                        </Button>
-                      </div>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Create flashcards from this case using expert Q&A responses.
-                    </p>
                   </>
-                )}
               </div>
             </section>
           </div>
