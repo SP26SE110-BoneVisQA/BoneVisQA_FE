@@ -143,6 +143,60 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
     return () => clearTimeout(timeout);
   }, []);
 
+  // Handle Google OAuth redirect - parse id_token from URL hash
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const hash = window.location.hash;
+    if (hash && hash.includes("id_token=")) {
+      const params = new URLSearchParams(hash.substring(1));
+      const idToken = params.get("id_token");
+      const error = params.get("error");
+
+      if (error) {
+        setError(`Google Sign-In failed: ${error}`);
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+
+      if (idToken) {
+        // Clean up URL first
+        window.history.replaceState({}, document.title, window.location.pathname);
+        // Process the token - call API directly
+        setError("");
+        setLoading(true);
+        http.post("/api/auths/google-login", { idToken })
+          .then(({ data }) => {
+            if (data.success && data.token && data.roles) {
+              localStorage.setItem("token", data.token);
+              localStorage.setItem("userId", data.userId);
+              localStorage.setItem("fullName", data.fullName);
+              localStorage.setItem("email", data.email);
+              localStorage.setItem("roles", JSON.stringify(data.roles));
+
+              const primaryRole = Array.isArray(data.roles)
+                ? data.roles[0]
+                : null;
+              const route = getRouteForRole(primaryRole);
+              if (route.activeRole) {
+                localStorage.setItem("activeRole", route.activeRole);
+              }
+              window.location.href = route.route;
+            } else {
+              setError(data.message || "Google sign-in was not accepted.");
+              setLoading(false);
+            }
+          })
+          .catch((err) => {
+            setError("Failed to process Google sign-in. Please try again.");
+            setLoading(false);
+            console.error("[Google OAuth redirect]", err);
+          });
+      }
+    }
+  }, [router]);
+
   const handleLoginSuccess = useCallback(
     (data: LoginResponse) => {
       localStorage.setItem("token", data.token);
