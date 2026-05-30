@@ -56,7 +56,7 @@ export function useExpertCaseLibrary(params?: { pageIndex?: number; pageSize?: n
             suggestedDiagnosis: '',
             reflectiveQuestions: '',
             keyFindings: '',
-            thumbnailUrl: c.thumbnailUrl,
+            thumbnailUrl: c.thumbnailUrl ?? undefined,
           })),
           totalCount: cases.length,
           pageIndex: 1,
