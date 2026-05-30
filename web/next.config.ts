@@ -42,6 +42,10 @@ const nextConfig: NextConfig = {
       { source: "/register", destination: "/auth/sign-up", permanent: false },
       { source: "/forgot-password", destination: "/auth/forgot-password", permanent: false },
       { source: "/reset-password", destination: "/auth/reset-password", permanent: false },
+      { source: "/student/qa", destination: "/student/visual-qa/workspace", permanent: false },
+      { source: "/student/qa/topic", destination: "/student/visual-qa/workspace", permanent: false },
+      { source: "/student/qa/topic/:topicId", destination: "/student/visual-qa/workspace", permanent: false },
+      { source: "/student/visual-qa/upload", destination: "/student/visual-qa/workspace", permanent: false },
     ];
   },
   async headers() {

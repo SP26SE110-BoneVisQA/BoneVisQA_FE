@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap');
 @import "tailwindcss";
 @plugin "tailwind-scrollbar";
@@ -36,6 +36,7 @@
   --border: var(--border-color);
   --input: #f8fafc;
   --ring: var(--cyan-accent);
+  --radius: 0.5rem;
   --destructive: var(--danger);
   --accent: var(--cyan-accent);
   --secondary: #eaf2ff;
@@ -140,7 +141,29 @@ h1,
 h2,
 h3,
 .font-headline {
-  font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+.medical-glass-panel {
+  border: 1px solid rgb(226 232 240 / 0.65);
+  background: rgb(255 255 255 / 0.82);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 30px rgb(15 23 42 / 0.06);
+  border-radius: 1.5rem;
+}
+
+.medical-bento-card {
+  border: 1px solid rgb(226 232 240 / 0.72);
+  background: rgb(255 255 255 / 0.94);
+  box-shadow: 0 8px 30px rgb(15 23 42 / 0.04);
+  border-radius: 1.5rem;
+}
+
+.medical-dark-panel {
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(2 6 23 / 0.94);
+  box-shadow: 0 18px 50px rgb(2 6 23 / 0.28);
+  border-radius: 1.75rem;
 }
 
 button,

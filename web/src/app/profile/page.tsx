@@ -17,7 +17,7 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
-import Header from '@/components/Header';
+import { ListPageLayout } from '@/components/layouts';
 import { SkeletonBlock } from '@/components/shared/DashboardSkeletons';
 import { Button } from '@/components/ui/button';
 import { getApiErrorMessage, resolveApiAssetUrl } from '@/lib/api/client';
@@ -28,7 +28,7 @@ import {
   type UserProfileDto,
 } from '@/lib/api/users';
 import { emitAuthRefresh } from '@/lib/useAuth';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/api/errors/app-toast';
 
 const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
 
@@ -142,7 +142,7 @@ export default function ProfilePage() {
       const bustedUrl = `${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
       // Preview immediately, but defer profile update until Save changes.
       setPendingAvatarUrl(bustedUrl);
-      toast.success('Profile photo ready. Click Save changes to apply.');
+      appToast.success('Profile photo ready. Click Save changes to apply.');
     } catch (e) {
       setFieldErrors((err) => ({
         ...err,
@@ -189,7 +189,7 @@ export default function ProfilePage() {
         ...(nextAvatarUrl ? { avatarUrl: nextAvatarUrl } : {}),
       });
       setPendingAvatarUrl(null);
-      toast.success('Profile saved.');
+      appToast.success('Profile saved.');
     } catch (err) {
       setFieldErrors({
         form: err instanceof Error ? err.message : 'Failed to save. Try again.',
@@ -200,10 +200,13 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Header title="Profile" subtitle="Your public presence and account details." />
-
-      <div className="mx-auto max-w-5xl space-y-8 px-4 py-6 sm:px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <ListPageLayout
+      title="Profile"
+      isLoading={loading}
+      error={loadError}
+      maxWidthClass="max-w-5xl"
+    >
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {loading ? (
           <ProfileHeroSkeleton />
         ) : loadError ? (
@@ -416,6 +419,6 @@ export default function ProfilePage() {
           </>
         )}
       </div>
-    </div>
+    </ListPageLayout>
   );
 }

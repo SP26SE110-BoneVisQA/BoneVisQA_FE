@@ -49,9 +49,11 @@ function MedicalImageViewerInner({
   const drag = useRef(false);
   const start = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const windowDrawListenersRef = useRef<{
-    move: (ev: MouseEvent) => void;
-    up: (ev: MouseEvent) => void;
+    move: (ev: PointerEvent) => void;
+    up: (ev: PointerEvent) => void;
   } | null>(null);
+  const pinchRef = useRef<{ distance: number; scale: number } | null>(null);
+  const panPointerId = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imageStageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -90,12 +92,57 @@ function MedicalImageViewerInner({
     return () => {
       const h = windowDrawListenersRef.current;
       if (h) {
-        window.removeEventListener('mousemove', h.move);
-        window.removeEventListener('mouseup', h.up);
+        window.removeEventListener('pointermove', h.move);
+        window.removeEventListener('pointerup', h.up);
+        window.removeEventListener('pointercancel', h.up);
         windowDrawListenersRef.current = null;
       }
     };
   }, []);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const getTouchDistance = (touches: TouchList) => {
+      if (touches.length < 2) return 0;
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.hypot(dx, dy);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchRef.current = { distance: getTouchDistance(e.touches), scale };
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchRef.current) {
+        e.preventDefault();
+        const dist = getTouchDistance(e.touches);
+        if (!dist || !pinchRef.current.distance) return;
+        const ratio = dist / pinchRef.current.distance;
+        const next = Math.min(MAX, Math.max(MIN, pinchRef.current.scale * ratio));
+        setScale(next);
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinchRef.current = null;
+    };
+
+    node.addEventListener('touchstart', onTouchStart, { passive: true });
+    node.addEventListener('touchmove', onTouchMove, { passive: false });
+    node.addEventListener('touchend', onTouchEnd, { passive: true });
+    node.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    return () => {
+      node.removeEventListener('touchstart', onTouchStart);
+      node.removeEventListener('touchmove', onTouchMove);
+      node.removeEventListener('touchend', onTouchEnd);
+      node.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [scale]);
 
   useEffect(() => {
     if (readOnly) setIsDrawMode(false);
@@ -125,8 +172,8 @@ function MedicalImageViewerInner({
     if (!readOnly) clearAnnotation();
   }, [clearAnnotation, readOnly]);
 
-  const handleDrawMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const handleDrawPointerDown = useCallback(
+    (e: React.PointerEvent) => {
       if (readOnly || !isDrawMode) return;
       e.preventDefault();
       e.stopPropagation();
@@ -137,15 +184,17 @@ function MedicalImageViewerInner({
       }
       setDrawStart(startPt);
       setDrawCurrent(startPt);
+      drawLayerRef.current?.setPointerCapture(e.pointerId);
 
-      const onMove = (ev: MouseEvent) => {
+      const onMove = (ev: PointerEvent) => {
         const q = getNormalizedPoint(ev.clientX, ev.clientY);
         if (q) setDrawCurrent(q);
       };
 
-      const onUp = (ev: MouseEvent) => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
+      const onUp = (ev: PointerEvent) => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
         windowDrawListenersRef.current = null;
         const end = getNormalizedPoint(ev.clientX, ev.clientY) ?? startPt;
         setDrawStart(null);
@@ -158,11 +207,43 @@ function MedicalImageViewerInner({
       };
 
       windowDrawListenersRef.current = { move: onMove, up: onUp };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
     },
     [clearAnnotation, closedBox, getNormalizedPoint, isDrawMode, onAnnotationComplete, readOnly],
   );
+
+  const handlePanPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (isDrawMode || readOnly) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      panPointerId.current = e.pointerId;
+      drag.current = true;
+      setIsDragging(true);
+      start.current = { x: e.clientX, y: e.clientY, tx, ty };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    [isDrawMode, readOnly, tx, ty],
+  );
+
+  const handlePanPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!drag.current || panPointerId.current !== e.pointerId || isDrawMode) return;
+    setTx(start.current.tx + (e.clientX - start.current.x));
+    setTy(start.current.ty + (e.clientY - start.current.y));
+  }, [isDrawMode]);
+
+  const handlePanPointerUp = useCallback((e: React.PointerEvent) => {
+    if (panPointerId.current !== e.pointerId) return;
+    drag.current = false;
+    panPointerId.current = null;
+    setIsDragging(false);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+  }, []);
 
   const shellMin = compact
     ? 'min-h-[180px] max-lg:min-h-[min(32vh,260px)] lg:min-h-[340px]'
@@ -190,35 +271,20 @@ function MedicalImageViewerInner({
       <div
         ref={containerRef}
         className="relative flex-1 touch-none overflow-hidden bg-slate-50"
-        style={{ cursor: isDrawMode ? undefined : undefined }}
+        style={{ touchAction: 'none' }}
       >
         <div
-          className={`relative flex h-full w-full items-center justify-center p-4 ${
+          className={`relative flex h-full w-full items-center justify-center p-2 sm:p-4 ${
             !isDrawMode ? 'cursor-grab active:cursor-grabbing' : ''
           }`}
           style={{
             transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
             transition: isDragging ? 'none' : 'transform 80ms ease-out',
           }}
-          onMouseDown={(e) => {
-            if (isDrawMode) return;
-            drag.current = true;
-            setIsDragging(true);
-            start.current = { x: e.clientX, y: e.clientY, tx, ty };
-          }}
-          onMouseMove={(e) => {
-            if (!drag.current || isDrawMode) return;
-            setTx(start.current.tx + (e.clientX - start.current.x));
-            setTy(start.current.ty + (e.clientY - start.current.y));
-          }}
-          onMouseUp={() => {
-            drag.current = false;
-            setIsDragging(false);
-          }}
-          onMouseLeave={() => {
-            drag.current = false;
-            setIsDragging(false);
-          }}
+          onPointerDown={handlePanPointerDown}
+          onPointerMove={handlePanPointerMove}
+          onPointerUp={handlePanPointerUp}
+          onPointerCancel={handlePanPointerUp}
         >
           <div
             ref={imageStageRef}
@@ -265,7 +331,7 @@ function MedicalImageViewerInner({
                 role="presentation"
                 className="absolute inset-0 z-20 cursor-crosshair bg-transparent"
                 aria-hidden
-                onMouseDown={handleDrawMouseDown}
+                onPointerDown={handleDrawPointerDown}
               />
             ) : null}
           </div>
@@ -338,11 +404,6 @@ function MedicalImageViewerInner({
           </Button>
         </div>
       </div>
-      <p className="border-t border-slate-200 bg-white px-4 py-3 text-[10px] uppercase tracking-[0.18em] text-slate-600">
-        {readOnly
-          ? 'Scroll to zoom · Pan to move · Educational preview only'
-          : 'Scroll to zoom · Square tool: click-drag on the image to mark a region of interest · Educational preview only'}
-      </p>
     </div>
   );
 }

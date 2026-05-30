@@ -187,7 +187,7 @@ export function StudentAppChrome({
 export function StudentDashboardFab() {
   return (
     <Link
-      href="/student/qa/image"
+      href="/student/visual-qa/workspace"
       className="fixed bottom-10 right-10 z-50 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-2xl transition-transform hover:scale-110 active:scale-90"
       aria-label="Open Visual QA"
     >

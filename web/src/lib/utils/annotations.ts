@@ -2,6 +2,7 @@ import type {
   NormalizedImageBoundingBox,
   NormalizedPolygonPoint,
   PercentageBoundingBox,
+  VisualQaTurn,
 } from '@/lib/api/types';
 
 type PixelPoint = {
@@ -285,6 +286,33 @@ export function serializeNormalizedBoundingBox(
     width: roundNorm(box.width),
     height: roundNorm(box.height),
   });
+}
+
+/** Restore persisted ROI as normalized JSON for the viewer store (newest turn wins). */
+export function resolveVisualQaStoredCoordinates(params: {
+  threadRoiBoundingBox?: NormalizedImageBoundingBox | null;
+  turns?: VisualQaTurn[] | null;
+  customCoordinates?: PercentageBoundingBox | null;
+}): string | null {
+  if (params.threadRoiBoundingBox && isValidNormalizedBoundingBox(params.threadRoiBoundingBox)) {
+    return serializeNormalizedBoundingBox(params.threadRoiBoundingBox);
+  }
+
+  const sorted = [...(params.turns ?? [])].sort((a, b) => b.turnIndex - a.turnIndex);
+  for (const turn of sorted) {
+    for (const candidate of [turn.roiBoundingBox, turn.questionCoordinates]) {
+      if (candidate && isValidNormalizedBoundingBox(candidate)) {
+        return serializeNormalizedBoundingBox(candidate);
+      }
+    }
+  }
+
+  const pct = params.customCoordinates;
+  if (pct && isValidPercentageBoundingBox(pct)) {
+    return serializeNormalizedBoundingBox(percentageBoundingBoxToNormalized(pct));
+  }
+
+  return null;
 }
 
 export function isValidPolygon(

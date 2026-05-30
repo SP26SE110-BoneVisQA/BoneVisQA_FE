@@ -16,20 +16,20 @@ import {
   Stethoscope,
   Sparkles,
   Eye,
-  BrainCircuit,
   BarChart3,
+  Users,
 } from 'lucide-react';
 
 const studentMenuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/student/dashboard' },
   { icon: BookOpen, label: 'Case Catalog', href: '/student/catalog' },
   { icon: ClipboardList, label: 'History', href: '/student/history' },
-  { icon: BotMessageSquare, label: 'AI Q&A', href: '/student/qa' },
-  { icon: BrainCircuit, label: 'Spaced Review', href: '/student/review' },
+  { icon: BotMessageSquare, label: 'Visual QA', href: '/student/visual-qa/workspace' },
   { icon: Trophy, label: 'Quizzes', href: '/student/quizzes' },
-  { icon: Eye, label: 'My Flashcards', href: '/student/flashcards' },
+  { icon: Eye, label: 'Flashcards', href: '/student/review' },
   { icon: BarChart3, label: 'Analytics', href: '/student/analytics' },
-  { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
+  { icon: Users, label: 'Class', href: '/student/classes' },
+  // { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
   { icon: UserCircle, label: 'Profile', href: '/student/profile' },
   { icon: Settings, label: 'Settings', href: '/student/settings' },
 ];

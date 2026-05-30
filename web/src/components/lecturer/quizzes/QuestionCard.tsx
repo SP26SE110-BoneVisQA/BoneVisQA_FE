@@ -7,10 +7,9 @@ import {
   Trash2,
   CheckCircle2,
   ZoomIn,
-  ImageOff,
-  Lightbulb,
-  MessageSquare,
   CircleDot,
+  Award,
+  ImageOff,
 } from 'lucide-react';
 import type { QuizQuestionDto } from '@/lib/api/types';
 import {
@@ -23,6 +22,7 @@ interface QuestionCardProps {
   caseThumbnail?: string;
   onEdit?: (question: QuizQuestionDto) => void;
   onDelete?: (questionId: string, questionText: string) => void;
+  points?: number;
   /** Rich layout for quiz detail / Question Manager */
   variant?: 'default' | 'manager' | 'curated';
   /** Topic pill for curated variant (e.g. Trauma, Imaging) */
@@ -42,26 +42,14 @@ function getQuestionTypeStyle(type: string | null): {
   if (t === 'truefalse' || t === 'true/false') {
     return {
       label: 'True / False',
-      badgeClass: 'bg-orange-100 text-orange-900',
+      badgeClass: 'bg-[#ffdcc3] text-[#6e3900]',
     };
   }
-  if (t === 'multiselect' || t === 'multi-select') {
+  if (t === 'annotation' || t === 'draw') {
     return {
-      label: 'Multi-Select',
-      badgeClass: 'bg-blue-100 text-blue-900',
+      label: 'Annotation',
+      badgeClass: 'bg-violet-100 text-violet-900',
     };
-  }
-  if (t === 'fillinblank' || t === 'fill-in-blank') {
-    return {
-      label: 'Fill in Blank',
-      badgeClass: 'bg-green-100 text-green-900',
-    };
-  }
-  if (t === 'essay') {
-  return {
-    label: 'Essay',
-    badgeClass: 'bg-purple-100 text-purple-900',
-  };
   }
   return {
     label: 'Multiple Choice',
@@ -107,6 +95,7 @@ export default function QuestionCard({
   caseThumbnail,
   onEdit,
   onDelete,
+  points = 10,
   variant = 'default',
   topicCategory = 'Trauma',
 }: QuestionCardProps) {
@@ -186,6 +175,10 @@ export default function QuestionCard({
             <span className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
               <CircleDot className="h-4 w-4" />
               {typeStyle.label}
+            </span>
+            <span className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+              <Award className="h-4 w-4" />
+              {points} Points
             </span>
           </div>
         </div>
@@ -336,32 +329,9 @@ export default function QuestionCard({
         )}
 
         <div className="mt-4 flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          {question.caseTitle && <span>{question.caseTitle}</span>}
+          <span>{points} pts</span>
+          {question.caseTitle && <span>· {question.caseTitle}</span>}
         </div>
-
-        {/* Hint & Explanation Display */}
-        {(question.hint || question.explanation) && (
-          <div className="mt-4 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-            {question.hint && (
-              <div className="flex items-start gap-2">
-                <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                <div>
-                  <span className="block text-xs font-bold text-amber-800">Hint</span>
-                  <span className="text-sm text-amber-700">{question.hint}</span>
-                </div>
-              </div>
-            )}
-            {question.explanation && (
-              <div className="flex items-start gap-2">
-                <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-                <div>
-                  <span className="block text-xs font-bold text-blue-800">Explanation</span>
-                  <span className="text-sm text-blue-700">{question.explanation}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     );
   }
@@ -424,6 +394,9 @@ export default function QuestionCard({
           </div>
 
           <div className="mt-3 flex items-center gap-4">
+            <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+              {points} Points
+            </span>
             {question.correctAnswer && (
               <span className="rounded bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
                 Answer: {question.correctAnswer}

@@ -14,6 +14,7 @@ import { VISUAL_QA_MESSAGE_IN } from '@/components/student/visualQaMessageClasse
 import { Button } from '@/components/ui/button';
 import type { ExpertSupportInline } from '@/components/student/AiMessageBubble';
 import type { VisualQaSessionReport, VisualQaTurn } from '@/lib/api/types';
+import { formatReviewFeedbackDisplay } from '@/lib/student/visual-qa-feedback';
 
 type OptimisticMessage = {
   id: string;
@@ -160,6 +161,24 @@ function formatTurnTimestamp(value?: string | null): string | null {
   });
 }
 
+function GlobalAnalysisLoadingCard() {
+  return (
+    <div
+      className="min-w-[min(300px,74vw)] rounded-[1.4rem] border border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_8px_30px_rgb(15,23,42,0.06)]"
+      aria-hidden
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+        AI is analyzing the image and knowledge base...
+      </p>
+      <div className="mt-3 space-y-2 animate-pulse">
+        <div className="h-2.5 w-24 rounded-full bg-slate-200" />
+        <div className="h-2.5 w-full rounded-full bg-slate-200" />
+        <div className="h-2.5 w-5/6 rounded-full bg-slate-200" />
+      </div>
+    </div>
+  );
+}
+
 export function ChatConversation({
   messages,
   capabilities,
@@ -185,9 +204,7 @@ export function ChatConversation({
   const retryMessage = optimisticMessages[optimisticMessages.length - 1]?.content?.trim() || '';
   const hasInlineAwaitingAssistant = messages.some((m) => m.awaitingAssistant === true);
   const showGlobalTyping =
-    isLoading &&
-    chatRequestPhase === 'analyzing' &&
-    !hasInlineAwaitingAssistant;
+    isLoading && chatRequestPhase === 'analyzing' && !hasInlineAwaitingAssistant;
   const canAskNext = capabilities?.canAskNext ?? true;
   const capabilityReason = capabilities?.reason?.trim() || '';
   const sessionFooterNoticeLabel = formatSystemNoticeCodeLabel(systemNoticeCode);
@@ -268,8 +285,7 @@ export function ChatConversation({
     }));
   }, [messages, blockingNotice]);
 
-  const isRestoring =
-    isLoading && renderedTurns.length === 0 && optimisticMessages.length === 0;
+  const isRestoring = isLoading && messages.length === 0 && optimisticMessages.length === 0;
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -295,11 +311,11 @@ export function ChatConversation({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
-      className="app-scroll-y min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 md:px-5"
+      className="app-scroll-y min-h-0 min-w-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] px-4 py-4 md:px-5"
     >
       <ChatErrorBoundary onReset={onClear}>
         {networkWarning ? (
-          <div className="mb-4 rounded-xl border border-amber-500/45 bg-amber-100 px-4 py-3 text-sm text-amber-950 shadow-sm">
+          <div className="mb-4 rounded-[1.25rem] border border-amber-200 bg-amber-50/95 px-4 py-3 text-sm text-amber-950 shadow-sm">
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-800" />
               <p className="font-medium text-contrast-outline-soft">{networkWarning}</p>
@@ -308,7 +324,7 @@ export function ChatConversation({
         ) : null}
 
         {blockingNotice?.trim() ? (
-          <div className="mb-4 rounded-xl border border-sky-500/40 bg-sky-50 px-4 py-3 text-sm text-sky-950 shadow-sm">
+          <div className="mb-4 rounded-[1.25rem] border border-sky-200 bg-sky-50/95 px-4 py-3 text-sm text-sky-950 shadow-sm">
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-sky-800" aria-hidden />
               <p className="font-medium text-contrast-outline-soft">{blockingNotice.trim()}</p>
@@ -326,7 +342,7 @@ export function ChatConversation({
             <span className="text-xs font-medium text-muted-foreground">Loading conversation…</span>
           </div>
         ) : renderedTurns.length === 0 && optimisticMessages.length === 0 && !isLoading && !hasInlineAwaitingAssistant ? (
-          <div className="flex min-h-[45vh] w-full flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/20 px-6 py-12 text-center">
+          <div className="medical-bento-card flex min-h-[45vh] w-full flex-col items-center justify-center border-dashed bg-white/80 px-6 py-12 text-center">
             <p className="text-sm font-medium text-foreground">No messages yet</p>
             <p className="mt-2 max-w-sm text-xs leading-relaxed text-muted-foreground">
               Add an image for the first turn, then ask the AI. New replies will stay anchored unless you scroll up to review.
@@ -351,21 +367,17 @@ export function ChatConversation({
                   ) => {
                     const systemNoticeLabel = formatSystemNoticeCodeLabel(turnSystemNoticeCode);
                     const turnKey = turn.turnId ?? String(turn.turnIndex);
-                    const inlineReviewMarkdown = reviewFeedbackByTargetKey.get(turnKey) ?? null;
+                    const inlineReviewRaw = reviewFeedbackByTargetKey.get(turnKey) ?? null;
+                    const inlineReviewMarkdown = inlineReviewRaw
+                      ? formatReviewFeedbackDisplay(inlineReviewRaw) || null
+                      : null;
                     const isLastTurn = idx === renderedTurns.length - 1;
                     const deferLatestNonAnalysisWhileBusy =
                       isLoading &&
                       isLastTurn &&
                       (responseKind === 'clarification' || responseKind === 'refusal');
-                    const provisionalEmptyAnalysis =
-                      isLoading &&
-                      isLastTurn &&
-                      responseKind === 'analysis' &&
-                      !assistantText &&
-                      !turn.awaitingAssistant;
                     const awaitingAssistant =
                       deferLatestNonAnalysisWhileBusy ||
-                      provisionalEmptyAnalysis ||
                       (turn.awaitingAssistant === true &&
                         !assistantText &&
                         responseKind === 'analysis');
@@ -376,7 +388,13 @@ export function ChatConversation({
                       rawSupport?.phase === 'awaiting'
                         ? { kind: 'awaiting' }
                         : rawSupport?.phase === 'resolved'
-                          ? { kind: 'resolved', tone: rawSupport.tone, text: rawSupport.message }
+                          ? {
+                              kind: 'resolved',
+                              tone: rawSupport.tone,
+                              text:
+                                formatReviewFeedbackDisplay(rawSupport.message) ||
+                                rawSupport.message,
+                            }
                           : null;
                     return (
                   <motion.div
@@ -490,11 +508,7 @@ export function ChatConversation({
                     transition={{ duration: 0.2 }}
                     layout
                   >
-                    <div className="inline-flex items-center gap-1.5 rounded-2xl border border-border/70 bg-slate-100 px-4 py-3" aria-hidden>
-                      <span className="messenger-typing-dot" />
-                      <span className="messenger-typing-dot" />
-                      <span className="messenger-typing-dot" />
-                    </div>
+                    <GlobalAnalysisLoadingCard />
                   </motion.div>
                 ) : null}
               </AnimatePresence>
@@ -508,7 +522,7 @@ export function ChatConversation({
                   initial={false}
                   layout
                 >
-                  <div className="max-w-[min(92vw,92%)] rounded-2xl border border-violet-300 bg-violet-50 px-4 py-3 text-sm text-violet-950 shadow-sm sm:max-w-[92%]">
+                  <div className="max-w-[min(92vw,92%)] rounded-[1.35rem] border border-violet-200 bg-violet-50/95 px-4 py-3 text-sm text-violet-950 shadow-sm sm:max-w-[92%]">
                     <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-700">
                       <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
                       System notice
@@ -550,7 +564,7 @@ export function ChatConversation({
           <button
             type="button"
             onClick={scrollToLatest}
-            className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-md transition-colors hover:bg-muted"
+            className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-slate-200/80 bg-white/95 text-foreground shadow-[0_8px_24px_rgba(15,23,42,0.10)] transition-colors hover:bg-slate-50"
             aria-label="Scroll to latest messages"
           >
             <ArrowDown className="h-5 w-5" aria-hidden />

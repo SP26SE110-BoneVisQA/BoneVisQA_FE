@@ -35,9 +35,11 @@ export function resolveStudentRecentActivityHref(activity: StudentRecentActivity
   const sid = activity.sessionId?.trim();
 
   if (t === 'visual_qa' || t === 'visual_qa_lecturer_reply' || t.includes('visual_qa')) {
-    return sid
-      ? `/student/qa/image?sessionId=${encodeURIComponent(sid)}`
-      : '/student/qa/image';
+    if (sid) {
+      const params = new URLSearchParams({ sessionId: sid, flow: 'personal' });
+      return `/student/visual-qa/workspace?${params.toString()}`;
+    }
+    return '/student/visual-qa/workspace';
   }
   const caseId = activity.caseId?.trim();
   const quizId = activity.quizId?.trim();
