@@ -237,7 +237,7 @@ export function StudentClinicalBento({
               if (q) {
                 sessionStorage.setItem('studentQaPrefill', q);
               }
-              router.push('/student/qa/topic');
+              router.push('/student/visual-qa/workspace');
             }}
           >
             <input

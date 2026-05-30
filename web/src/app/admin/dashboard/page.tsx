@@ -1,9 +1,12 @@
-"use client";
+'use client';
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import Header from '@/components/Header';
 import StatCard from '@/components/StatCard';
+import { DashboardOverviewLayout } from '@/components/layouts';
+import RecentUsersTable from '@/components/admin/dashboard/RecentUsersTable';
+import RoleDistributionChart from '@/components/admin/dashboard/RoleDistributionChart';
+import SystemActivityFeed from '@/components/admin/dashboard/SystemActivityFeed';
 import {
   Users,
   GraduationCap,
@@ -13,12 +16,6 @@ import {
   Award,
   Clock,
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-
-import RecentUsersTable from '@/components/admin/dashboard/RecentUsersTable';
-import RoleDistributionChart from '@/components/admin/dashboard/RoleDistributionChart';
-import SystemActivityFeed from '@/components/admin/dashboard/SystemActivityFeed';
-import { AdminDashboardSkeleton } from '@/components/shared/DashboardSkeletons';
 import {
   fetchAdminUserStats,
   fetchAdminActivityStats,
@@ -26,14 +23,16 @@ import {
   fetchAdminExpertReviewStats,
   fetchAdminRecentUsersPage,
 } from '@/lib/api/admin-dashboard';
+import { queryKeys } from '@/lib/query-keys';
+import { getQueryErrorMessage } from '@/lib/query-utils';
+
 const RECENT_USERS_PAGE_SIZE = 8;
 
 export default function AdminDashboardPage() {
-  const { t } = useTranslation();
   const [recentPage, setRecentPage] = useState(1);
 
   const overviewQuery = useQuery({
-    queryKey: ['admin', 'dashboard-overview'],
+    queryKey: queryKeys.admin.dashboardOverview(),
     queryFn: async () => {
       const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const to = new Date();
@@ -48,7 +47,7 @@ export default function AdminDashboardPage() {
   });
 
   const recentUsersQuery = useQuery({
-    queryKey: ['admin', 'recent-users', recentPage, RECENT_USERS_PAGE_SIZE],
+    queryKey: queryKeys.admin.recentUsers(recentPage, RECENT_USERS_PAGE_SIZE),
     queryFn: () => fetchAdminRecentUsersPage(recentPage, RECENT_USERS_PAGE_SIZE),
     staleTime: 0,
   });
@@ -60,12 +59,9 @@ export default function AdminDashboardPage() {
   const recentUsers = recentUsersQuery.data?.users ?? [];
   const recentTotal = recentUsersQuery.data?.totalCount ?? 0;
 
-  const statsError =
-    overviewQuery.error instanceof Error
-      ? overviewQuery.error.message
-      : overviewQuery.error
-        ? String(overviewQuery.error)
-        : null;
+  const statsError = overviewQuery.error
+    ? getQueryErrorMessage(overviewQuery.error)
+    : null;
 
   const totalUsers = userStats?.totalUsers || 0;
   const newUsers = userStats?.newUsersThisMonth || 0;
@@ -92,7 +88,7 @@ export default function AdminDashboardPage() {
 
   const currentStats = [
     {
-      title: t('dashboard.totalUsers', 'Total Users'),
+      title: 'Total Users',
       value: totalUsers.toString(),
       change: `+${newUsers} this month`,
       changeType: 'positive' as const,
@@ -100,7 +96,7 @@ export default function AdminDashboardPage() {
       iconColor: 'bg-primary/10 text-primary',
     },
     {
-      title: t('users.roles.student', 'Students'),
+      title: 'Students',
       value: students.toString(),
       change: 'active members',
       changeType: 'positive' as const,
@@ -108,7 +104,7 @@ export default function AdminDashboardPage() {
       iconColor: 'bg-accent/10 text-accent',
     },
     {
-      title: t('users.roles.lecturer', 'Lecturers'),
+      title: 'Lecturers',
       value: lecturers.toString(),
       change: 'active teaching',
       changeType: 'positive' as const,
@@ -125,119 +121,109 @@ export default function AdminDashboardPage() {
     },
   ];
 
-  const dashboardBootLoading = overviewQuery.isPending || recentUsersQuery.isPending;
+  const isLoading = overviewQuery.isPending || recentUsersQuery.isPending;
 
   return (
-    <div className="min-h-screen">
-      <Header title={t('nav.dashboard', 'Dashboard')} subtitle={t('dashboard.systemHealth', 'System overview and management')} />
-
-      <div className="mx-auto max-w-[1600px] p-6">
-        {dashboardBootLoading ? (
-          <AdminDashboardSkeleton />
-        ) : statsError ? (
-          <div className="rounded-2xl border border-destructive bg-destructive/10 px-6 py-8 text-center">
-            <p className="font-medium text-destructive">{statsError}</p>
-          </div>
-        ) : (
-          <>
-            <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {currentStats.map((stat) => (
-                <StatCard key={stat.title} {...stat} />
-              ))}
-            </div>
-
-            <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div className="space-y-6 lg:col-span-2">
-                <RecentUsersTable
-                  users={recentUsers}
-                  isLoading={false}
-                  isPaging={recentUsersQuery.isFetching}
-                  page={recentPage}
-                  pageSize={RECENT_USERS_PAGE_SIZE}
-                  totalCount={recentTotal}
-                  onPageChange={setRecentPage}
-                />
-                <RoleDistributionChart isLoading={false} roleDistribution={roleDistribution} />
-              </div>
-
-              <div className="space-y-6">
-                <SystemActivityFeed activityStats={activityStats} />
-                <div className="rounded-xl border border-border bg-card p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-primary" />
-                    <h2 className="font-semibold text-card-foreground">Platform Stats</h2>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-card-foreground">Total Cases</span>
-                      </div>
-                      <span className="text-sm font-semibold text-card-foreground">
-                        {ragStats?.totalDocuments?.toLocaleString() ?? '—'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Award className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-card-foreground">Total Reviews</span>
-                      </div>
-                      <span className="text-sm font-semibold text-card-foreground">
-                        {expertStats?.totalReviews?.toLocaleString() ?? '—'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-card-foreground">Pending Reviews</span>
-                      </div>
-                      <span className="text-sm font-semibold text-warning">
-                        {expertStats?.pendingAnswers?.toLocaleString() ?? '—'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-card-foreground">Document Chunks</span>
-                      </div>
-                      <span className="text-sm font-semibold text-card-foreground">
-                        {ragStats?.totalChunks?.toLocaleString() ?? '—'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <div className="rounded-xl border border-border bg-card p-4 text-center">
-                <p className="text-3xl font-bold text-primary">
-                  {expertStats?.approvedReviews?.toLocaleString() ?? '—'}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">Approved Reviews</p>
-              </div>
-              <div className="rounded-xl border border-border bg-card p-4 text-center">
-                <p className="text-3xl font-bold text-success">
-                  {ragStats?.totalCitations?.toLocaleString() ?? '—'}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">Total Citations</p>
-              </div>
-              <div className="rounded-xl border border-border bg-card p-4 text-center">
-                <p className="text-3xl font-bold text-warning">
-                  {ragStats?.outdatedDocuments?.toLocaleString() ?? '—'}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">Outdated Documents</p>
-              </div>
-              <div className="rounded-xl border border-border bg-card p-4 text-center">
-                <p className="text-3xl font-bold text-accent">
-                  {userStats?.pendingUsers?.toLocaleString() ?? '—'}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">Pending Users</p>
-              </div>
-            </div>
-          </>
-        )}
+    <DashboardOverviewLayout
+      title="Dashboard"
+      isLoading={isLoading}
+      error={statsError}
+    >
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {currentStats.map((stat) => (
+          <StatCard key={stat.title} {...stat} />
+        ))}
       </div>
-    </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <RecentUsersTable
+            users={recentUsers}
+            isLoading={false}
+            isPaging={recentUsersQuery.isFetching}
+            page={recentPage}
+            pageSize={RECENT_USERS_PAGE_SIZE}
+            totalCount={recentTotal}
+            onPageChange={setRecentPage}
+          />
+          <RoleDistributionChart isLoading={false} roleDistribution={roleDistribution} />
+        </div>
+
+        <div className="space-y-6">
+          <SystemActivityFeed activityStats={activityStats} />
+          <div className="rounded-xl border border-border bg-card p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <h2 className="font-semibold text-card-foreground">Platform Stats</h2>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-card-foreground">Total Cases</span>
+                </div>
+                <span className="text-sm font-semibold text-card-foreground">
+                  {ragStats?.totalDocuments?.toLocaleString() ?? '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Award className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-card-foreground">Total Reviews</span>
+                </div>
+                <span className="text-sm font-semibold text-card-foreground">
+                  {expertStats?.totalReviews?.toLocaleString() ?? '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-card-foreground">Pending Reviews</span>
+                </div>
+                <span className="text-sm font-semibold text-warning">
+                  {expertStats?.pendingAnswers?.toLocaleString() ?? '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-card-foreground">Document Chunks</span>
+                </div>
+                <span className="text-sm font-semibold text-card-foreground">
+                  {ragStats?.totalChunks?.toLocaleString() ?? '—'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <p className="text-3xl font-bold text-primary">
+            {expertStats?.approvedReviews?.toLocaleString() ?? '—'}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Approved Reviews</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <p className="text-3xl font-bold text-success">
+            {ragStats?.totalCitations?.toLocaleString() ?? '—'}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Total Citations</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <p className="text-3xl font-bold text-warning">
+            {ragStats?.outdatedDocuments?.toLocaleString() ?? '—'}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Outdated Documents</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <p className="text-3xl font-bold text-accent">
+            {userStats?.pendingUsers?.toLocaleString() ?? '—'}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Pending Users</p>
+        </div>
+      </div>
+    </DashboardOverviewLayout>
   );
 }

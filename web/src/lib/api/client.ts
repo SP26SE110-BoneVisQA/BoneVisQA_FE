@@ -1,5 +1,15 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { getClientAcceptLanguageHeader } from '@/lib/api/accept-language';
+import {
+  showAccessDeniedWithoutLogoutToast,
+  showApiErrorToast,
+} from '@/lib/api/errors/show-api-error-toast';
+import {
+  looksLikeTechnicalErrorMessage,
+  sanitizeForUserToast,
+} from '@/lib/api/errors/sanitize-for-user';
+
+export { sanitizeForUserToast } from '@/lib/api/errors/sanitize-for-user';
 
 /**
  * When `NEXT_PUBLIC_API_URL` is unset, local dev uses this origin (no `/api` suffix).
@@ -80,54 +90,6 @@ type ProblemDetailsPayload = {
   errors?: unknown;
 };
 
-/**
- * ASP.NET / EF Core often returns ProblemDetails with a multi-line LINQ translation error.
- * End users should not see DbSet / Where stack text in toasts — the fix belongs in the API.
- */
-/** Strip UUIDs, long paths, and stack-like fragments before showing API text in toasts. */
-export function sanitizeForUserToast(raw: string): string {
-  let s = raw.trim();
-  if (!s) return 'Something went wrong. Please try again.';
-  s = s.replace(
-    /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
-    '',
-  );
-  s = s.replace(/\b[0-9a-f]{32}\b/gi, '');
-  s = s.replace(/\/[^\s]+\.(cs|dll)(:\d+)?\b/gi, '');
-  s = s.replace(/\bat\s+[^\n]+(?:line\s+\d+)?/gi, '');
-  s = s.replace(/\s{2,}/g, ' ').trim();
-  if (s.length > 220) s = `${s.slice(0, 217)}…`;
-  if (!s || /^[\s.,;:]+$/.test(s)) return 'Something went wrong. Please try again.';
-  return s;
-}
-
-function queueSonnerErrorToast(message: string) {
-  if (typeof window === 'undefined') return;
-  void import('sonner')
-    .then(({ toast }) => toast.error(message))
-    .catch(() => {});
-}
-
-function friendlyGlobalApiToastMessage(err: AxiosError): string | null {
-  const st = err.response?.status;
-  if (st === 400) {
-    const msg = sanitizeForUserToast(getApiErrorMessage(err));
-    if (msg.length < 180 && !looksLikeTechnicalErrorMessage(msg)) return msg;
-    return 'The request could not be processed. Please check your input and try again.';
-  }
-  if (st === 403) {
-    return 'You do not have permission to perform this action.';
-  }
-  if (st !== undefined && st >= 500) {
-    const msg = sanitizeForUserToast(getApiErrorMessage(err));
-    if (looksLikeTechnicalErrorMessage(msg)) {
-      return 'The server ran into a problem. Please try again in a moment.';
-    }
-    return msg;
-  }
-  return null;
-}
-
 export function polishUserFacingApiErrorMessage(message: string): string {
   const s = message.trim();
   if (!s) return message;
@@ -161,25 +123,13 @@ http.interceptors.response.use(
     const skipToast = Boolean(cfg?.skipApiToast);
     /** Default true: misconfigured APIs sometimes return 401 for “forbidden” — optional opt-out per request. */
     const clearSessionOn401 = cfg?.clearSessionOn401 !== false;
-    if (
-      !skipToast &&
-      typeof window !== 'undefined' &&
-      axios.isAxiosError(err) &&
-      err.response?.status &&
-      err.response.status !== 401
-    ) {
-      const friendly = friendlyGlobalApiToastMessage(err);
-      if (friendly) queueSonnerErrorToast(friendly);
-    }
-    if (
-      err.response?.status === 401 &&
-      typeof window !== 'undefined' &&
-      !skipToast &&
-      !clearSessionOn401
-    ) {
-      queueSonnerErrorToast(
-        'This action could not be completed (access denied or server error). You have not been signed out — try again or contact support if it persists.',
-      );
+    if (!skipToast && typeof window !== 'undefined' && axios.isAxiosError(err)) {
+      const status = err.response?.status;
+      if (status && status !== 401) {
+        showApiErrorToast(err);
+      } else if (status === 401 && !clearSessionOn401) {
+        showAccessDeniedWithoutLogoutToast();
+      }
     }
     if (err.response?.status === 401 && typeof window !== 'undefined' && clearSessionOn401) {
       localStorage.removeItem('token');
@@ -198,12 +148,6 @@ http.interceptors.response.use(
     return Promise.reject(err);
   },
 );
-
-function looksLikeTechnicalErrorMessage(message: string): boolean {
-  const s = message.trim();
-  if (!s || s.length > 220) return true;
-  return /exception|stack|trace|LINQ|SqlClient|DbUpdate|System\.|Microsoft\.|timeout of \d+ms/i.test(s);
-}
 
 /** Safe short messages for login / Google OAuth UI — never expose stack traces or Axios internals. */
 export function sanitizeUserFacingLoginMessage(message: string | null | undefined, fallback: string): string {

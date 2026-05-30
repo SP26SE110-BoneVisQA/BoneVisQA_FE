@@ -2,6 +2,20 @@ import axios from 'axios';
 import { http, getApiErrorMessage } from './client';
 import type { ClassItem, LecturerTriageRequestKind, LecturerTriageRow } from './types';
 
+export type ExpertSpecialtyOption = {
+  id: string;
+  name: string;
+  description?: string;
+};
+
+const MOCK_EXPERT_SPECIALTIES: ExpertSpecialtyOption[] = [
+  { id: 'orthopedics', name: 'Orthopedics', description: 'Bone, joint, and musculoskeletal trauma.' },
+  { id: 'radiology', name: 'Radiology', description: 'Image interpretation and radiographic correlation.' },
+  { id: 'pediatrics', name: 'Pediatrics', description: 'Growth plate and age-specific bone findings.' },
+  { id: 'oncology', name: 'Oncology', description: 'Bone tumors and malignant differential review.' },
+  { id: 'traumatology', name: 'Traumatology', description: 'Acute injury and fracture pattern review.' },
+];
+
 function parseTriageCaseTags(r: Record<string, unknown>): string[] {
   const direct = r.caseTags ?? r.CaseTags ?? r.tags ?? r.Tags;
   if (Array.isArray(direct)) return direct.map((x) => String(x).trim()).filter(Boolean);
@@ -18,6 +32,26 @@ function parseTriageCaseTags(r: Record<string, unknown>): string[] {
     if (Array.isArray(nested)) return nested.map((x) => String(x).trim()).filter(Boolean);
   }
   return [];
+}
+
+function normalizeExpertSpecialtyOption(raw: unknown): ExpertSpecialtyOption | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = String(
+    r.id ?? r.Id ?? r.specialtyId ?? r.SpecialtyId ?? r.code ?? r.Code ?? '',
+  ).trim();
+  const name = String(
+    r.name ?? r.Name ?? r.specialtyName ?? r.SpecialtyName ?? r.label ?? r.Label ?? '',
+  ).trim();
+  if (!id || !name) return null;
+  const description = String(
+    r.description ?? r.Description ?? r.summary ?? r.Summary ?? '',
+  ).trim();
+  return {
+    id,
+    name,
+    description: description || undefined,
+  };
 }
 
 export const WORKFLOW_CONFLICT = 'WORKFLOW_CONFLICT';
@@ -56,6 +90,38 @@ export async function getQuestionDetail(
   }
 }
 
+export async function fetchExpertSpecialties(): Promise<ExpertSpecialtyOption[]> {
+  const endpoints = [
+    '/api/specialties',
+    '/api/lecturer/experts/specialties',
+    '/api/lecturer/specialties',
+    '/api/expert/specialties',
+  ] as const;
+
+  for (const endpoint of endpoints) {
+    try {
+      const { data } = await http.get<unknown>(endpoint);
+      const list = Array.isArray(data)
+        ? data
+        : data && typeof data === 'object'
+          ? ((data as Record<string, unknown>).items ??
+              (data as Record<string, unknown>).data ??
+              (data as Record<string, unknown>).result)
+          : [];
+      if (Array.isArray(list)) {
+        const normalized = list
+          .map(normalizeExpertSpecialtyOption)
+          .filter((item): item is ExpertSpecialtyOption => item !== null);
+        if (normalized.length > 0) return normalized;
+      }
+    } catch {
+      /* fall through to next endpoint / mock fallback */
+    }
+  }
+
+  return MOCK_EXPERT_SPECIALTIES;
+}
+
 export async function respondToQuestion(
   classId: string,
   questionId: string,
@@ -68,6 +134,7 @@ export async function respondToQuestion(
     selectedUserMessageId?: string | null;
     selectedAssistantMessageId?: string | null;
     requestedReviewMessageId?: string | null;
+    specialtyId?: string | null;
   },
 ): Promise<unknown> {
   try {

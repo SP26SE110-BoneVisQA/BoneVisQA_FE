@@ -1,0 +1,12 @@
+export { WorkspaceShell } from '@/features/visual-qa/components/WorkspaceShell';
+export { WorkspaceHeader } from '@/features/visual-qa/components/WorkspaceHeader';
+export { WorkspaceImagePanel } from '@/features/visual-qa/components/WorkspaceImagePanel';
+export { WorkspaceChatPanel } from '@/features/visual-qa/components/WorkspaceChatPanel';
+export { WorkspaceStructuredAnswer } from '@/features/visual-qa/components/WorkspaceStructuredAnswer';
+export { WorkspaceCitationChips } from '@/features/visual-qa/components/WorkspaceCitationChips';
+export { WorkspacePageClient } from '@/features/visual-qa/components/WorkspacePageClient';
+export { WorkspacePersonalUpload } from '@/features/visual-qa/components/WorkspacePersonalUpload';
+export { WorkspaceEmptyState } from '@/features/visual-qa/components/WorkspaceEmptyState';
+export { WorkspaceContextPanel } from '@/features/visual-qa/components/WorkspaceContextPanel';
+export { WorkspaceFlowBar } from '@/features/visual-qa/components/WorkspaceFlowBar';
+export { WorkspaceRagSources } from '@/features/visual-qa/components/WorkspaceRagSources';

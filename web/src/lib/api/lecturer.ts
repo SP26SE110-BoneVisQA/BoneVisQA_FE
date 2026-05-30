@@ -15,7 +15,6 @@ import type {
   StudentQuizAttemptDto,
   QuizAttemptDetailDto,
   UpdateQuizAttemptRequestDto,
-  ExpertOption,
   VisualQaTurn,
   AssignmentDetail,
   AssignmentSubmission,
@@ -23,7 +22,6 @@ import type {
   UpdateAssignmentSubmissionRequest,
   QuizWithQuestionsDto,
   ClassCaseAssignmentDto,
-  ClassQuizSessionDto,
 } from './types';
 import {
   isValidNormalizedBoundingBox,
@@ -31,6 +29,7 @@ import {
   parsePercentageBoundingBox,
   percentageBoundingBoxToNormalized,
 } from '@/lib/utils/annotations';
+import { normalizeDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -134,7 +133,8 @@ function normalizeClassItem(raw: unknown): ClassItem | null {
   };
 }
 
-export async function getLecturerClasses(lecturerId: string): Promise<ClassItem[]> {
+export async function getLecturerClasses(lecturerId?: string): Promise<ClassItem[]> {
+  void lecturerId;
   try {
     const { data } = await http.get<unknown[]>('/api/lecturer/classes');
     const list = Array.isArray(data) ? data : [];
@@ -494,6 +494,28 @@ function normalizeLectStudentQuestionDto(raw: unknown): LectStudentQuestionDto |
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
 
+  function extractDicomMetadata(row: Record<string, unknown>) {
+    const candidates: unknown[] = [
+      row.dicomMetadata,
+      row.dicom_metadata,
+      row.DicomMetadata,
+      row.metadata,
+      row.Metadata,
+      row.studyMetadata,
+      row.study_metadata,
+    ];
+    const session = row.session ?? row.visualQaSession ?? row.VisualQaSession;
+    if (session && typeof session === 'object') {
+      const s = session as Record<string, unknown>;
+      candidates.push(s.dicomMetadata, s.dicom_metadata, s.DicomMetadata, s.metadata, s.Metadata);
+    }
+    for (const candidate of candidates) {
+      const normalized = normalizeDicomMetadata(candidate);
+      if (normalized) return normalized;
+    }
+    return null;
+  }
+
   const questionId = String(
     r.questionId ?? r.QuestionId ?? r.id ?? r.Id ?? '',
   ).trim();
@@ -789,14 +811,26 @@ function normalizeLectStudentQuestionDto(raw: unknown): LectStudentQuestionDto |
   const caseIdRaw = r.caseId ?? r.CaseId;
   const caseId: string | null =
     caseIdRaw != null && String(caseIdRaw).trim() !== '' ? String(caseIdRaw).trim() : null;
-  const caseTitle = String(r.caseTitle ?? r.CaseTitle ?? '').trim();
+  const nestedCaseTitle =
+    caseObj && typeof caseObj === 'object'
+      ? String(
+          (caseObj as Record<string, unknown>).title ??
+            (caseObj as Record<string, unknown>).Title ??
+            (caseObj as Record<string, unknown>).name ??
+            (caseObj as Record<string, unknown>).Name ??
+            '',
+        ).trim()
+      : '';
+  const caseTitle = String(r.caseTitle ?? r.CaseTitle ?? nestedCaseTitle ?? '').trim();
   const tagLabels = parseCaseTagLabels(r);
   const isPersonalUpload = normalizePersonalUploadFlag(r);
+  const dicomMetadata = extractDicomMetadata(r);
 
   return {
     id: questionId,
     answerId,
     caseAnswerId,
+    dicomMetadata,
     studentId: String(r.studentId ?? r.StudentId ?? ''),
     studentName: String(r.studentName ?? r.StudentName ?? ''),
     studentEmail: String(r.studentEmail ?? r.StudentEmail ?? ''),
@@ -804,7 +838,20 @@ function normalizeLectStudentQuestionDto(raw: unknown): LectStudentQuestionDto |
     caseTitle,
     questionText: String(r.questionText ?? r.QuestionText ?? ''),
     language: r.language == null && r.Language == null ? null : String(r.language ?? r.Language ?? ''),
-    createdAt: (r.createdAt ?? r.CreatedAt ?? null) as string | null,
+    createdAt: (() => {
+      const raw =
+        r.createdAt ??
+        r.CreatedAt ??
+        r.askedAt ??
+        r.AskedAt ??
+        r.submittedAt ??
+        r.SubmittedAt ??
+        r.questionCreatedAt ??
+        r.QuestionCreatedAt ??
+        null;
+      const value = raw != null ? String(raw).trim() : '';
+      return value || null;
+    })(),
     answerText: (r.answerText ?? r.AnswerText ?? null) as string | null,
     answerStatus: (r.answerStatus ?? r.AnswerStatus ?? null) as string | null,
     escalatedById: (r.escalatedById ?? r.EscalatedById ?? null) as string | null,
@@ -859,6 +906,17 @@ function normalizeLectStudentQuestionDto(raw: unknown): LectStudentQuestionDto |
     caseKeyFindings: String(r.caseKeyFindings ?? r.CaseKeyFindings ?? '').trim() || null,
     isPersonalUpload,
     caseTags: tagLabels.length > 0 ? tagLabels : null,
+    reviewFeedback: (() => {
+      const raw =
+        r.reviewFeedback ??
+        r.ReviewFeedback ??
+        r.rejectionReason ??
+        r.RejectionReason ??
+        r.policyReason ??
+        r.PolicyReason ??
+        null;
+      return raw != null && String(raw).trim() !== '' ? String(raw).trim() : null;
+    })(),
   };
 }
 
@@ -890,10 +948,32 @@ export async function getStudentQuestions(
 }
 
 /**
- * Visual QA–only triage queue (BE: GET /api/lecturer/triage/visual-qa?classId=...).
- * Falls back to class questions with source=visual-qa when the dedicated route is unavailable.
+ * Visual QA triage queue.
+ * Pending: GET /api/lecturer/triage/visual-qa
+ * History: GET /api/lecturer/triage?status=History
  */
-export async function fetchLecturerVisualQaTriageQueue(classId: string): Promise<LectStudentQuestionDto[]> {
+export type TriageQueueStatus = 'Pending' | 'History' | 'Approved' | 'Rejected';
+
+export async function fetchLecturerVisualQaTriageQueue(
+  classId: string,
+  options?: { status?: TriageQueueStatus },
+): Promise<LectStudentQuestionDto[]> {
+  const status = options?.status ?? 'Pending';
+
+  if (status === 'History' || status === 'Approved' || status === 'Rejected') {
+    try {
+      const { data } = await http.get<unknown[]>('/api/lecturer/triage', {
+        params: { classId, status },
+      });
+      if (!Array.isArray(data)) return [];
+      return data
+        .map(normalizeLectStudentQuestionDto)
+        .filter((row): row is LectStudentQuestionDto => row !== null);
+    } catch (e) {
+      throw new Error(getApiErrorMessage(e));
+    }
+  }
+
   try {
     const { data } = await http.get<unknown[]>(`/api/lecturer/triage/visual-qa`, {
       params: { classId },

@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useLogout } from '@/lib/useLogout';
 import { getStoredUserInfo } from '@/lib/getStoredUserInfo';
-import LanguageSwitcher from '@/components/common/LanguageSwitcher';
 import {
   LayoutDashboard,
   Users,
@@ -95,11 +94,6 @@ export default function AdminSidebar() {
       {/* User profile */}
       {stored.fullName && (
         <div className="border-t border-white/10 px-3 py-4">
-          <div className="flex justify-center border-b border-white/10 pb-4 mb-4">
-            <div className="bg-white rounded-lg p-0.5 shadow-sm overflow-hidden">
-              <LanguageSwitcher />
-            </div>
-          </div>
           <div className="flex items-center gap-3 rounded-xl px-3 py-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs font-bold text-white">
               {initials}

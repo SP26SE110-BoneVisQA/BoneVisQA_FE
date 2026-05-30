@@ -1,6 +1,3 @@
-import { redirect } from 'next/navigation';
+import { AdminLogsPage } from '@/features/admin/components/AdminLogsPage';
 
-/** Legacy route — system logs API is not exposed; keep deep links from 404ing. */
-export default function AdminLogsRedirectPage() {
-  redirect('/admin/dashboard');
-}
+export default AdminLogsPage;

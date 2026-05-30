@@ -43,7 +43,6 @@ export function TriageQueueTable({
               <TableEmptyState
                 icon={AlertTriangle}
                 title="Choose a class scope"
-                description="Select a lecturer class to load its diagnostic triage queue."
                 colSpan={7}
               />
             ) : loadingRows ? (
@@ -56,7 +55,6 @@ export function TriageQueueTable({
               <TableEmptyState
                 icon={AlertTriangle}
                 title="No diagnostic requests"
-                description="This class does not currently have any requests waiting for lecturer triage."
                 colSpan={7}
               />
             ) : (

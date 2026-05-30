@@ -120,7 +120,6 @@ function StudentClassWorkbench({ classId }: StudentClassWorkbenchProps) {
       <EmptyState
         icon={<GraduationCap className="h-7 w-7" />}
         title="Class not found"
-        description="This class could not be loaded or you are not enrolled."
       />
     );
   }
@@ -353,7 +352,6 @@ function StudentClassWorkbench({ classId }: StudentClassWorkbenchProps) {
               <EmptyState
                 icon={<Users className="h-6 w-6" />}
                 title="No classmates yet"
-                description="When your classmates enroll, they'll appear here."
               />
             ) : (
               <div className="overflow-hidden rounded-xl border border-border">
@@ -425,11 +423,6 @@ function StudentClassWorkbench({ classId }: StudentClassWorkbenchProps) {
               <EmptyState
                 icon={<BookOpen className="h-6 w-6" />}
                 title="No assigned cases"
-                description={
-                  caseSearch
-                    ? 'No cases match your search.'
-                    : 'Your lecturer has not assigned any cases to this class yet.'
-                }
                 action={
                   <Link href="/student/catalog">
                     <Button variant="outline">
@@ -504,7 +497,6 @@ function StudentClassWorkbench({ classId }: StudentClassWorkbenchProps) {
               <EmptyState
                 icon={<ClipboardList className="h-6 w-6" />}
                 title="No quizzes assigned"
-                description="Your lecturer has not assigned any quizzes to this class yet."
               />
             ) : (
               <div className="space-y-3">
@@ -598,7 +590,6 @@ function StudentClassWorkbench({ classId }: StudentClassWorkbenchProps) {
               <EmptyState
                 icon={<Megaphone className="h-6 w-6" />}
                 title="No announcements"
-                description="Your lecturer has not posted any announcements for this class yet."
               />
             ) : (
               <div className="space-y-4">
@@ -727,11 +718,6 @@ function StudentClassesList({
         <EmptyState
           icon={<GraduationCap className="h-7 w-7 opacity-90" />}
           title="No classes match your filters"
-          description={
-            classes.length === 0
-              ? 'You are not enrolled in any classes yet. Contact your administrator to get enrolled.'
-              : 'Try a different search or semester filter.'
-          }
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 animate-in fade-in slide-in-from-bottom-2 duration-500">

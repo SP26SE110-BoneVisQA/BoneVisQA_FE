@@ -1,13 +1,20 @@
 import axios from 'axios';
+import { sanitizeNullableGuid } from '@/lib/api/sanitize-guids';
+import {
+  normalizeDicomMetadata,
+  type VisualQaDicomMetadata,
+} from '@/lib/api/visual-qa/dicom-metadata';
 import { http, getApiErrorMessage } from './client';
 
 export type CaseDifficulty = 'Easy' | 'Medium' | 'Hard';
 /** Aligns with workbench cards: draft (inactive), pending, approved, rejected. */
 export type CaseStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 
-/** Values stored in DB (`medical_images.modality` CHECK); BE normalizer maps aliases to these. */
-export const DB_IMAGE_MODALITIES = ['X-Ray', 'CT', 'MRI', 'Ultrasound', 'Other'] as const;
-export type DbImageModality = (typeof DB_IMAGE_MODALITIES)[number];
+/** Re-export from ontology module to avoid circular imports with visual-qa/dicom-metadata. */
+export {
+  DB_IMAGE_MODALITIES,
+  type DbImageModality,
+} from '@/features/expert/lib/expert-ontology';
 
 export interface ExpertCaseTag {
   id: string;
@@ -374,7 +381,22 @@ function parseCreatedCaseId(data: unknown): string | undefined {
 /** Creates a case via `application/json` (public image URLs + polygon coordinates). */
 export async function createExpertCase(input: CreateExpertCaseJsonInput): Promise<string | undefined> {
   try {
-    const { data } = await http.post<unknown>('/api/expert/cases', input, {
+    const body: Record<string, unknown> = {
+      title: input.title,
+      description: input.description,
+      difficulty: input.difficulty ?? null,
+      suggestedDiagnosis: input.suggestedDiagnosis ?? null,
+      reflectiveQuestions: input.reflectiveQuestions ?? null,
+      keyFindings: input.keyFindings ?? null,
+      medicalImages: input.medicalImages ?? null,
+    };
+    if (input.categoryId != null && String(input.categoryId).trim()) {
+      body.categoryId = input.categoryId;
+    }
+    if (input.tagIds != null && input.tagIds.length > 0) {
+      body.tagIds = input.tagIds;
+    }
+    const { data } = await http.post<unknown>('/api/expert/cases', body, {
       headers: { 'Content-Type': 'application/json' },
     });
     return parseCreatedCaseId(data);
@@ -404,17 +426,18 @@ export async function updateExpertCase(id: string, input: SaveExpertCaseInput): 
     const trimmedId = String(id).trim();
     if (!trimmedId) throw new Error('Missing case id.');
     /** Match `UpdateMedicalCaseDTORequest` — route is PUT `api/expert/cases/{id:guid}` (no duplicate id in path). */
-    const body = {
+    const categoryId = sanitizeNullableGuid(input.categoryId);
+    const body: Record<string, unknown> = {
       title: input.title,
       description: input.description,
       difficulty: input.difficulty,
-      categoryId: input.categoryId?.trim() || null,
       suggestedDiagnosis: input.suggestedDiagnosis?.trim() || null,
       reflectiveQuestions: input.reflectiveQuestions?.trim() || null,
       keyFindings: input.keyFindings?.trim() || null,
       isApproved: input.isApproved,
       isActive: input.isActive,
     };
+    if (categoryId) body.categoryId = categoryId;
     await http.request({
       method: 'PUT',
       url: `/api/expert/cases/${encodeURIComponent(trimmedId)}`,
@@ -593,6 +616,62 @@ export async function fetchExpertAnnotations(pageIndex = 1, pageSize = 10): Prom
       totalCount: Number(d?.totalCount ?? res?.totalCount ?? items.length),
       pageIndex: Number(d?.pageIndex ?? res?.pageIndex ?? pageIndex),
       pageSize: Number(d?.pageSize ?? res?.pageSize ?? pageSize),
+    };
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export type ExpertCaseDicomUploadResult = {
+  id: string;
+  imageUrl: string;
+  modality: string;
+  mediaId: string | null;
+  catalogImageId: string | null;
+  dicomMetadata: VisualQaDicomMetadata | null;
+};
+
+/**
+ * Ingest DICOM archive for an expert case — `POST /api/expert/cases/upload-dicom`.
+ */
+export async function uploadExpertCaseDicomArchive(
+  caseId: string,
+  file: File,
+  modality?: string,
+): Promise<ExpertCaseDicomUploadResult> {
+  const form = new FormData();
+  form.append('caseId', caseId);
+  form.append('CaseId', caseId);
+  form.append('file', file);
+  form.append('File', file);
+  if (modality?.trim()) {
+    form.append('modality', modality.trim());
+    form.append('Modality', modality.trim());
+  }
+
+  try {
+    const { data } = await http.post<unknown>('/api/expert/cases/upload-dicom', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    const row =
+      data && typeof data === 'object' && 'result' in data
+        ? (data as { result: unknown }).result
+        : data;
+    const o =
+      row && typeof row === 'object' ? (row as Record<string, unknown>) : ({} as Record<string, unknown>);
+    const pick = (keys: string[]) => {
+      for (const k of keys) {
+        if (k in o && o[k] != null) return o[k];
+      }
+      return undefined;
+    };
+    return {
+      id: String(pick(['id', 'Id', 'catalogImageId', 'CatalogImageId']) ?? '').trim(),
+      imageUrl: String(pick(['previewImageUrl', 'PreviewImageUrl', 'imageUrl', 'ImageUrl']) ?? '').trim(),
+      modality: String(pick(['modality', 'Modality']) ?? modality ?? '').trim(),
+      mediaId: String(pick(['mediaId', 'MediaId']) ?? '').trim() || null,
+      catalogImageId: String(pick(['catalogImageId', 'CatalogImageId']) ?? '').trim() || null,
+      dicomMetadata: normalizeDicomMetadata(pick(['dicomMetadata', 'dicom_metadata', 'DicomMetadata'])),
     };
   } catch (e) {
     throw new Error(getApiErrorMessage(e));

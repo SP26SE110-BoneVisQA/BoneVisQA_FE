@@ -1,21 +1,15 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import Header from '@/components/Header';
+import { DashboardOverviewLayout } from '@/components/layouts';
 import { SectionCard } from '@/components/shared/SectionCard';
-import { SkeletonBlock, StudentDashboardSkeleton } from '@/components/shared/DashboardSkeletons';
+import { SkeletonBlock } from '@/components/shared/DashboardSkeletons';
+import { useStudentDashboardQueries } from '@/features/student/hooks/useStudentDashboardQueries';
 import ProgressRing from '@/components/student/ProgressRing';
 import QuickActionCard from '@/components/student/QuickActionCard';
 import { StudentDashboardFab } from '@/components/student/StudentAppChrome';
-import {
-  fetchStudentProgress,
-  fetchStudentRecentActivity,
-  fetchStudentTopicStats,
-} from '@/lib/api/student';
 import { resolveStudentRecentActivityHref } from '@/lib/student/recent-activity-href';
-import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/lib/useAuth';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -46,43 +40,30 @@ type StatCardModel = {
 const quickActions = [
   {
     title: 'New visual QA',
-    description: 'Upload an imaging study and ask one focused clinical question.',
     icon: ImageUp,
-    href: '/student/qa/image',
+    href: '/student/visual-qa/workspace',
     iconColor: 'bg-primary/15 text-primary',
   },
-  // TODO: Uncomment when AI Image Practice is ready for production
-  // {
-  //   title: 'AI Image Practice',
-  //   description: 'Upload an X-ray and get AI-generated practice questions instantly.',
-  //   icon: ImageIcon,
-  //   href: '/student/ai-quiz/image-based',
-  //   iconColor: 'bg-purple-500/15 text-purple-700',
-  // },
   {
     title: 'View history',
-    description: 'Review your past visual QA requests and expert review status.',
     icon: History,
     href: '/student/history',
     iconColor: 'bg-slate-500/15 text-slate-700',
   },
   {
     title: 'Case catalog',
-    description: 'Browse curated teaching cases by location, lesion type, and difficulty.',
     icon: Library,
     href: '/student/catalog',
     iconColor: 'bg-sky-500/15 text-sky-800',
   },
   {
     title: 'Practice quiz',
-    description: 'Load a live quiz attempt from the backend by topic.',
     icon: Trophy,
     href: '/student/quiz',
     iconColor: 'bg-cyan-accent/15 text-primary',
   },
   {
     title: 'My profile',
-    description: 'Update your cohort and profile fields visible to instructors.',
     icon: User,
     href: '/student/profile',
     iconColor: 'bg-emerald-500/15 text-emerald-800',
@@ -101,44 +82,18 @@ function clampPercent(value: number | null | undefined): number {
 
 export default function StudentDashboard() {
   const { user } = useAuth();
-  const toast = useToast();
-  const progressQuery = useQuery({
-    queryKey: ['student', 'dashboard', 'progress'],
-    queryFn: fetchStudentProgress,
-  });
-  const topicQuery = useQuery({
-    queryKey: ['student', 'dashboard', 'topic-stats'],
-    queryFn: fetchStudentTopicStats,
-  });
-  const activityQuery = useQuery({
-    queryKey: ['student', 'dashboard', 'recent-activity'],
-    queryFn: fetchStudentRecentActivity,
-  });
-  const progress = progressQuery.data ?? null;
-  const topicStats = topicQuery.data ?? [];
-  const recentActivity = activityQuery.data ?? [];
-  const progressError = progressQuery.error;
-  const topicError = topicQuery.error;
-  const activityError = activityQuery.error;
-  const progressPending = progressQuery.isPending;
-  const topicPending = topicQuery.isPending;
-  const activityPending = activityQuery.isPending;
-
-  useEffect(() => {
-    if (progressError) {
-      toast.error(progressError instanceof Error ? progressError.message : 'Failed to load student progress.');
-    }
-  }, [progressError, toast]);
-  useEffect(() => {
-    if (topicError) {
-      toast.error(topicError instanceof Error ? topicError.message : 'Failed to load topic analytics.');
-    }
-  }, [topicError, toast]);
-  useEffect(() => {
-    if (activityError) {
-      toast.error(activityError instanceof Error ? activityError.message : 'Failed to load recent activity.');
-    }
-  }, [activityError, toast]);
+  const {
+    progress,
+    topicStats,
+    recentActivity,
+    isLoading,
+    progressPending,
+    topicPending,
+    activityPending,
+    progressError,
+    topicError,
+    activityError,
+  } = useStudentDashboardQueries();
 
   const statCards = useMemo<StatCardModel[]>(
     () =>
@@ -191,46 +146,23 @@ export default function StudentDashboard() {
 
   const firstName = user?.fullName?.trim().split(/\s+/)[0] || 'there';
   const goalTopic = topicStats[0]?.topicName ?? 'Musculoskeletal focus';
-  const showInitialSkeleton =
-    progressPending &&
-    topicPending &&
-    activityPending &&
-    !progress &&
-    topicStats.length === 0 &&
-    recentActivity.length === 0;
+  const casesViewedPct = Math.min(100, (progress?.totalCasesViewed ?? 0) * 5);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Header
-        title="Student dashboard"
-        subtitle="Track progress, browse cases, and continue your radiology learning path."
-      />
-
-      <div className="mx-auto max-w-[1600px] space-y-8 px-6 py-6">
-        {showInitialSkeleton ? (
-          <StudentDashboardSkeleton />
-        ) : (
-          <>
-            <section className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
+    <DashboardOverviewLayout
+      title="Student dashboard"
+      isLoading={isLoading}
+    >
+      <>
+            <section className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
               <div>
                 <h2 className="font-headline text-3xl font-bold tracking-tight text-foreground md:text-4xl">
                   Welcome back, {firstName}
                 </h2>
-                <p className="mt-2 max-w-xl text-base text-muted-foreground">
-                  {progress?.quizAccuracyRate != null && !Number.isNaN(progress.quizAccuracyRate) ? (
-                    <>
-                      You&apos;ve completed {Math.min(100, Math.round(progress.quizAccuracyRate))}% of your weekly
-                      radiology goals.{' '}
-                    </>
-                  ) : (
-                    <>No quiz accuracy recorded yet. Complete a quiz to see goal progress. </>
-                  )}
-                  Continue with case reviews or a practice quiz.
-                </p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <Link
-                  href="/student/qa/image"
+                  href="/student/visual-qa/workspace"
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <PlayCircle className="h-5 w-5 shrink-0" aria-hidden />
@@ -256,8 +188,8 @@ export default function StudentDashboard() {
               </div>
             ) : null}
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="group flex flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+              <div className="group flex flex-col gap-4 rounded-xl border border-border bg-card p-8 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
                   <BookOpen className="h-6 w-6" />
                 </div>
@@ -270,12 +202,12 @@ export default function StudentDashboard() {
                 <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${Math.min(100, (progress?.totalCasesViewed ?? 0) * 5)}%` }}
+                    style={{ '--cases-pct': `${casesViewedPct}%`, width: 'var(--cases-pct)' } as CSSProperties}
                   />
                 </div>
               </div>
 
-              <div className="group flex flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
+              <div className="group flex flex-col gap-4 rounded-xl border border-border bg-card p-8 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/15 text-amber-700 transition-colors group-hover:bg-amber-600 group-hover:text-white">
                   <Trophy className="h-6 w-6" />
                 </div>
@@ -285,12 +217,9 @@ export default function StudentDashboard() {
                   </span>
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Avg. quiz score</p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {progress?.completedQuizzes ?? 0} completed · {progress?.totalQuizAttempts ?? 0} attempts
-                </p>
               </div>
 
-              <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
+              <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-8 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-500/15 text-sky-800">
                   <Target className="h-6 w-6" />
                 </div>
@@ -298,17 +227,17 @@ export default function StudentDashboard() {
                   <span className="font-headline text-lg font-bold text-foreground">Study focus</span>
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current goal</p>
                 </div>
-                <p className="text-sm text-muted-foreground">Topic spotlight: {goalTopic}</p>
+                <p className="text-sm font-medium text-foreground">{goalTopic}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-4">
               {statCards.map((stat) => {
                 const Icon = stat.icon;
                 return (
                   <div
                     key={stat.title}
-                    className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+                    className="flex flex-col gap-3 rounded-xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -325,26 +254,17 @@ export default function StudentDashboard() {
               })}
             </div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-              <div className="space-y-6">
-                <SectionCard>
-                  <div className="mb-5">
-                    <h2 className="font-headline text-xl font-bold tracking-tight text-foreground">Quick actions</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Shortcuts to live workflows backed by the BoneVisQA API.
-                    </p>
-                  </div>
-                  <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,17.5rem),1fr))]">
+            <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1.15fr_0.85fr]">
+              <div className="space-y-8">
+                <SectionCard title="Quick actions">
+                  <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,17.5rem),1fr))]">
                     {quickActions.map((action) => (
                       <QuickActionCard key={action.title} {...action} />
                     ))}
                   </div>
                 </SectionCard>
 
-                <SectionCard
-                  title="Topic mastery"
-                  description="Quiz accuracy and attempts by topic from your progress analytics."
-                >
+                <SectionCard title="Topic mastery">
                   {topicPending ? (
                     <div className="space-y-3">
                       <div className="h-20 animate-pulse rounded-xl bg-muted/60" />
@@ -386,17 +306,21 @@ export default function StudentDashboard() {
                           <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                             <div
                               className="h-full rounded-full bg-primary transition-all"
-                              style={{
-                                width: `${Math.min(
-                                  100,
-                                  Math.max(
-                                    0,
-                                    typeof topic.accuracyRate === 'number' && Number.isFinite(topic.accuracyRate)
-                                      ? topic.accuracyRate
-                                      : 0,
-                                  ),
-                                )}%`,
-                              }}
+                              style={
+                                {
+                                  '--accuracy-pct': `${Math.min(
+                                    100,
+                                    Math.max(
+                                      0,
+                                      typeof topic.accuracyRate === 'number' &&
+                                        Number.isFinite(topic.accuracyRate)
+                                        ? topic.accuracyRate
+                                        : 0,
+                                    ),
+                                  )}%`,
+                                  width: 'var(--accuracy-pct)',
+                                } as CSSProperties
+                              }
                             />
                           </div>
                         </div>
@@ -406,32 +330,30 @@ export default function StudentDashboard() {
                 </SectionCard>
               </div>
 
-              <div className="space-y-6">
-                <SectionCard>
-                  <h2 className="mb-4 text-lg font-semibold text-foreground">Overall progress</h2>
+              <div className="space-y-8">
+                <SectionCard title="Overall progress">
                   <div className="flex flex-col items-center">
                     <ProgressRing progress={clampPercent(progress?.quizAccuracyRate)} size={140} strokeWidth={10} />
-                    <div className="mt-4 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        Latest quiz score:{' '}
-                        <span className="font-medium text-foreground">{formatQuizPercent(progress?.latestQuizScore)}</span>
+                    <div className="mt-6 text-center">
+                      <p className="text-2xl font-bold text-foreground">
+                        {formatQuizPercent(progress?.latestQuizScore)}
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {progress?.completedQuizzes ?? 0} completed quizzes across {progress?.totalQuizAttempts ?? 0} attempts
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Latest quiz score
                       </p>
                     </div>
                   </div>
                 </SectionCard>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-2xl border border-border bg-card p-4 text-center shadow-sm">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
                     <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                       <Clock className="h-6 w-6 text-primary" />
                     </div>
                     <p className="text-2xl font-bold text-foreground">{progress?.totalQuizAttempts ?? 0}</p>
                     <p className="text-sm text-muted-foreground">Quiz attempts</p>
                   </div>
-                  <div className="rounded-2xl border border-border bg-card p-4 text-center shadow-sm">
+                  <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
                     <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-cyan-accent/10">
                       <MessageSquare className="h-6 w-6 text-primary" />
                     </div>
@@ -440,10 +362,7 @@ export default function StudentDashboard() {
                   </div>
                 </div>
 
-                <SectionCard
-                  title="Recent activity"
-                  description="Latest study, quiz, and expert-review events (chronological)."
-                >
+                <SectionCard title="Recent activity">
                   {activityPending ? (
                     <div className="space-y-4" aria-busy="true" aria-label="Loading recent activity">
                       {[0, 1, 2].map((i) => (
@@ -536,15 +455,8 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            <div className="flex justify-end border-t border-border pt-6">
-              <Link href="/student/quiz" className="text-sm font-medium text-primary hover:underline">
-                Open practice quizzes
-              </Link>
-            </div>
-          </>
-        )}
-      </div>
+      </>
       <StudentDashboardFab />
-    </div>
+    </DashboardOverviewLayout>
   );
 }

@@ -21,7 +21,7 @@ const studentMenuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/student/dashboard' },
   { icon: BookOpen, label: 'Case Catalog', href: '/student/catalog' },
   { icon: ClipboardList, label: 'History', href: '/student/history' },
-  { icon: BotMessageSquare, label: 'AI Q&A', href: '/student/qa' },
+  { icon: BotMessageSquare, label: 'Visual QA', href: '/student/visual-qa/workspace' },
   { icon: Trophy, label: 'Quizzes', href: '/student/quiz' },
   { icon: Eye, label: 'Review', href: '/student/quiz/history' },
   // TODO: Uncomment when AI Quiz is ready for production

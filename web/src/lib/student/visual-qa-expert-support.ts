@@ -1,4 +1,8 @@
 import type { VisualQaSessionReport, VisualQaTurn } from '@/lib/api/types';
+import {
+  formatReviewFeedbackDisplay,
+} from '@/lib/student/visual-qa-feedback';
+import { normalizeWorkflowStatus } from '@/lib/visual-qa-workflow';
 
 export type ExpertSupportUiState =
   | { phase: 'awaiting' }
@@ -23,6 +27,20 @@ function pickDisplayReason(...candidates: (string | null | undefined)[]): string
 
 function normalizeResponseKindRaw(kind?: string | null): string {
   return kind?.trim().toLowerCase() ?? '';
+}
+
+/** Matches triage / thread workflow: waiting on lecturer or expert (not terminal). */
+function workflowIndicatesAwaitingExpert(raw: string | null | undefined): boolean {
+  if (!String(raw ?? '').trim()) return false;
+  const n = normalizeWorkflowStatus(raw);
+  return n === 'PendingExpertReview' || n === 'EscalatedToExpert';
+}
+
+function turnIndicatesAwaitingExpert(turn: VisualQaTurn): boolean {
+  if (workflowIndicatesAwaitingExpert(turn.reviewState)) return true;
+  if (workflowIndicatesAwaitingExpert(turn.answerStatus)) return true;
+  const status = (turn.answerStatus ?? '').trim().toLowerCase();
+  return status === 'pending' || status.includes('pending');
 }
 
 function resolveReviewUpdateTarget(reviewTurn: VisualQaTurn, sortedTurns: VisualQaTurn[]): VisualQaTurn | null {
@@ -77,9 +95,13 @@ export function buildExpertSupportMapFromSession(session: VisualQaSessionReport)
   const feedbackByAssistant = collectReviewFeedbackByAssistantId(sorted);
   const out: Record<string, ExpertSupportUiState> = {};
 
-  const st = (session.status ?? '').toLowerCase();
+  const st = (session.sessionStatus ?? session.status ?? '').toLowerCase();
   const sessionReviewLc = (session.reviewState ?? '').toLowerCase();
-  const sessionPolicy = pickDisplayReason(session.rejectionReason, session.policyReason);
+  const sessionPolicy = pickDisplayReason(
+    formatReviewFeedbackDisplay(session.reviewFeedback),
+    session.rejectionReason,
+    session.policyReason,
+  );
 
   for (const turn of sorted) {
     const aid = turn.assistantMessageId?.trim();
@@ -88,7 +110,7 @@ export function buildExpertSupportMapFromSession(session: VisualQaSessionReport)
     const rs = (turn.reviewState ?? '').toLowerCase();
     const inlineFeedback = feedbackByAssistant.get(aid);
 
-    if (rs === 'pending' || rs === 'escalated') {
+    if (turnIndicatesAwaitingExpert(turn)) {
       out[aid] = { phase: 'awaiting' };
       continue;
     }
@@ -125,27 +147,23 @@ export function buildExpertSupportMapFromSession(session: VisualQaSessionReport)
     }
   }
 
-  // Session rejected nhưng turn chưa có reviewState (BE thiếu field): vẫn hiển thị kèm lý do nếu có
-  if ((st.includes('reject') || sessionReviewLc === 'rejected') && sessionPolicy?.trim()) {
-    for (const turn of [...sorted].reverse()) {
-      const aid = turn.assistantMessageId?.trim();
-      if (!aid || out[aid]) continue;
-      if (turn.isReviewTarget === true) {
-        out[aid] = {
-          phase: 'resolved',
-          tone: 'danger',
-          message: pickDisplayReason(feedbackByAssistant.get(aid), sessionPolicy) || 'This request was rejected.',
-        };
-        break;
-      }
+  // Per-turn only: do not broadcast session-level awaiting/rejected to every turn.
+  for (const turn of sorted) {
+    const aid = turn.assistantMessageId?.trim();
+    if (!aid || out[aid]) continue;
+
+    if (turn.isReviewTarget === true && turnIndicatesAwaitingExpert(turn)) {
+      out[aid] = { phase: 'awaiting' };
+      continue;
     }
-    const assistants = sorted.filter((t) => t.assistantMessageId?.trim());
-    if (assistants.length === 1 && !out[assistants[0].assistantMessageId!.trim()]) {
-      const aid = assistants[0].assistantMessageId!.trim();
+
+    if (turn.isReviewTarget === true && (st.includes('reject') || sessionReviewLc === 'rejected')) {
       out[aid] = {
         phase: 'resolved',
         tone: 'danger',
-        message: pickDisplayReason(feedbackByAssistant.get(aid), sessionPolicy) || 'This request was rejected.',
+        message:
+          pickDisplayReason(feedbackByAssistant.get(aid), sessionPolicy, turn.policyReason) ||
+          'This request was rejected.',
       };
     }
   }

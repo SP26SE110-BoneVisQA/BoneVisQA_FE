@@ -1,6 +1,7 @@
 # BoneVisQA — API contracts (FE view)
 
-> **Nguồn:** Tổng hợp từ `web/src/lib/api/*.ts`. BE chính thức có thể mở rộng; khi Backend cung cấp `_ai-context/API_CONTRACTS.md`, merge và ghi version/ngày cập nhật.
+> **Cập nhật:** 2026-05-22 (đồng bộ Visual QA code freeze + FE `web/src/lib/api/visual-qa/`).  
+> **Nguồn:** Tổng hợp từ `web/src/lib/api/*.ts` và `FRONTEND_HANDOFF_REPORT.md`.
 
 **Base URL:** `NEXT_PUBLIC_API_URL` (ví dụ `http://localhost:5046`). Mọi path dưới đây là suffix sau origin.
 
@@ -38,10 +39,13 @@
 | GET | `/api/student/progress/recent-activity` | |
 | GET | `/api/student/announcements` | |
 | GET | `/api/students/classes` | |
-| POST | `/api/student/visual-qa/ask` | multipart Visual QA |
+| POST | `/api/student/visual-qa/ask` | multipart Visual QA (legacy — prefer `ask-json`) |
+| POST | `/api/student/visual-qa/ask-json` | JSON Visual QA chat (`questionText`, `caseId`, `sessionId?`, `coordinates?`, `clientRequestId?`); query `locale=vi\|en` |
+| POST | `/api/student/visual-qa/upload-personal` | multipart DICOM `.zip`/`.rar` (max 200MB) → `sessionId`, `caseId`, `previewImageUrl`, `ingestOk` |
 | POST | `/api/student/visual-qa/turns/{assistantMessageId}/request-review` | query `sessionId`; path id is the **assistant (AI) message** id for that turn |
-| GET | `/api/student/visual-qa/history/cases` | |
-| GET | `/api/student/visual-qa/history/personal` | |
+| GET | `/api/student/visual-qa/history/{sessionId}` | Full thread (`VisualQaThreadDto`) |
+| GET | `/api/student/visual-qa/history/cases` | Catalog session list (`limit`, `offset`) |
+| GET | `/api/student/visual-qa/history/personal` | Personal upload session list |
 | GET | `/api/student/cases/catalog` | query: `location`, `lesionType`, `difficulty`, `q` / `search` (optional text; FE gửi cả hai nếu BE hỗ trợ một trong hai). Response item nên có: `thumbnailUrl`/`imageUrl`, `tags` (string[]), `categoryName`/`category`, `difficulty` (raw enum), `createdAt`, `caseOrigin` hoặc `source` (`ExpertCreated` / `CommunityPromoted` / tương đương). |
 | GET | `/api/student/cases/{id}` | Chi tiết: `description`, `diagnosis`, `keyLearningPoints` / `keyLearnings`, `images[]` (url + `roiBoundingBox` / annotations), `caseOrigin` để FE khóa Visual QA. |
 | GET | `/api/cases/filters` | |
@@ -127,7 +131,35 @@
 
 ## Visual QA thread (REST)
 
-- Các route thread/session nằm trong `student-visual-qa.ts`, `normalize-visual-qa.ts`, và trang `web/src/app/student/qa/image/page.tsx` — xem code cho query `sessionId`, `roiBoundingBox`, `questionCoordinates`.
+- **Chuẩn mới (code freeze):** `web/src/lib/api/visual-qa/` — `ask-json.ts`, `upload-personal.ts`, `history.ts`; state `web/src/features/visual-qa/store/visual-qa-store.ts`, hooks `useVisualQA`, `useVisualQAUpload`.
+- **Routes FE:** `/student/visual-qa/upload`, `/student/visual-qa/workspace`; legacy `/student/qa/image` → redirect workspace (map `caseId`, `sessionId`, …).
+- Legacy multipart/SSE: `student-visual-qa.ts` (`ask`, `ask-stream`) — không dùng cho UI workspace mới.
+- **Lỗi:** RFC 7807 + body Visual QA (`message`, `systemNotice`, `latestTurn`, `capabilities`) qua `web/src/lib/api/errors/`; toast tiếng Việt `showApiErrorToast` (400/404/503/500/429); chat `ask-json` dùng `skipApiToast: true`.
+
+### ask-json (request / response tóm tắt)
+
+| Field request | Ghi chú |
+|---------------|---------|
+| `questionText` | Bắt buộc |
+| `caseId` | Bắt buộc (catalog hoặc sau upload) |
+| `sessionId` | Follow-up; bỏ qua lượt đầu catalog |
+| `coordinates` | JSON bbox chuẩn hóa 0–1 (ROI) |
+| `clientRequestId` | UUID tùy chọn |
+
+| Field response | UI |
+|----------------|-----|
+| `diagnosis`, `findings[]`, `differentialDiagnoses[]`, `reflectiveQuestions[]` | `WorkspaceStructuredAnswer` |
+| `citations[]` | Citation chips |
+| `capabilities.canAskNext`, `turnsUsed`, `turnLimit` | Khóa composer |
+| `latestTurn` | Append timeline; 400 session block vẫn append nếu có |
+
+### upload-personal
+
+| Field | Ghi chú |
+|-------|---------|
+| `file` | `.zip` / `.rar`, max 200MB |
+| `diagnosisText` | Tùy chọn |
+| Response `ingestOk`, `sessionId`, `caseId`, `previewImageUrl` | Zustand `setFromUpload` → redirect workspace |
 
 ---
 

@@ -1,0 +1,45 @@
+'use client';
+
+import type { ReactNode } from 'react';
+import { useDashboardHeader, type DashboardHeaderConfig } from '@/components/layouts/dashboard-header-context';
+import { QueryPageSkeleton } from '@/components/shared/QueryPageSkeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
+
+type DetailPageLayoutProps = DashboardHeaderConfig & {
+  children: ReactNode;
+  isLoading?: boolean;
+  error?: string | null;
+  maxWidthClass?: string;
+  className?: string;
+};
+
+export function DetailPageLayout({
+  children,
+  isLoading = false,
+  error = null,
+  maxWidthClass = 'max-w-5xl',
+  className,
+  title,
+  actions,
+  showBack = true,
+}: DetailPageLayoutProps) {
+  useDashboardHeader({ title, actions, showBack });
+
+  return (
+    <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
+      <div className={cn('mx-auto w-full flex-1 space-y-8 p-8', maxWidthClass)}>
+        {isLoading ? (
+          <QueryPageSkeleton variant="detail" minHeight="min-h-[420px]" />
+        ) : error ? (
+          <Alert variant="destructive">
+            <AlertTitle>Unable to load details</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}

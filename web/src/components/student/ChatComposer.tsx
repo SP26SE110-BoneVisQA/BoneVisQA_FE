@@ -36,7 +36,7 @@ export function ChatComposer({
               type="button"
               variant="outline"
               size="sm"
-              className="h-11 w-11 shrink-0 rounded-full p-0"
+              className="h-11 w-11 shrink-0 rounded-2xl border-slate-200/80 bg-white p-0 shadow-sm"
               disabled={isDisabled}
               aria-label="Attach imaging file"
               onClick={onChooseFile}
@@ -53,7 +53,7 @@ export function ChatComposer({
           onChange={(e) => onChange(e.target.value)}
           disabled={isDisabled}
           placeholder={placeholder}
-          className="h-11 min-w-0 flex-1 rounded-2xl border border-border-color bg-background/70 px-4 text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-cyan-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
+          className="h-12 min-w-0 flex-1 rounded-[1.35rem] border border-slate-200/80 bg-slate-50/90 px-4 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus:outline-none focus:ring-2 focus:ring-cyan-accent/60 disabled:cursor-not-allowed disabled:opacity-70"
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -65,7 +65,7 @@ export function ChatComposer({
         <motion.div layout>
           <Button
             type="button"
-            className="h-11 w-11 shrink-0 rounded-full px-0 transition-all hover:opacity-90 active:scale-95"
+            className="h-12 w-12 shrink-0 rounded-[1.35rem] px-0 transition-all hover:opacity-90 active:scale-95"
             disabled={isDisabled}
             aria-label={isDisabled ? 'Sending message' : 'Send message'}
             aria-busy={isLoading}

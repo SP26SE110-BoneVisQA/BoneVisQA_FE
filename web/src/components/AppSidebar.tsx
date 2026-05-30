@@ -5,81 +5,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useLogout } from '@/lib/useLogout';
 import { useAuth, type BackendRole } from '@/lib/useAuth';
-import {
-  BookOpen,
-  CheckSquare,
-  Flag,
-  Database,
-  LayoutDashboard,
-  HelpCircle,
-  LogOut,
-  Plus,
-  ScanSearch,
-  Stethoscope,
-  ClipboardList,
-  BadgeCheck,
-  Users,
-  FileQuestion,
-  BarChart3,
-  Megaphone,
-
-  Sparkles,
-  ChevronLeft,
-  ChevronRight,
-  GraduationCap,
-} from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight, Stethoscope } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { LucideIcon } from 'lucide-react';
+import { navByRole, roleMeta, type AppRoleKey, type NavItem } from '@/config/navigation';
 
-type RoleKey = 'admin' | 'lecturer' | 'expert' | 'student';
-
-type NavItem = {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-};
-
-const navByRole: Record<RoleKey, NavItem[]> = {
-  admin: [
-    { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
-    { label: 'User Management', href: '/admin/users', icon: Users },
-    { label: 'Medical Student Verification', href: '/admin/verifications', icon: BadgeCheck },
-    { label: 'Class Management', href: '/admin/classes', icon: GraduationCap },
-    { label: 'Knowledge Base', href: '/admin/documents', icon: Database },
-    { label: 'Flagged chunks', href: '/admin/flagged-chunks', icon: Flag },
-    { label: 'Medical Cases', href: '/admin/cases', icon: BookOpen },
-  ],
-  lecturer: [
-    { label: 'Dashboard', href: '/lecturer/dashboard', icon: LayoutDashboard },
-    { label: 'Triage Workbench', href: '/lecturer/qa-triage', icon: Stethoscope },
-    { label: 'Classes', href: '/lecturer/classes', icon: Users },
-    { label: 'Quiz Library', href: '/lecturer/quizzes', icon: FileQuestion },
-    { label: 'Assignments', href: '/lecturer/assignments', icon: ClipboardList },
-    { label: 'Cases', href: '/lecturer/cases', icon: BookOpen },
-    { label: 'Analytics', href: '/lecturer/analytics', icon: BarChart3 },
-    { label: 'Announcements', href: '/lecturer/announcements', icon: Megaphone },
-  ],
-  expert: [
-    { label: 'Dashboard', href: '/expert/dashboard', icon: LayoutDashboard },
-    { label: 'Expert review', href: '/expert/reviews', icon: CheckSquare },
-    { label: 'Case Library', href: '/expert/cases', icon: BookOpen },
-    { label: 'Quiz Library', href: '/expert/quizzes', icon: FileQuestion },
-  ],
-  student: [
-    { label: 'Dashboard', href: '/student/dashboard', icon: LayoutDashboard },
-    { label: 'Case Library', href: '/student/catalog', icon: BookOpen },
-    { label: 'Visual QA', href: '/student/qa/image', icon: ScanSearch },
-    { label: 'Quizzes', href: '/student/quizzes', icon: HelpCircle },
-    { label: 'Class', href: '/student/classes', icon: Users },
-  ],
-};
-
-const roleMeta: Record<RoleKey, { label: string; actionHref: string; actionLabel: string }> = {
-  admin: { label: 'Radiology Education', actionHref: '/admin/documents', actionLabel: 'Upload Document' },
-  lecturer: { label: 'Radiology Education', actionHref: '/lecturer/qa-triage', actionLabel: 'Open Triage' },
-  expert: { label: 'Radiology Education', actionHref: '/expert/reviews', actionLabel: 'Open reviews' },
-  student: { label: 'Radiology Education', actionHref: '/student/qa/image', actionLabel: 'New Analysis' },
-};
+type RoleKey = AppRoleKey;
 
 function mapBackendRoleToRoleKey(role: BackendRole | null | undefined): RoleKey | null {
   if (role === 'Student') return 'student';
@@ -121,7 +51,7 @@ export function AppSidebar({
   }, [resolvedRole]);
   const meta = resolvedRole ? roleMeta[resolvedRole] : null;
 
-  const shellClass = `fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-blue-100 bg-[#f0f7ff] text-[#1e293b] shadow-sm transition-[width] duration-200 ease-out ${
+  const shellClass = `flex h-full shrink-0 flex-col border-r border-blue-100 bg-[#f0f7ff] text-[#1e293b] shadow-sm transition-[width] duration-200 ease-out ${
     collapsed ? 'w-[72px]' : 'w-[260px]'
   }`;
 
@@ -263,12 +193,14 @@ export function AppSidebar({
       </nav>
 
       <div className="border-t border-blue-100 p-2">
-        <Link href={meta.actionHref} className="block" title={collapsed ? meta.actionLabel : undefined}>
-          <Button className={`w-full justify-center ${collapsed ? 'px-2' : ''}`}>
-            <Plus className="h-4 w-4 shrink-0" />
-            {!collapsed ? <span className="ml-2">{meta.actionLabel}</span> : null}
-          </Button>
-        </Link>
+        <Button
+          onClick={logout}
+          variant="outline"
+          className="w-full justify-center border-blue-200 bg-white text-[#1e293b] hover:bg-blue-100"
+        >
+          <LogOut className="h-4 w-4" />
+          {!collapsed ? <span className="ml-2">Logout</span> : null}
+        </Button>
       </div>
     </aside>
   );
