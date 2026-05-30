@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   FileQuestion,
   Pencil,
@@ -8,6 +9,7 @@ import {
   ZoomIn,
   CircleDot,
   Award,
+  ImageOff,
 } from 'lucide-react';
 import type { QuizQuestionDto } from '@/lib/api/types';
 import {
@@ -55,6 +57,39 @@ function getQuestionTypeStyle(type: string | null): {
   };
 }
 
+function ImageWithFallback({
+  src,
+  alt,
+  className,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError || !src) {
+    return (
+      <div className={`flex items-center justify-center bg-slate-900 ${className}`}>
+        <div className="flex flex-col items-center gap-2 text-slate-500">
+          <ImageOff className="h-8 w-8" />
+          <span className="text-xs">No image</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => setHasError(true)}
+    />
+  );
+}
+
 export default function QuestionCard({
   question,
   caseThumbnail,
@@ -87,17 +122,14 @@ export default function QuestionCard({
     return (
       <div className="group flex gap-8 rounded-3xl bg-card p-8 shadow-lg shadow-black/5 transition-all hover:bg-muted/20 hover:shadow-xl hover:shadow-black/10 border border-border/30">
         <div className="relative h-44 w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-slate-900 shadow-xl">
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={thumbSrc}
-              alt={hasRealImage ? '' : 'Placeholder — lecturer can add diagnostic image'}
-              className={`h-full w-full object-cover ${hasRealImage ? 'opacity-80' : 'opacity-95'}`}
-            />
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-              <ZoomIn className="h-10 w-10 text-white" />
-            </div>
-          </>
+          <ImageWithFallback
+            src={thumbSrc}
+            alt={hasRealImage ? '' : 'Placeholder — lecturer can add diagnostic image'}
+            className={`h-full w-full object-cover ${hasRealImage ? 'opacity-80' : 'opacity-95'}`}
+          />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+            <ZoomIn className="h-10 w-10 text-white" />
+          </div>
         </div>
 
         <div className="flex flex-1 flex-col justify-between">
@@ -233,8 +265,7 @@ export default function QuestionCard({
               const custom = hasQuizQuestionCustomImage(question, caseThumbnail);
               return (
                 <>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <ImageWithFallback
                     src={src}
                     alt={custom ? '' : 'Placeholder diagnostic image'}
                     className={`h-full w-full object-cover ${custom ? 'opacity-85' : 'opacity-95'}`}
@@ -313,17 +344,14 @@ export default function QuestionCard({
     <div className="bg-card rounded-2xl border-2 border-border p-5 transition-colors hover:bg-accent/5 group">
       <div className="flex gap-5">
         <div className="relative h-32 w-44 flex-shrink-0 overflow-hidden rounded-xl bg-muted">
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={defaultThumb}
-              alt={question.caseTitle || (defaultHasCustom ? 'Case thumbnail' : 'Default placeholder image')}
-              className={`h-full w-full object-cover ${defaultHasCustom ? 'opacity-80' : 'opacity-95'}`}
-            />
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-              <FileQuestion className="h-8 w-8 text-white" />
-            </div>
-          </>
+          <ImageWithFallback
+            src={defaultThumb}
+            alt={question.caseTitle || (defaultHasCustom ? 'Case thumbnail' : 'Default placeholder image')}
+            className={`h-full w-full object-cover ${defaultHasCustom ? 'opacity-80' : 'opacity-95'}`}
+          />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+            <FileQuestion className="h-8 w-8 text-white" />
+          </div>
         </div>
 
         <div className="flex flex-1 flex-col justify-between">

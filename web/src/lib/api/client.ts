@@ -16,7 +16,7 @@ export { sanitizeForUserToast } from '@/lib/api/errors/sanitize-for-user';
  * All axios paths are like `/api/...`, so the base must be e.g. `http://localhost:5046`, not `.../api`.
  * Do not commit other ports (e.g. 5000) here — override in `.env.local` if your backend differs.
  */
-const DEV_FALLBACK_API_ORIGIN = 'http://localhost:5046';
+const DEV_FALLBACK_API_ORIGIN = 'https://localhost:5047';
 
 /** BE gốc chỉ là origin + port, ví dụ http://localhost:5046 — không thêm /api/... */
 export function normalizeApiBaseUrl(raw: string): string {
@@ -208,7 +208,7 @@ export function getApiErrorMessage(err: unknown): string {
       const origin = getPublicApiOrigin();
       const hint =
         origin ||
-        '(set NEXT_PUBLIC_API_URL in .env.local, e.g. http://localhost:5046 — see .env.example)';
+        '(set NEXT_PUBLIC_API_URL in .env.local, e.g. https://localhost:5047 — see .env.example)';
       raw = `Cannot reach the API at ${hint}. Start the backend and ensure the URL matches its host and port.`;
       return raw;
     }
@@ -278,6 +278,48 @@ export function getApiProblemDetails(err: unknown): {
   }
   if (err instanceof Error) return { title: err.message };
   return { title: 'Request failed' };
+}
+
+/**
+ * Returns a headers object with Authorization token for raw fetch requests.
+ * Use the `http` axios instance instead when possible (it handles this automatically).
+ */
+export function authHeader(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const token = localStorage.getItem('token');
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
+/**
+ * Extracts and throws the API error from a fetch Response.
+ * Handles both success (returns parsed JSON) and error responses.
+ */
+export async function getResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const data = await response.json();
+      if (data?.message) message = data.message;
+      else if (data?.detail) message = data.detail;
+      else if (data?.title) message = data.title;
+    } catch {
+      try {
+        const text = await response.text();
+        if (text) message = text;
+      } catch {
+        // use default message
+      }
+    }
+    throw new Error(message);
+  }
+  // Handle 204 No Content (DELETE often returns no body)
+  const contentLength = response.headers.get('content-length');
+  const contentType = response.headers.get('content-type');
+  if (response.status === 204 || contentLength === '0' || (!contentType?.includes('application/json') && !contentType?.includes('text/'))) {
+    return undefined as T;
+  }
+  return response.json() as Promise<T>;
 }
 
 declare module 'axios' {

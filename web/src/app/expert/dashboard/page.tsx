@@ -9,7 +9,6 @@ import QuickStatsCard from '@/components/expert/QuickStatsCard';
 import ReviewCard from '@/components/expert/ReviewCard';
 import CaseManagementCard from '@/components/expert/CaseManagementCard';
 import ExpertActivityPanel from '@/components/expert/dashboard/ExpertActivityPanel';
-import ExpertBottomStats from '@/components/expert/dashboard/ExpertBottomStats';
 import {
   FolderOpen,
   CheckCircle,
@@ -27,17 +26,17 @@ import { EmptyState } from '@/components/shared/EmptyState';
 export default function ExpertDashboardPage() {
   const router = useRouter();
 
-  const { data, error, isPending } = useQuery({
+  const { data: bundle, error, isPending } = useQuery({
     queryKey: queryKeys.expert.dashboard(),
     queryFn: fetchExpertDashboardBundle,
   });
 
   const errorMessage = error ? getQueryErrorMessage(error, 'Failed to load dashboard data.') : null;
 
-  const stats = data?.stats ?? null;
-  const pendingReviews = data?.pendingReviews ?? [];
-  const recentCases = data?.recentCases ?? [];
-  const activity = data?.activity ?? null;
+  const stats = bundle?.stats ?? null;
+  const pendingReviews = bundle?.pendingReviews ?? [];
+  const recentCases = useMemo(() => bundle?.recentCases ?? [], [bundle?.recentCases]);
+  const activity = bundle?.activity ?? null;
 
   const expertStats = useMemo(() => {
     if (!stats) return [];
@@ -87,11 +86,11 @@ export default function ExpertDashboardPage() {
   return (
     <DashboardOverviewLayout
       title="Expert workbench"
-      isLoading={isPending && !data}
-      error={errorMessage && !data ? errorMessage : null}
+      isLoading={isPending && !bundle}
+      error={errorMessage && !bundle ? errorMessage : null}
       maxWidthClass="max-w-[1200px]"
     >
-      {data ? (
+      {bundle ? (
           <>
             <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               {expertStats.map((stat) => (
@@ -228,10 +227,6 @@ export default function ExpertDashboardPage() {
               </div>
             </div>
 
-            <ExpertBottomStats
-              totalReviews={stats?.totalReviews ?? 0}
-              casesApproved={stats?.approvedThisMonth ?? 0}
-            />
           </>
       ) : null}
     </DashboardOverviewLayout>

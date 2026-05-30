@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLogout } from '@/lib/useLogout';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import {
   LayoutDashboard,
   Users,
@@ -16,6 +17,7 @@ import {
   ListFilter,
   FileQuestion,
   ClipboardCheck,
+  UserCog,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -33,6 +35,7 @@ const lecturerMenuItems: LecturerMenuItem[] = [
   { icon: ClipboardCheck, label: 'QA Triage', href: '/lecturer/qa-triage' },
   { icon: FolderOpen, label: 'Cases', href: '/lecturer/cases' },
   { icon: ClipboardList, label: 'Assignments', href: '/lecturer/assignments' },
+  { icon: UserCog, label: 'Expert Assignments', href: '/lecturer/expert-assignments' },
   { icon: BarChart3, label: 'Analytics', href: '/lecturer/analytics' },
   { icon: Bell, label: 'Announcements', href: '/lecturer/announcements' },
   { icon: Settings, label: 'Settings', href: '/lecturer/settings' },
@@ -96,6 +99,11 @@ export default function LecturerSidebar() {
 
       {/* User & Logout */}
       <div className="px-3 py-4 border-t border-white/10">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="bg-white rounded-lg p-0.5 shadow-sm overflow-hidden">
+            <ThemeToggle />
+          </div>
+        </div>
         <Link
           href="/lecturer/settings"
           className="flex items-center gap-3 px-4 py-3 mb-2 rounded-lg hover:bg-sidebar-hover transition-colors duration-150"

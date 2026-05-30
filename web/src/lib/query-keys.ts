@@ -7,8 +7,16 @@ export const queryKeys = {
   student: {
     all: ['student'] as const,
     dashboard: () => [...queryKeys.student.all, 'dashboard'] as const,
-    catalog: (filters: { location?: string; lesionType?: string; difficulty?: string; q?: string }) =>
-      [...queryKeys.student.all, 'catalog', filters] as const,
+    catalog: (filters: {
+      location?: string;
+      lesionType?: string;
+      difficulty?: string;
+      boneSpecialtyId?: string;
+      pathologyCategoryId?: string;
+      severity?: string;
+      patientAgeGroup?: string;
+      q?: string;
+    }) => [...queryKeys.student.all, 'catalog', filters] as const,
     catalogFilters: () => [...queryKeys.student.all, 'catalog-filters'] as const,
     caseDetail: (caseId: string) => [...queryKeys.student.all, 'case', caseId] as const,
     history: () => [...queryKeys.student.all, 'history'] as const,

@@ -1,89 +1,110 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/toast';
+import { StudentAppChrome } from '@/components/student/StudentAppChrome';
+import { Button } from '@/components/ui/button';
 import {
   Loader2,
   CheckCircle2,
   XCircle,
   ArrowLeft,
   ArrowRight,
-  ZoomIn,
-  Minus,
   BookOpen,
-  PlayCircle,
-  AlertCircle,
-  Timer,
   HelpCircle,
-  Contrast,
-  Ruler,
   ChevronDown,
-  Eye,
   Star,
   Zap,
+  Lightbulb,
+  MessageSquare,
+  Sparkles,
+  BookmarkPlus,
+  FolderOpen,
+  Play,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import {
   generateAndSaveAIPracticeQuiz,
   submitAIPracticeQuiz,
-  fetchQuizAttemptReview,
+  fetchQuizHint,
+  saveQuizToFlashcards,
 } from '@/lib/api/student';
-import type { QuizAttemptReview, StudentGeneratedQuizSession } from '@/lib/api/student';
-import { resolveApiAssetUrl, getApiErrorMessage } from '@/lib/api/client';
-import type { StudentSubmitQuestionDto } from '@/lib/api/types';
-
-const ZOOM_LEVELS = [1, 1.25, 1.5, 2, 2.5];
-
-function formatMmSs(totalSeconds: number): string {
-  const m = Math.floor(Math.max(0, totalSeconds) / 60);
-  const s = Math.max(0, totalSeconds) % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
+import type { StudentGeneratedQuizSession } from '@/lib/api/student';
+import { getApiErrorMessage } from '@/lib/api/client';
 
 const QUICK_TOPICS = [
-  'Long Bone Fractures',
-  'Spine Lesions',
-  'Joint Diseases',
-  'Bone Tumors',
-  'Upper Extremity',
-  'Lower Extremity',
-  'Pelvis & Hip',
-  'Foot & Ankle',
+  'Gãy xương dài',
+  'Tổn thương cột sống',
+  'Bệnh lý khớp',
+  'U xương',
+  'Chi trên',
+  'Chi dưới',
+  'Khung chậu và háng',
+  'Bàn chân và mắt cá chân',
+];
+
+const ALL_TOPICS = [
+  ...QUICK_TOPICS,
+  'Bệnh xương chuyển hóa',
+  'Bệnh xương nhiễm trùng',
+  'Sọ và mặt',
+  'Ngực và sườn',
+  'Gãy xương căng stress',
+  'U xương lành tính và ác tính',
+  'Bệnh thoái hóa',
+  'Rối loạn mạch máu xương',
 ];
 
 type DifficultyLevel = '' | 'Easy' | 'Medium' | 'Hard';
 type QuizState = 'config' | 'generating' | 'active' | 'submitting' | 'result';
 
+interface QuizQuestionResult {
+  questionId: string;
+  questionText: string;
+  type?: string | null;
+  optionA: string | null;
+  optionB: string | null;
+  optionC: string | null;
+  optionD: string | null;
+  correctAnswer: string | null;
+  explanation: string | null;
+  studentAnswer: string | null;
+  isCorrect: boolean;
+}
+
 export default function AIQuizPage() {
   const router = useRouter();
   const toast = useToast();
 
-  // Config state
   const [selectedTopic, setSelectedTopic] = useState('');
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [questionCount, setQuestionCount] = useState(10);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('');
 
-  // Quiz session state
   const [quizState, setQuizState] = useState<QuizState>('config');
   const [session, setSession] = useState<StudentGeneratedQuizSession | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [quizResult, setQuizResult] = useState<{ score: number; passed: boolean; totalQuestions: number; correctAnswers: number } | null>(null);
-  const [quizReview, setQuizReview] = useState<QuizAttemptReview | null>(null);
-
-  // Image controls
-  const [zoomIndex, setZoomIndex] = useState(0);
-  const [highContrastImg, setHighContrastImg] = useState(false);
-  const [straightenActive, setStraightenActive] = useState(false);
-
-  // UI state
+  const [quizResult, setQuizResult] = useState<{
+    score: number;
+    passed: boolean;
+    totalQuestions: number;
+    correctAnswers: number;
+  } | null>(null);
+  const [quizResultDetails, setQuizResultDetails] = useState<QuizQuestionResult[]>([]);
   const [showAIReasoning, setShowAIReasoning] = useState(false);
-  const [showReview, setShowReview] = useState(false);
+
+  const [savingFlashcards, setSavingFlashcards] = useState(false);
+
+  const [hintLevel, setHintLevel] = useState(1);
+  const [currentHint, setCurrentHint] = useState<string | null>(null);
+  const [loadingHint, setLoadingHint] = useState(false);
+  const [hintUsedCount, setHintUsedCount] = useState(0);
+
+  // MultiSelect answers: Record<questionId, Set of selected keys>
+  const [multiSelectAnswers, setMultiSelectAnswers] = useState<Record<string, Set<string>>>({});
 
   const questions = session?.questions ?? [];
   const currentQ = questions[currentIndex];
@@ -92,31 +113,80 @@ export default function AIQuizPage() {
   const allAnswered = answeredCount === totalQ && totalQ > 0;
   const currentAnswer = currentQ ? answers[currentQ.questionId] : null;
 
-  const handleSelect = useCallback((option: string) => {
-    if (!currentQ || quizState !== 'active') return;
-    setAnswers((prev) => ({ ...prev, [currentQ.questionId]: option }));
-  }, [currentQ, quizState]);
+  const handleRequestHint = useCallback(async () => {
+    if (!currentQ) return;
+    setLoadingHint(true);
+    try {
+      const result = await fetchQuizHint(currentQ.questionId, session?.attemptId, hintLevel);
+      if (result.success && result.hint) {
+        setCurrentHint(result.hint);
+        setHintLevel((prev) => Math.min(prev + 1, 3));
+        setHintUsedCount((prev) => prev + 1);
+        toast.success('Hint loaded!');
+      } else {
+        toast.error(result.errorMessage || 'Failed to load hint');
+      }
+    } catch {
+      toast.error('Failed to load hint');
+    } finally {
+      setLoadingHint(false);
+    }
+  }, [currentQ, session?.attemptId, hintLevel, toast]);
+
+  const handleSelect = useCallback(
+    (option: string) => {
+      if (!currentQ || quizState !== 'active') return;
+      setAnswers((prev) => ({ ...prev, [currentQ.questionId]: option }));
+    },
+    [currentQ, quizState],
+  );
+
+  const handleMultiSelectToggle = useCallback(
+    (questionId: string, key: string) => {
+      if (!currentQ || quizState !== 'active') return;
+      setMultiSelectAnswers((prev) => {
+        const prevKeys = prev[questionId] ?? new Set<string>();
+        const next = new Set(prevKeys);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        const nextKeys = Array.from(next).sort().join(',');
+        setAnswers((a) => ({ ...a, [questionId]: nextKeys }));
+        return { ...prev, [questionId]: next };
+      });
+    },
+    [currentQ, quizState],
+  );
 
   const handleGenerate = async () => {
     if (!selectedTopic.trim()) {
-      toast.error('Please select a topic.');
+      toast.error('Vui lòng chọn một chủ đề.');
       return;
     }
     setQuizState('generating');
     setAnswers({});
     setCurrentIndex(0);
     setQuizResult(null);
-    setQuizReview(null);
+    setQuizResultDetails([]);
+    setCurrentHint(null);
+    setHintLevel(1);
+    setHintUsedCount(0);
     try {
-      const data = await generateAndSaveAIPracticeQuiz(selectedTopic, questionCount, difficulty || undefined);
+      const data = await generateAndSaveAIPracticeQuiz(
+        selectedTopic,
+        questionCount,
+        difficulty || undefined,
+      );
       if (!data.attemptId || data.attemptId === '00000000-0000-0000-0000-000000000000') {
-        toast.info('AI cannot generate questions. Please try a different topic.');
+        toast.info('AI không thể tạo câu hỏi cho chủ đề này. Vui lòng thử chủ đề khác.');
         setQuizState('config');
         return;
       }
       setSession(data);
       setQuizState('active');
-      toast.success(`Quiz "${data.title}" created! Start practicing.`);
+      toast.success(`Quiz "${data.title}" đã được tạo! Bắt đầu luyện tập.`);
     } catch (e) {
       toast.error(getApiErrorMessage(e));
       setQuizState('config');
@@ -127,20 +197,38 @@ export default function AIQuizPage() {
     if (!session) return;
     setSubmitting(true);
     try {
-      const payload: StudentSubmitQuestionDto[] = Object.entries(answers).map(
-        ([questionId, studentAnswer]) => ({ questionId, studentAnswer }),
-      );
+      const payload = Object.entries(answers).map(([questionId, studentAnswer]) => ({
+        questionId,
+        studentAnswer,
+      }));
       const result = await submitAIPracticeQuiz(session.attemptId, payload);
       setQuizResult(result);
+
+      const details: QuizQuestionResult[] = session.questions.map((q) => {
+        const studentAnswer = answers[q.questionId] || null;
+        const correctAnswer = q.correctAnswer || null;
+        const isCorrect =
+          q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select'
+            ? (studentAnswer || '').split(',').map((k) => k.trim()).filter(Boolean).sort().join(',') ===
+              (correctAnswer || '').split(',').map((k) => k.trim()).filter(Boolean).sort().join(',')
+            : studentAnswer === correctAnswer;
+        return {
+          questionId: q.questionId,
+          questionText: q.questionText,
+          type: q.type || null,
+          optionA: q.optionA || null,
+          optionB: q.optionB || null,
+          optionC: q.optionC || null,
+          optionD: q.optionD || null,
+          correctAnswer,
+          explanation: q.explanation || null,
+          studentAnswer,
+          isCorrect,
+        };
+      });
+      setQuizResultDetails(details);
       setQuizState('result');
-      toast.success(`Submitted! Score: ${Math.round(result.score)}%`);
-      // Load review
-      try {
-        const review = await fetchQuizAttemptReview(session.attemptId);
-        setQuizReview(review);
-      } catch {
-        // non-critical
-      }
+      toast.success('Submission successful! Your quiz has been sent. Score will be updated after the instructor grades.');
     } catch (e) {
       toast.error(getApiErrorMessage(e));
     } finally {
@@ -148,667 +236,869 @@ export default function AIQuizPage() {
     }
   };
 
-  const handleRetake = () => {
-    setQuizState('config');
-    setSession(null);
-    setAnswers({});
-    setCurrentIndex(0);
-    setQuizResult(null);
-    setQuizReview(null);
+  const handleSaveToFlashcards = async () => {
+    if (!session) return;
+    setSavingFlashcards(true);
+    try {
+      const result = await saveQuizToFlashcards(session.attemptId, {
+        deckName: session.title,
+        description: `Flashcard set from AI quiz - ${selectedTopic}`,
+      });
+      if (result.success) {
+        toast.success(
+          `Saved ${result.cardCount} flashcards to deck "${result.deckName}"!`,
+        );
+      } else {
+        toast.error(result.message || 'Failed to save flashcards.');
+      }
+    } catch (e) {
+      toast.error(getApiErrorMessage(e));
+    } finally {
+      setSavingFlashcards(false);
+    }
   };
 
   const handleStartNew = () => {
-    handleRetake();
+    setQuizState('config');
+    setSession(null);
+    setAnswers({});
+    setMultiSelectAnswers({});
+    setCurrentIndex(0);
+    setQuizResult(null);
+    setQuizResultDetails(null as unknown as QuizQuestionResult[]);
+    setCurrentHint(null);
+    setHintLevel(1);
+    setHintUsedCount(0);
   };
 
-  // Progress percentage
-  const progressPct = totalQ > 0 ? Math.round(((currentIndex + 1) / totalQ) * 100) : 0;
-  const answeredPct = totalQ > 0 ? Math.round((answeredCount / totalQ) * 100) : 0;
+  const isConfigState = quizState === 'config' || quizState === 'generating';
 
-  if (!session) {
-    return (
-      <div className="flex flex-1 min-h-screen bg-[#f7f9fb]">
-        {/* Main content */}
-        <main className="flex-1 flex flex-col min-h-screen">
-          {/* Header */}
-          <header className="flex justify-between items-center w-full px-8 py-5 bg-white border-b border-slate-200/60">
-            <div className="flex items-center gap-4">
-              <span className="px-3 py-1 bg-secondary-container text-on-secondary-container rounded-full text-xs font-bold tracking-wide">
-                AI PRACTICE MODE
-              </span>
-            </div>
-            <div className="flex items-center gap-6">
-              <button className="p-2 hover:bg-slate-100 rounded-full transition-colors" title="Help">
-                <HelpCircle className="h-5 w-5 text-slate-500" />
-              </button>
-            </div>
-          </header>
+  return (
+    <div className="min-h-screen">
+      <StudentAppChrome
+        breadcrumb="AI Quiz"
+        title="AI Quiz Practice"
+        subtitle="Tạo bài kiểm tra cá nhân hóa được hỗ trợ bởi AI"
+      />
 
-          {/* Content */}
-          <div className="flex flex-1">
-            {/* Config sidebar */}
-            <aside className="w-80 bg-[#f2f4f6] p-6 flex flex-col gap-8 border-r border-slate-200/60">
+      <div className="mx-auto max-w-5xl px-4 pb-16 pt-8 sm:px-6">
+        {/* Hero Banner */}
+        <div className="mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 p-8 text-white shadow-xl">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm shadow-lg">
+                <Sparkles className="h-7 w-7 text-white" />
+              </div>
               <div>
-                <h2 className="font-['Manrope',sans-serif] font-bold text-[#191c1e] text-lg mb-1">Quiz Configuration</h2>
-                <p className="text-xs text-[#424752]">Customize your AI practice session</p>
+                <h1 className="font-['Manrope',sans-serif] text-2xl font-black tracking-tight">
+                  AI Quiz Generator
+                </h1>
+                <p className="mt-1 max-w-lg text-sm text-white/80">
+                  Chọn chủ đề y khoa, AI sẽ tạo câu hỏi trắc nghiệm cá nhân hóa kèm gợi ý
+                  thông minh và giải thích chi tiết.
+                </p>
               </div>
-
-              {/* Topic Selection */}
-              <div className="space-y-3">
-                <label className="text-xs font-bold text-[#424752] uppercase tracking-wider">Topic</label>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => setShowAllTopics(!showAllTopics)}
-                    className="w-full text-left p-3 rounded-xl bg-white text-[#00478d] font-semibold text-sm border border-[#00478d]/20 flex justify-between items-center shadow-sm"
-                  >
-                    {selectedTopic || 'Select topic...'}
-                    <ChevronDown className={`h-4 w-4 transition-transform ${showAllTopics ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showAllTopics && (
-                    <div className="grid grid-cols-1 gap-2 bg-white rounded-xl p-2 shadow-sm border border-slate-200/60 max-h-64 overflow-y-auto">
-                      {QUICK_TOPICS.map((topic) => (
-                        <button
-                          key={topic}
-                          onClick={() => {
-                            setSelectedTopic(topic);
-                            setShowAllTopics(false);
-                          }}
-                          className={`p-3 rounded-lg text-sm text-left transition-colors flex items-center gap-2 ${
-                            selectedTopic === topic
-                              ? 'bg-[#00478d]/10 text-[#00478d] font-semibold'
-                              : 'hover:bg-slate-50 text-[#191c1e]'
-                          }`}
-                        >
-                          <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                            selectedTopic === topic
-                              ? 'border-[#00478d] bg-[#00478d]'
-                              : 'border-slate-300'
-                          }`}>
-                            {selectedTopic === topic && <CheckCircle2 className="h-3 w-3 text-white" />}
-                          </span>
-                          {topic}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            </div>
+            <div className="hidden shrink-0 text-right md:block">
+              <div className="rounded-2xl bg-white/15 px-4 py-2 backdrop-blur-sm">
+                <p className="text-2xl font-black">{totalQ}</p>
+                <p className="text-xs text-white/70">Questions</p>
               </div>
+            </div>
+          </div>
 
-              {/* Question Count */}
-              <div className="space-y-3">
-                <label className="text-xs font-bold text-[#424752] uppercase tracking-wider">Number of questions</label>
-                <div className="grid grid-cols-5 gap-2">
-                  {[5, 10, 15, 20, 25].map((n) => (
-                    <button
-                      key={n}
-                      onClick={() => setQuestionCount(n)}
-                      className={`py-2.5 rounded-xl text-sm font-bold transition-all ${
-                        questionCount === n
-                          ? 'bg-[#00478d] text-white shadow-md'
-                          : 'bg-white text-[#424752] hover:bg-slate-50 border border-slate-200'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
+          {/* Feature pills */}
+          <div className="mt-5 flex flex-wrap gap-2">
+            {[
+              { icon: Zap, label: 'Tạo tức thì' },
+              { icon: Lightbulb, label: 'Gợi ý AI' },
+              { icon: MessageSquare, label: 'Giải thích chi tiết' },
+              { icon: BookmarkPlus, label: 'Lưu Flashcards' },
+            ].map(({ icon: Icon, label }) => (
+              <div
+                key={label}
+                className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm"
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
               </div>
+            ))}
+          </div>
+        </div>
 
-              {/* Difficulty */}
-              <div className="space-y-3">
-                <label className="text-xs font-bold text-[#424752] uppercase tracking-wider">Difficulty</label>
-                <div className="flex p-1 bg-white rounded-full border border-slate-200">
-                  {['', 'Easy', 'Medium', 'Hard'].map((d) => (
-                    <button
-                      key={d || 'all'}
-                      onClick={() => setDifficulty(d as DifficultyLevel)}
-                      className={`flex-1 py-2 text-xs font-bold rounded-full transition-all ${
-                        difficulty === d
-                          ? 'bg-[#00478d] text-white shadow-sm'
-                          : 'text-[#424752] hover:text-[#191c1e]'
-                      }`}
-                    >
-                      {d || 'All'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Mode Info */}
-              <div className="space-y-3">
-                <label className="text-xs font-bold text-[#424752] uppercase tracking-wider">AI Mode</label>
-                <div className="p-4 rounded-2xl bg-[#00478d]/10 border border-[#00478d]/10">
-                  <div className="flex items-start gap-3">
-                    <Star className="h-5 w-5 text-[#00478d] mt-0.5" />
-                    <div>
-                      <p className="text-xs font-bold text-[#00478d]">RAG Knowledge Base</p>
-                      <p className="text-[10px] text-[#424752] leading-relaxed mt-1">
-                        AI synthesizes questions from clinical medical journals and bone pathology databases.
-                      </p>
-                    </div>
+        {/* Config: Topic & Settings */}
+        {isConfigState && (
+          <div className="space-y-6">
+            {/* Topic Selection */}
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="border-b border-border bg-muted/30 px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+                    <BookOpen className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-card-foreground">Chọn Chủ đề Y khoa</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Chọn một chủ đề để AI tạo câu hỏi phù hợp
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-auto">
-                <button
-                  onClick={() => void handleGenerate()}
-                  disabled={quizState === 'generating' || !selectedTopic.trim()}
-                  className="w-full py-4 bg-gradient-to-r from-[#00478d] to-[#005eb8] text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-blue-500/20 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {quizState === 'generating' ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Generating questions...
-                    </>
-                  ) : (
-                    <>
-                      <Star className="h-5 w-5" />
-                      Create &amp; Start Quiz
-                    </>
-                  )}
-                </button>
-              </div>
-            </aside>
-
-            {/* Main area - Welcome */}
-            <section className="flex-1 p-8 flex items-center justify-center bg-[#f7f9fb]">
-              <div className="text-center max-w-lg">
-                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-[#00478d] to-[#005eb8] shadow-xl shadow-blue-500/20">
-                  <Star className="h-10 w-10 text-white" />
-                </div>
-                <h2 className="font-['Manrope',sans-serif] text-3xl font-extrabold text-[#191c1e] mb-3">
-                  AI Quiz Practice
-                </h2>
-                <p className="text-[#424752] leading-relaxed mb-8">
-                  Select a topic you want to practice, and AI will generate questions based on medical knowledge.
-                  After submitting, you can review answers and scores.
-                </p>
-                <div className="flex flex-wrap justify-center gap-3">
-                  {['Long Bone Fractures', 'Spine Lesions', 'Joint Diseases'].map((topic) => (
+              <div className="p-6">
+                {/* Quick Topics */}
+                <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                  {QUICK_TOPICS.map((topic) => (
                     <button
                       key={topic}
                       onClick={() => setSelectedTopic(topic)}
-                      className={`px-4 py-2 rounded-full text-sm font-semibold transition-all border ${
+                      className={`rounded-xl border-2 px-3 py-2.5 text-left text-xs font-semibold transition-all ${
                         selectedTopic === topic
-                          ? 'bg-[#00478d] text-white border-[#00478d]'
-                          : 'bg-white text-[#424752] border-slate-200 hover:border-[#00478d]/40 hover:text-[#00478d]'
+                          ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
+                          : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
                       }`}
                     >
                       {topic}
                     </button>
                   ))}
                 </div>
-              </div>
-            </section>
-          </div>
-        </main>
-      </div>
-    );
-  }
 
-  // Quiz Active / Result View
-  return (
-    <div className="flex flex-1 min-h-screen bg-[#f7f9fb]">
-      {/* Main content */}
-      <main className="flex-1 flex flex-col min-h-screen">
-        {/* Header */}
-        <header className="flex justify-between items-center w-full px-8 py-4 bg-white border-b border-slate-200/60 z-40">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Star className="h-5 w-5 text-[#00478d]" />
-              <span className="px-3 py-1 bg-secondary-container text-on-secondary-container rounded-full text-xs font-bold tracking-wide">
-                AI PRACTICE MODE
-              </span>
+                {/* Show More Toggle */}
+                <button
+                  onClick={() => setShowAllTopics(!showAllTopics)}
+                  className="mb-4 flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${showAllTopics ? 'rotate-180' : ''}`}
+                  />
+                  {showAllTopics ? 'Thu gọn' : 'Xem thêm chủ đề'}
+                </button>
+
+                {showAllTopics && (
+                  <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                    {ALL_TOPICS.slice(8).map((topic) => (
+                      <button
+                        key={topic}
+                        onClick={() => setSelectedTopic(topic)}
+                        className={`rounded-xl border-2 px-3 py-2.5 text-left text-xs font-semibold transition-all ${
+                          selectedTopic === topic
+                            ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
+                            : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                        }`}
+                      >
+                        {topic}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Selected Topic Display */}
+                {selectedTopic && (
+                  <div className="mb-6 rounded-2xl border-2 border-primary/30 bg-primary/5 p-4 text-center">
+                    <p className="text-xs text-muted-foreground">Chủ đề đã chọn</p>
+                    <p className="mt-1 font-bold text-primary">{selectedTopic}</p>
+                  </div>
+                )}
+
+                {/* Question Count & Difficulty */}
+                <div className="mb-6 grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold text-muted-foreground">
+                      Số câu hỏi
+                    </label>
+                    <div className="flex gap-2">
+                      {[5, 10, 15, 20].map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => setQuestionCount(n)}
+                          className={`flex-1 rounded-xl border-2 px-3 py-2.5 text-sm font-bold transition-all ${
+                            questionCount === n
+                              ? 'border-primary bg-primary text-white'
+                              : 'border-border bg-background text-muted-foreground hover:border-primary/40'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold text-muted-foreground">
+                      Độ khó
+                    </label>
+                    <div className="flex gap-2">
+                      {(['', 'Easy', 'Medium', 'Hard'] as DifficultyLevel[]).map((d) => (
+                        <button
+                          key={d || 'any'}
+                          onClick={() => setDifficulty(d)}
+                          className={`flex-1 rounded-xl border-2 px-3 py-2.5 text-xs font-bold transition-all ${
+                            difficulty === d
+                              ? 'border-primary bg-primary text-white'
+                              : 'border-border bg-background text-muted-foreground hover:border-primary/40'
+                          }`}
+                        >
+                          {d === '' ? 'Any' : d === 'Easy' ? 'Dễ' : d === 'Medium' ? 'TB' : 'Khó'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Generate Button */}
+                <Button
+                  onClick={() => void handleGenerate()}
+                  disabled={!selectedTopic || quizState === 'generating'}
+                  isLoading={quizState === 'generating'}
+                  className="w-full gap-2 bg-gradient-to-r from-violet-600 to-purple-600 py-3 text-sm font-bold text-white shadow-lg hover:from-violet-700 hover:to-purple-700"
+                >
+                  {quizState !== 'generating' && <Sparkles className="h-4 w-4" />}
+                  {quizState === 'generating' ? 'Đang tạo...' : 'Tạo Quiz AI ngay'}
+                </Button>
+              </div>
             </div>
-            {quizState === 'active' && (
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
-                <span className="text-xs font-semibold text-green-600">In progress</span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-6">
-            {quizState === 'active' && (
-              <div className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-[#f2f4f6] px-4 py-2 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-black text-[#00478d] font-['Manrope',sans-serif]">
-                    {currentIndex + 1} <span className="text-[#424752] font-normal">/</span> {totalQ}
-                  </span>
-                </div>
-                <div className="h-6 w-px bg-slate-300/60" />
-                <span className="text-sm">
-                  <span className="font-bold text-[#00478d]">{answeredCount}</span>
-                  <span className="text-[#424752]"> answered</span>
-                </span>
-              </div>
-            )}
-            <button className="p-2 hover:bg-slate-100 rounded-full transition-colors" title="Help">
-              <HelpCircle className="h-5 w-5 text-slate-500" />
-            </button>
-            <button
-              onClick={handleRetake}
-              className="flex items-center gap-2 rounded-xl border border-slate-200/60 px-4 py-2 text-sm font-bold text-[#424752] hover:bg-slate-50 transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Exit
-            </button>
-          </div>
-        </header>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left: Image Viewer */}
-          <section className="flex-1 p-8 overflow-y-auto">
-            <div className="max-w-5xl mx-auto">
-              {/* Progress Bar */}
-              <div className="mb-6 bg-white rounded-2xl border border-slate-200/60 p-4 shadow-sm">
-                <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="font-semibold text-[#191c1e]">Progress: Question {currentIndex + 1} / {totalQ}</span>
-                  <span className="text-[#424752]">
-                    <span className="font-bold text-[#00478d]">{answeredPct}%</span> completed ({answeredCount}/{totalQ})
-                  </span>
+            {/* How it works */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {[
+                {
+                  icon: BookOpen,
+                  step: 1,
+                  title: 'Chọn chủ đề',
+                  desc: 'Chọn một chủ đề y khoa cụ thể',
+                },
+                {
+                  icon: Sparkles,
+                  step: 2,
+                  title: 'AI tạo câu hỏi',
+                  desc: 'Câu hỏi được tạo từ kiến thức y khoa (tiếng Việt)',
+                },
+                {
+                  icon: Lightbulb,
+                  step: 3,
+                  title: 'Gợi ý & Giải thích',
+                  desc: 'Nhận phản hồi ngay với gợi ý AI và giải thích',
+                },
+              ].map(({ icon: Icon, step, title, desc }) => (
+                <div
+                  key={step}
+                  className="flex items-start gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
+                        {step}
+                      </span>
+                      <h3 className="text-sm font-bold text-card-foreground">{title}</h3>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{desc}</p>
+                  </div>
                 </div>
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#eceef0]">
+              ))}
+            </div>
+
+            {/* Generate from Case Library shortcut */}
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="border-b border-border bg-muted/30 px-6 py-4">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-card-foreground">
+                  <FolderOpen className="h-4 w-4 text-primary" />
+                  Tạo Quiz từ Case Library
+                </h2>
+              </div>
+              <div className="p-6">
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Bạn có thể chọn các ca lâm sàng cụ thể từ thư viện case để AI tạo câu hỏi
+                  dựa trên hình ảnh và chẩn đoán thực tế.
+                </p>
+                <Button
+                  variant="outline"
+                  asChild
+                  className="w-full gap-2 border-primary/30 text-primary hover:bg-primary/5"
+                >
+                  <Link href="/student/quizzes?tab=practice">
+                    <FolderOpen className="h-4 w-4" />
+                    Mở Case Library
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active / Result Quiz View */}
+        {!isConfigState && (
+          <div className="space-y-6">
+            {/* Progress Header */}
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="flex flex-col gap-4 border-b border-border bg-muted/30 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100">
+                    <Star className="h-5 w-5 text-violet-600" />
+                  </div>
+                  <div>
+                    <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700">
+                      AI Practice Mode
+                    </span>
+                    <p className="mt-0.5 font-semibold text-card-foreground">{session?.title}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">
+                    <span className="font-bold text-primary">{answeredCount}</span> / {totalQ}{' '}
+                    answered
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleStartNew}
+                    className="gap-1.5 text-xs"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    New Quiz
+                  </Button>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="px-6 py-4">
+                <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-medium">
+                    Question {currentIndex + 1} / {totalQ}
+                  </span>
+                  <span>{Math.round(((currentIndex + 1) / totalQ) * 100)}% completed</span>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#00478d] to-[#005eb8] transition-all duration-500"
-                    style={{ width: `${progressPct}%` }}
+                    className="h-full rounded-full bg-gradient-to-r from-violet-600 to-purple-600 transition-all"
+                    style={{ width: `${((currentIndex + 1) / totalQ) * 100}%` }}
                   />
                 </div>
               </div>
-
-              {/* Question Navigation Pills */}
-              <div className="mb-6 flex flex-wrap gap-2">
-                {questions.map((q, i) => {
-                  const isAnswered = !!answers[q.questionId];
-                  const isCurrent = i === currentIndex;
-                  return (
-                    <button
-                      key={q.questionId}
-                      onClick={() => setCurrentIndex(i)}
-                      className={`w-10 h-10 rounded-xl text-sm font-bold transition-all ${
-                        isCurrent
-                          ? 'bg-[#00478d] text-white shadow-md ring-2 ring-[#00478d]/30'
-                          : isAnswered
-                            ? 'bg-green-100 text-green-700 border-2 border-green-300'
-                            : 'bg-white text-[#424752] border-2 border-slate-200 hover:border-[#00478d]/40'
-                      }`}
-                    >
-                      {i + 1}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Image Viewer */}
-              {currentQ?.imageUrl && (
-                <div className="relative group mb-6 overflow-hidden rounded-3xl shadow-2xl bg-gradient-to-br from-[#3d4449] to-[#191c1e] border border-white/10">
-                  <div
-                    className={`flex min-h-[40vh] w-full origin-center items-center justify-center overflow-auto p-4 transition-transform duration-300 ${
-                      highContrastImg ? 'contrast-125 saturate-125' : ''
-                    }`}
-                    style={{
-                      transform: `scale(${ZOOM_LEVELS[zoomIndex]}) ${straightenActive ? 'rotate(-1deg)' : 'none'}`,
-                    }}
-                  >
-                    <img
-                      src={resolveApiAssetUrl(currentQ.imageUrl)}
-                      alt={currentQ.caseTitle ?? 'Case image'}
-                      className="h-auto w-full max-w-full object-contain opacity-90 group-hover:opacity-100 transition-opacity"
-                      style={{ maxHeight: 'min(70vh, 800px)' }}
-                    />
-                  </div>
-
-                  {/* AI Marker */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                    <div className="w-24 h-24 border-2 border-[#94efec] rounded-full animate-pulse flex items-center justify-center">
-                      <div className="w-2 h-2 bg-[#94efec] rounded-full" />
-                    </div>
-                    <div className="absolute -top-12 left-12 px-3 py-1.5 rounded-lg bg-white/80 backdrop-blur-xl border border-white/20 shadow-xl whitespace-nowrap">
-                      <p className="text-[10px] font-bold text-[#00478d] flex items-center gap-1">
-                        <span className="text-xs">🔍</span> AI INSIGHT: EXAMINE ROI
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Image Toolbar */}
-                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full border border-white/20 bg-white/80 backdrop-blur-xl px-4 py-2 shadow-2xl">
-                    <button
-                      onClick={() => setZoomIndex((i) => Math.min(i + 1, ZOOM_LEVELS.length - 1))}
-                      className="rounded-full p-2 text-[#00478d] hover:bg-blue-50 transition-colors"
-                      title="Zoom in"
-                    >
-                      <ZoomIn className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={() => setZoomIndex((i) => Math.max(i - 1, 0))}
-                      className="rounded-full p-2 text-[#00478d] hover:bg-blue-50 transition-colors"
-                      title="Zoom out"
-                    >
-                      <Minus className="h-5 w-5" />
-                    </button>
-                    <div className="h-6 w-px bg-slate-300/60 mx-1" />
-                    <button
-                      onClick={() => setHighContrastImg((v) => !v)}
-                      className={`rounded-full p-2 transition-colors hover:bg-blue-50 ${
-                        highContrastImg ? 'text-[#006a68] bg-teal-50' : 'text-[#00478d]'
-                      }`}
-                      title="Contrast"
-                    >
-                      <Contrast className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={() => setStraightenActive((v) => !v)}
-                      className={`rounded-full p-2 transition-colors hover:bg-blue-50 ${
-                        straightenActive ? 'text-[#006a68] bg-teal-50' : 'text-[#00478d]'
-                      }`}
-                      title="Straighten"
-                    >
-                      <Ruler className="h-5 w-5" />
-                    </button>
-                    <div className="h-6 w-px bg-slate-300/60 mx-1" />
-                    <span className="px-2 py-1 font-['Manrope',sans-serif] text-xs font-bold text-[#424752]">
-                      {ZOOM_LEVELS[zoomIndex]}x
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Case Info */}
-              {currentQ && (
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {currentQ.caseId && (
-                    <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 bg-white px-4 py-2 text-xs font-semibold text-[#424752] shadow-sm">
-                      <Eye className="h-4 w-4" />
-                      ID: {currentQ.caseId.slice(0, 8)}
-                    </span>
-                  )}
-                  {currentQ.caseTitle && (
-                    <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200/60 bg-white px-4 py-2 text-xs font-semibold text-[#424752] shadow-sm">
-                      <BookOpen className="h-4 w-4" />
-                      {currentQ.caseTitle}
-                    </span>
-                  )}
-                  <span className="inline-flex items-center rounded-xl bg-amber-100 px-4 py-2 text-xs font-bold text-amber-900 shadow-sm">
-                    AI Generated
-                  </span>
-                </div>
-              )}
             </div>
-          </section>
 
-          {/* Right: Question Panel */}
-          <aside className="w-[480px] bg-white border-l border-slate-200/60 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Question Card */}
-              <div className="bg-[#f2f4f6] rounded-3xl p-8 shadow-sm">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-[#00478d] uppercase tracking-tighter">
-                    Question {currentIndex + 1} / {totalQ}
-                  </span>
-                  {currentQ?.type && (
-                    <span className="rounded-full bg-[#00478d]/10 px-3 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#00478d]">
-                      {currentQ.type}
-                    </span>
-                  )}
+            {/* Question Navigation Pills */}
+            <div className="flex flex-wrap gap-2">
+              {questions.map((q, i) => {
+                const isAnswered = !!answers[q.questionId];
+                const isCurrent = i === currentIndex;
+                const resultDetail = quizResultDetails.find((r) => r.questionId === q.questionId);
+                const isCorrect = resultDetail?.isCorrect;
+
+                let pillClass =
+                  'bg-white text-muted-foreground border-2 border-border hover:border-primary/40';
+                if (isCurrent) {
+                  pillClass = 'bg-violet-600 text-white border-2 border-violet-600 shadow-md';
+                } else if (quizResultDetails.length > 0) {
+                  if (isCorrect === true) {
+                    pillClass = 'bg-green-100 text-green-700 border-2 border-green-300';
+                  } else if (isCorrect === false) {
+                    pillClass = 'bg-red-100 text-red-700 border-2 border-red-300';
+                  } else if (isAnswered) {
+                    pillClass = 'bg-blue-100 text-blue-700 border-2 border-blue-300';
+                  }
+                } else if (isAnswered) {
+                  pillClass = 'bg-green-100 text-green-700 border-2 border-green-300';
+                }
+
+                return (
+                  <button
+                    key={q.questionId}
+                    onClick={() => setCurrentIndex(i)}
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold transition-all hover:scale-105 ${pillClass}`}
+                  >
+                    {i + 1}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Current Question Card */}
+            {currentQ && (
+              <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+                <div className="border-b border-border bg-muted/20 px-6 py-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-primary">
+                    Question {currentIndex + 1}
+                  </p>
+                  <h2 className="mt-2 font-semibold leading-relaxed text-card-foreground">
+                    {currentQ.questionText}
+                  </h2>
                 </div>
-                <h3 className="font-['Manrope',sans-serif] text-xl font-bold text-[#191c1e] leading-snug">
-                  {currentQ?.questionText ?? ''}
-                </h3>
-              </div>
 
-              {/* Answer Options */}
-              <div className="space-y-3">
-                {(
-                  [
-                    { key: 'A' as const, text: currentQ?.optionA },
-                    { key: 'B' as const, text: currentQ?.optionB },
-                    { key: 'C' as const, text: currentQ?.optionC },
-                    { key: 'D' as const, text: currentQ?.optionD },
-                  ] as const
-                ).map(({ key, text }) => {
-                  if (!text) return null;
-                  const isSelected = currentAnswer === key;
-
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      disabled={quizState !== 'active'}
-                      onClick={() => handleSelect(key)}
-                      className={`w-full p-5 text-left rounded-2xl border-2 transition-all group ${
-                        isSelected
-                          ? 'bg-[#00478d]/10 border-[#00478d] shadow-md'
-                          : 'bg-white border-slate-200 hover:border-[#00478d]/30 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <span
-                          className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${
-                            isSelected
-                              ? 'bg-[#00478d] text-white'
-                              : 'bg-slate-100 text-[#424752] group-hover:bg-[#00478d] group-hover:text-white'
-                          }`}
-                        >
-                          {key}
-                        </span>
-                        <span className={`flex-1 font-medium ${isSelected ? 'text-[#00478d]' : 'text-[#191c1e]'}`}>
-                          {text}
-                        </span>
-                        {isSelected && <CheckCircle2 className="h-6 w-6 text-[#00478d]" />}
-                      </div>
-                    </button>
+              <div className="p-6 space-y-3">
+                {/* Answer Options */}
+                {(() => {
+                  const isTrueFalse =
+                    currentQ.type?.toLowerCase() === 'truefalse' || currentQ.type?.toLowerCase() === 'true/false';
+                  const isMultiSelect =
+                    currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select';
+                  const resultDetail = quizResultDetails.find(
+                    (r) => r.questionId === currentQ.questionId,
                   );
-                })}
-              </div>
+                  const showResult = quizState === 'result' && resultDetail;
+                  const multiSelectedKeys = multiSelectAnswers[currentQ.questionId];
 
-              {/* AI Reasoning */}
-              <div className="bg-[#eceef0] rounded-2xl p-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAIReasoning(!showAIReasoning)}
-                  className="flex w-full items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <Star className="h-5 w-5 text-[#00478d]" />
-                    <span className="text-xs font-bold text-[#191c1e]">AI Reasoning &amp; References</span>
-                  </div>
-                  <ChevronDown className={`h-5 w-5 text-[#424752] transition-transform ${showAIReasoning ? 'rotate-180' : ''}`} />
-                </button>
-                {showAIReasoning && (
-                  <div className="mt-3 bg-white/60 rounded-xl p-3 border border-white/20">
-                    <p className="text-[11px] text-[#424752] leading-relaxed">
-                      This question was generated by AI based on X-ray image analysis and medical knowledge base.
-                      <span className="block mt-2 font-semibold text-[#00478d]">
-                        Source: Journal of Orthopedic Trauma (2023), Vol 42.
-                      </span>
-                    </p>
+                  if (isTrueFalse) {
+                      return (
+                        <div className="flex gap-4">
+                          {(['True', 'False'] as const).map((opt) => {
+                            const isSelected = currentAnswer === opt;
+                            const isCorrectAnswer = currentQ.correctAnswer?.toLowerCase() === opt.toLowerCase();
+
+                            let bgColor = '';
+                            let borderColor = 'border-border';
+                            let badgeBg = 'bg-muted text-muted-foreground';
+
+                            if (showResult) {
+                              if (isCorrectAnswer) {
+                                bgColor = 'bg-green-50';
+                                borderColor = 'border-green-400';
+                                badgeBg = 'bg-green-500 text-white';
+                              } else if (isSelected) {
+                                bgColor = 'bg-red-50';
+                                borderColor = 'border-red-400';
+                                badgeBg = 'bg-red-500 text-white';
+                              }
+                            } else if (isSelected) {
+                              bgColor = 'bg-primary/5';
+                              borderColor = 'border-primary';
+                              badgeBg = 'bg-primary text-white';
+                            }
+
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                disabled={quizState !== 'active'}
+                                onClick={() => handleSelect(opt)}
+                                className={`flex flex-1 items-center justify-center rounded-xl border-2 p-4 transition-all ${bgColor} ${borderColor} ${
+                                  !showResult && !isSelected
+                                    ? 'hover:border-primary/40 hover:bg-muted/30'
+                                    : ''
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span
+                                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold text-lg ${badgeBg}`}
+                                  >
+                                    {opt === 'True' ? 'T' : 'F'}
+                                  </span>
+                                  <span className="flex-1 text-base font-semibold text-card-foreground">
+                                    {opt}
+                                  </span>
+                                  {isSelected && !showResult && (
+                                    <CheckCircle2 className="h-6 w-6 text-primary" />
+                                  )}
+                                  {showResult && isCorrectAnswer && (
+                                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                                  )}
+                                  {showResult && isSelected && !isCorrectAnswer && (
+                                    <XCircle className="h-6 w-6 text-red-500" />
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    );
+                  }
+
+                  // MultiSelect: checkbox-style options
+                  if (isMultiSelect) {
+                    const optionKeys = (['A', 'B', 'C', 'D'] as const).filter((key) => {
+                      const text = currentQ[`option${key}` as keyof typeof currentQ];
+                      return !!text;
+                    });
+                    const correctKeys = new Set(
+                      (currentQ.correctAnswer || '')
+                        .split(',')
+                        .map((k) => k.trim().toUpperCase())
+                        .filter((k) => ['A', 'B', 'C', 'D'].includes(k)),
+                    );
+                    const hasAnySelected = !!multiSelectedKeys && multiSelectedKeys.size > 0;
+
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Select all correct answers (multiple choices allowed)
+                        </p>
+                        {optionKeys.map((key) => {
+                          const text = currentQ[`option${key}` as keyof typeof currentQ];
+                          const isSelected = multiSelectedKeys?.has(key) ?? false;
+                          const isCorrectOption = correctKeys.has(key);
+
+                          let bgColor = '';
+                          let borderColor = 'border-border';
+                          let badgeBg = 'bg-muted text-muted-foreground';
+
+                          if (showResult) {
+                            if (isCorrectOption) {
+                              bgColor = 'bg-green-50';
+                              borderColor = 'border-green-400';
+                              badgeBg = 'bg-green-500 text-white';
+                            } else if (isSelected) {
+                              bgColor = 'bg-red-50';
+                              borderColor = 'border-red-400';
+                              badgeBg = 'bg-red-500 text-white';
+                            }
+                          } else if (isSelected) {
+                            bgColor = 'bg-primary/5';
+                            borderColor = 'border-primary';
+                            badgeBg = 'bg-primary text-white';
+                          }
+
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              disabled={quizState !== 'active'}
+                              onClick={() => handleMultiSelectToggle(currentQ.questionId, key)}
+                              className={`w-full rounded-xl border-2 p-4 text-left transition-all ${bgColor} ${borderColor} ${
+                                !showResult && !isSelected
+                                  ? 'hover:border-primary/40 hover:bg-muted/30'
+                                  : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-sm ${badgeBg} ${
+                                    isSelected && !showResult ? 'ring-2 ring-primary ring-offset-1' : ''
+                                  }`}
+                                >
+                                  {key}
+                                </span>
+                                <span className="flex-1 text-sm font-medium text-card-foreground">
+                                  {text}
+                                </span>
+                                {isSelected && !showResult && (
+                                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                                )}
+                                {showResult && isCorrectOption && (
+                                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                )}
+                                {showResult && isSelected && !isCorrectOption && (
+                                  <XCircle className="h-5 w-5 text-red-500" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {hasAnySelected && !showResult && (
+                          <p className="text-xs text-muted-foreground">
+                            Đã chọn: {multiSelectedKeys ? Array.from(multiSelectedKeys).sort().join(', ') : ''}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Standard ABCD options
+                    return (
+                      <>
+                        {(
+                          [
+                            { key: 'A' as const, text: currentQ.optionA },
+                            { key: 'B' as const, text: currentQ.optionB },
+                            { key: 'C' as const, text: currentQ.optionC },
+                            { key: 'D' as const, text: currentQ.optionD },
+                          ] as const
+                        ).map(({ key, text }) => {
+                          if (!text) return null;
+                          const isSelected = currentAnswer === key;
+                          const isCorrectAnswer = currentQ.correctAnswer === key;
+
+                          let bgColor = '';
+                          let borderColor = 'border-border';
+                          let badgeBg = 'bg-muted text-muted-foreground';
+
+                          if (showResult) {
+                            if (isCorrectAnswer) {
+                              bgColor = 'bg-green-50';
+                              borderColor = 'border-green-400';
+                              badgeBg = 'bg-green-500 text-white';
+                            } else if (isSelected) {
+                              bgColor = 'bg-red-50';
+                              borderColor = 'border-red-400';
+                              badgeBg = 'bg-red-500 text-white';
+                            }
+                          } else if (isSelected) {
+                            bgColor = 'bg-primary/5';
+                            borderColor = 'border-primary';
+                            badgeBg = 'bg-primary text-white';
+                          }
+
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              disabled={quizState !== 'active'}
+                              onClick={() => handleSelect(key)}
+                              className={`w-full rounded-xl border-2 p-4 text-left transition-all ${bgColor} ${borderColor} ${
+                                !showResult && !isSelected
+                                  ? 'hover:border-primary/40 hover:bg-muted/30'
+                                  : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-bold text-sm ${badgeBg}`}
+                                >
+                                  {key}
+                                </span>
+                                <span className="flex-1 text-sm font-medium text-card-foreground">
+                                  {text}
+                                </span>
+                                {isSelected && !showResult && (
+                                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                                )}
+                                {showResult && isCorrectAnswer && (
+                                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                )}
+                                {showResult && isSelected && !isCorrectAnswer && (
+                                  <XCircle className="h-5 w-5 text-red-500" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Explanation - shown after submission */}
+                {quizState === 'result' &&
+                  (() => {
+                    const resultDetail = quizResultDetails.find(
+                      (r) => r.questionId === currentQ.questionId,
+                    );
+                    if (!resultDetail) return null;
+                    return (
+                      <div
+                        className={`mx-6 mb-6 rounded-2xl border-2 p-5 ${
+                          resultDetail.isCorrect
+                            ? 'border-green-200/60 bg-green-50'
+                            : 'border-amber-200/60 bg-amber-50'
+                        }`}
+                      >
+                        <div className="mb-3 flex items-center gap-3">
+                          {resultDetail.isCorrect ? (
+                            <>
+                              <CheckCircle2 className="h-6 w-6 text-green-600" />
+                              <span className="font-bold text-green-800">Correct!</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-6 w-6 text-amber-600" />
+                              <span className="font-bold text-amber-800">Incorrect</span>
+                            </>
+                          )}
+                        </div>
+
+                        {resultDetail.explanation && (
+                          <div className="mb-4 rounded-xl border border-purple-100 bg-white/80 p-4">
+                            <div className="mb-2 flex items-center gap-2">
+                              <MessageSquare className="h-4 w-4 text-purple-600" />
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-purple-700">
+                                Explanation
+                              </h4>
+                            </div>
+                            <p className="text-sm leading-relaxed text-gray-700 whitespace-pre-wrap">
+                              {resultDetail.explanation}
+                            </p>
+                          </div>
+                        )}
+
+                        {!resultDetail.isCorrect && resultDetail.correctAnswer && (
+                          <p className="text-sm font-semibold text-gray-700">
+                            Correct answer:{' '}
+                            <span className="font-bold text-green-600">
+                              {resultDetail.correctAnswer}.{' '}
+                              {
+                                currentQ[
+                                  `option${resultDetail.correctAnswer}` as keyof typeof currentQ
+                                ]
+                              }
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                {/* AI Hint - shown during active quiz */}
+                {quizState === 'active' && (
+                  <div className="mx-6 mb-6 rounded-xl border-2 border-violet-200/60 bg-violet-50/50 p-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowAIReasoning(!showAIReasoning)}
+                      className="flex w-full items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Lightbulb className="h-4 w-4 text-violet-600" />
+                        <span className="text-sm font-bold text-violet-700">AI Hint</span>
+                        {hintUsedCount > 0 && (
+                          <span className="text-xs text-violet-500">
+                            ({hintUsedCount} used)
+                          </span>
+                        )}
+                      </div>
+                      <ChevronDown
+                        className={`h-4 w-4 text-violet-500 transition-transform ${showAIReasoning ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+
+                    {showAIReasoning && (
+                      <div className="mt-3 space-y-3">
+                        {currentHint ? (
+                          <div className="rounded-lg border border-violet-200 bg-white p-3 text-sm text-violet-800">
+                            <p className="mb-1 font-medium">
+                              Hint level {hintLevel > 1 ? hintLevel - 1 : hintLevel}:
+                            </p>
+                            <p>{currentHint}</p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-violet-600">
+                            Nhấn nút bên dưới để nhận gợi ý từ AI!
+                          </p>
+                        )}
+
+                        {hintLevel <= 3 && (
+                          <button
+                            type="button"
+                            onClick={() => void handleRequestHint()}
+                            disabled={loadingHint || !currentQ}
+                            className={`w-full flex items-center justify-center gap-2 rounded-lg py-2.5 px-4 text-sm font-semibold transition-all ${
+                              loadingHint
+                                ? 'bg-violet-300 text-white cursor-wait'
+                                : 'bg-violet-600 text-white hover:bg-violet-700'
+                            }`}
+                          >
+                            {loadingHint ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Getting hint...
+                              </>
+                            ) : (
+                              <>
+                                <Lightbulb className="h-4 w-4" />
+                                {currentHint ? 'More specific hint' : 'Get AI Hint'}
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {hintLevel > 3 && (
+                          <p className="text-center text-xs text-violet-500">
+                            Maximum hint level reached. Try answering the question!
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+                disabled={currentIndex === 0}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-card py-3.5 text-sm font-semibold text-card-foreground shadow-sm transition-all hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentIndex((i) => Math.min(totalQ - 1, i + 1))}
+                disabled={currentIndex >= totalQ - 1}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 py-3.5 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+                <ArrowRight className="h-4 w-4" />
+              </button>
             </div>
 
-            {/* Bottom Actions */}
-            <div className="border-t border-slate-200/60 p-6 space-y-3 bg-white">
-              {/* Navigation */}
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-                  disabled={currentIndex === 0}
-                  className="flex-1 py-4 bg-[#eceef0] text-[#191c1e] font-bold rounded-2xl hover:bg-slate-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentIndex((i) => Math.min(totalQ - 1, i + 1))}
-                  disabled={currentIndex >= totalQ - 1}
-                  className="flex-1 py-4 bg-gradient-to-r from-[#00478d] to-[#005eb8] text-white font-bold rounded-2xl shadow-lg shadow-blue-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  Next
-                  <ArrowRight className="h-5 w-5" />
-                </button>
-              </div>
-
-              {/* Submit Button */}
-              {quizState === 'result' && quizResult ? (
-                <div className="space-y-4">
-                  <div className={`rounded-2xl border-2 p-6 text-center ${
+            {/* Submit / Result Section */}
+            {quizState === 'result' && quizResult ? (
+              <div className="space-y-4">
+                {/*
+                <div
+                  className={`overflow-hidden rounded-2xl border-2 p-6 text-center ${
                     quizResult.passed
-                      ? 'border-green-500/50 bg-green-50'
-                      : 'border-red-500/50 bg-red-50'
-                  }`}>
-                    <div className="flex items-center justify-center gap-3 mb-2">
-                      {quizResult.passed ? (
-                        <CheckCircle2 className="h-10 w-10 text-green-600" />
-                      ) : (
-                        <XCircle className="h-10 w-10 text-red-600" />
-                      )}
-                      <div className="text-left">
-                        <p className={`text-4xl font-black font-['Manrope',sans-serif] ${
-                          quizResult.passed ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {Math.round(quizResult.score)}%
-                        </p>
-                        <p className="text-sm text-[#424752]">
-                          {quizResult.correctAnswers}/{quizResult.totalQuestions} correct
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleStartNew}
-                    className="w-full py-4 bg-gradient-to-r from-[#00478d] to-[#005eb8] text-white font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2"
-                  >
-                    <Star className="h-5 w-5" />
-                    Create New Quiz
-                  </button>
-                  <Link
-                    href="/student/quiz"
-                    className="w-full py-4 bg-[#eceef0] text-[#191c1e] font-bold rounded-2xl flex items-center justify-center gap-2"
-                  >
-                    <ArrowLeft className="h-5 w-5" />
-                    Back to Quiz List
-                  </Link>
-
-                  {/* Review Answers Button */}
-                  {quizReview && (
-                    <button
-                      type="button"
-                      onClick={() => setShowReview(!showReview)}
-                      className="w-full py-3 bg-[#00478d]/10 text-[#00478d] font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-[#00478d]/20 transition-colors"
-                    >
-                    <Eye className="h-5 w-5" />
-                    {showReview ? 'Hide answers' : 'View answers'}
-                    </button>
-                  )}
-
-                  {/* Review Panel */}
-                  {showReview && quizReview && (
-                    <div className="border-t border-slate-200/60 pt-4 mt-4 space-y-4">
-                      <h4 className="text-sm font-bold text-[#191c1e]">Answer details</h4>
-                      {quizReview.questions.map((q, idx) => {
-                        const isCorrect = q.isCorrect;
-                        const studentAns = q.studentAnswer ?? '-';
-                        const correctAns = q.correctAnswer ?? '-';
-                        return (
-                          <div
-                            key={q.questionId}
-                            className={`rounded-xl border p-4 text-left ${
-                              isCorrect
-                                ? 'border-green-300 bg-green-50'
-                                : 'border-red-300 bg-red-50'
-                            }`}
-                          >
-                            <div className="flex items-start gap-2 mb-2">
-                              {isCorrect ? (
-                                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                              ) : (
-                                <XCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                              )}
-                            <p className="text-sm font-semibold text-[#191c1e] flex-1">
-                              Question {idx + 1}: {q.questionText}
-                            </p>
-                            </div>
-                            <div className="ml-7 space-y-1">
-                              <p className="text-xs">
-                                <span className="font-semibold text-[#424752]">Your answer: </span>
-                                <span className={`font-bold ${isCorrect ? 'text-green-600' : 'text-red-600'}`}>{studentAns}</span>
-                              </p>
-                              {!isCorrect && (
-                                <p className="text-xs">
-                                  <span className="font-semibold text-[#424752]">Correct answer: </span>
-                                  <span className="font-bold text-green-600">{correctAns}</span>
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (answeredCount === 0) {
-                      toast.error('Please answer at least 1 question before submitting.');
-                      return;
-                    }
-                    void handleSubmit();
-                  }}
-                  disabled={submitting}
-                  className={`group relative w-full overflow-hidden rounded-2xl font-bold flex items-center justify-center gap-3 transition-all duration-300 ${
-                    answeredCount > 0
-                      ? 'bg-gradient-to-r from-[#00478d] via-[#005eb8] to-[#006a68] text-white shadow-xl shadow-blue-500/30 hover:shadow-2xl hover:shadow-blue-500/40 active:scale-[0.98]'
-                      : 'bg-slate-100 text-[#727783] cursor-not-allowed'
+                      ? 'border-green-400/50 bg-green-50'
+                      : 'border-red-400/50 bg-red-50'
                   }`}
                 >
-                  {/* Background animation for ready state */}
-                  {answeredCount > 0 && (
-                    <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                  )}
-                  {submitting ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin relative z-10" />
-                      <span className="relative z-10">Submitting...</span>
-                    </>
-                  ) : answeredCount > 0 ? (
-                    <>
-                      <span className="relative z-10 flex items-center gap-2">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                          <CheckCircle2 className="h-5 w-5" />
-                        </span>
-                        <span>Submit Quiz</span>
-                        <span className="ml-2 rounded-full bg-white/20 px-3 py-1 text-sm font-bold">
-                          {answeredCount}/{totalQ}
-                        </span>
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="relative z-10 flex items-center gap-2">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-current">
-                          !
-                        </span>
-                        <span>No questions answered</span>
-                      </span>
-                    </>
-                  )}
-                </button>
-              )}
+                  <div className="flex items-center justify-center gap-5">
+                    {quizResult.passed ? (
+                      <CheckCircle2 className="h-12 w-12 text-green-600" />
+                    ) : (
+                      <XCircle className="h-12 w-12 text-red-600" />
+                    )}
+                    <div className="text-left">
+                      <p
+                        className={`text-4xl font-black ${
+                          quizResult.passed ? 'text-green-600' : 'text-red-600'
+                        }`}
+                      >
+                        {Math.round(quizResult.score)}%
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {quizResult.correctAnswers}/{quizResult.totalQuestions} câu đúng
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Xem lại từng câu hỏi bên trên để xem đáp án đúng và giải thích chi tiết.
+                  </p>
+                </div>
+                */}
 
-              {/* Progress indicator */}
-              <div className="text-center text-xs text-[#727783]">
-                {answeredCount}/{totalQ} questions answered
+                {/* Action Buttons */}
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={handleStartNew}
+                    className="flex-1 gap-2 bg-gradient-to-r from-violet-600 to-purple-600 font-bold"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    New Quiz
+                  </Button>
+                  <Button
+                    onClick={() => void handleSaveToFlashcards()}
+                    disabled={savingFlashcards}
+                    isLoading={savingFlashcards}
+                    className="flex-1 gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 font-bold text-white"
+                  >
+                    <BookmarkPlus className="h-4 w-4" />
+                    Save to Flashcards
+                  </Button>
+                  <Button variant="outline" asChild className="flex-1 gap-2">
+                    <Link href="/student/flashcards">
+                      <Play className="h-4 w-4" />
+                      View Flashcards
+                    </Link>
+                  </Button>
+                </div>
               </div>
-            </div>
-          </aside>
-        </div>
-      </main>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => void handleSubmit()}
+                disabled={submitting || answeredCount === 0}
+                isLoading={submitting}
+                className="w-full gap-2 bg-gradient-to-r from-violet-600 to-purple-600 py-3.5 text-sm font-bold text-white shadow-lg hover:from-violet-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Submit Quiz ({answeredCount}/{totalQ})
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

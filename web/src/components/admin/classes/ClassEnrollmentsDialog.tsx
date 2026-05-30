@@ -20,6 +20,8 @@ import {
   fetchAdminClassById,
   assignClassUser,
   unenrollClassUser,
+  removeExpertFromClass,
+  removeLecturerFromClass,
   type AdminClassModel,
   type ClassEnrollment,
 } from '@/lib/api/admin-classes';
@@ -179,13 +181,10 @@ export function ClassEnrollmentsDialog({ cls, onCancel }: ClassEnrollmentsDialog
   const unenrollMutation = useMutation({
     mutationFn: async ({ enrollmentId, role }: { enrollmentId: string; role: string }) => {
       if (role === 'Expert') {
-        return assignClassUser({
-          classId: cls.id,
-          studentId: null,
-          lecturerId: null,
-          expertId: null,
-          removeExpert: true,
-        });
+        return removeExpertFromClass(cls.id);
+      }
+      if (role === 'Lecturer') {
+        return removeLecturerFromClass(cls.id);
       }
       return unenrollClassUser(enrollmentId);
     },
@@ -294,25 +293,19 @@ export function ClassEnrollmentsDialog({ cls, onCancel }: ClassEnrollmentsDialog
                               </span>
                             ) : null}
                           </div>
-                          {lecturerEnrollment ? (
-                            <button
-                              type="button"
-                              onClick={() => handleUnenroll(lecturerEnrollment.id, 'Lecturer')}
-                              disabled={assigningId === lecturerEnrollment.id}
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                              title="Remove Lecturer"
-                            >
-                              {assigningId === lecturerEnrollment.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          ) : (
-                            <span className="shrink-0 text-[10px] text-amber-600" title="No enrollment row yet — assign from the right panel">
-                              Not enrolled
-                            </span>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleUnenroll(lecturerEnrollment?.id || roster.lecturerId || '', 'Lecturer')}
+                            disabled={assigningId === (lecturerEnrollment?.id || roster.lecturerId || '')}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                            title="Remove Lecturer"
+                          >
+                            {assigningId === (lecturerEnrollment?.id || roster.lecturerId || '') ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
                         </div>
                       ) : (
                         <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-center text-xs text-muted-foreground">
@@ -336,23 +329,19 @@ export function ClassEnrollmentsDialog({ cls, onCancel }: ClassEnrollmentsDialog
                               </span>
                             ) : null}
                           </div>
-                          {expertEnrollment ? (
-                            <button
-                              type="button"
-                              onClick={() => handleUnenroll(expertEnrollment.id, 'Expert')}
-                              disabled={assigningId === expertEnrollment.id}
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                              title="Remove Expert"
-                            >
-                              {assigningId === expertEnrollment.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          ) : (
-                            <span className="shrink-0 text-[10px] text-amber-600">Catalog only</span>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleUnenroll(expertEnrollment?.id || roster.expertId || '', 'Expert')}
+                            disabled={assigningId === (expertEnrollment?.id || roster.expertId || '')}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                            title="Remove Expert"
+                          >
+                            {assigningId === (expertEnrollment?.id || roster.expertId || '') ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
                         </div>
                       ) : (
                         <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3 text-center text-xs text-muted-foreground">

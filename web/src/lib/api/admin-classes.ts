@@ -2,6 +2,7 @@ import { http, getApiErrorMessage } from './client';
 
 const ADMIN_CLASSES = '/api/admin/classes';
 const ADMIN_CLASS_ENROLLMENTS = `${ADMIN_CLASSES}/enrollments`;
+const CLASS_DASHBOARD = '/api/admin/class-dashboard';
 
 export type ClassEnrollmentRelation = 'Lecturer' | 'Student' | 'Expert';
 
@@ -18,6 +19,13 @@ export interface AdminClassModel {
   expertName?: string | null;
   lecturerEmail?: string | null;
   expertEmail?: string | null;
+
+  // Classification - Bone Specialty
+  classSpecialtyId?: string | null;
+  classSpecialtyName?: string | null;
+  classSpecialtyCode?: string | null;
+  focusLevel?: string | null;
+  targetStudentLevel?: string | null;
 }
 
 export interface ClassEnrollment {
@@ -115,6 +123,13 @@ export function normalizeAdminClassRow(item: unknown): AdminClassModel | null {
     lecturerEmail: r.lecturerEmail != null ? String(r.lecturerEmail) : r.LecturerEmail != null ? String(r.LecturerEmail) : null,
     expertEmail: r.expertEmail != null ? String(r.expertEmail) : r.ExpertEmail != null ? String(r.ExpertEmail) : null,
     studentCount: Number.isFinite(studentCount) ? studentCount : 0,
+
+    // Classification - Bone Specialty
+    classSpecialtyId: r.classSpecialtyId != null && String(r.classSpecialtyId).trim() ? String(r.classSpecialtyId) : r.ClassSpecialtyId != null && String(r.ClassSpecialtyId).trim() ? String(r.ClassSpecialtyId) : null,
+    classSpecialtyName: r.classSpecialtyName != null ? String(r.classSpecialtyName) : r.ClassSpecialtyName != null ? String(r.ClassSpecialtyName) : null,
+    classSpecialtyCode: r.classSpecialtyCode != null ? String(r.classSpecialtyCode) : r.ClassSpecialtyCode != null ? String(r.ClassSpecialtyCode) : null,
+    focusLevel: r.focusLevel != null ? String(r.focusLevel) : r.FocusLevel != null ? String(r.FocusLevel) : null,
+    targetStudentLevel: r.targetStudentLevel != null ? String(r.targetStudentLevel) : r.TargetStudentLevel != null ? String(r.TargetStudentLevel) : null,
   };
 }
 
@@ -148,11 +163,20 @@ export async function fetchAdminClassById(id: string): Promise<AdminClassModel> 
   }
 }
 
-export async function createAdminClass(payload: { className: string; semester: string }): Promise<AdminClassModel> {
+export async function createAdminClass(payload: { 
+  className: string; 
+  semester: string;
+  classSpecialtyId?: string | null;
+  focusLevel?: string | null;
+  targetStudentLevel?: string | null;
+}): Promise<AdminClassModel> {
   try {
     const { data } = await http.post<{ result?: unknown } | unknown>(ADMIN_CLASSES, {
       className: payload.className,
       semester: payload.semester,
+      classSpecialtyId: payload.classSpecialtyId || null,
+      focusLevel: payload.focusLevel || 'Basic',
+      targetStudentLevel: payload.targetStudentLevel || 'Beginner',
     });
     const resultObj = typeof data === 'object' && data !== null && 'result' in data ? data.result : data;
     const normalized = normalizeAdminClassRow(resultObj);
@@ -167,12 +191,21 @@ export async function createAdminClass(payload: { className: string; semester: s
   }
 }
 
-export async function updateAdminClass(id: string, payload: { className: string; semester: string }): Promise<void> {
+export async function updateAdminClass(id: string, payload: { 
+  className: string; 
+  semester: string;
+  classSpecialtyId?: string | null;
+  focusLevel?: string | null;
+  targetStudentLevel?: string | null;
+}): Promise<void> {
   try {
     await http.put(ADMIN_CLASSES, {
       id,
       className: payload.className,
       semester: payload.semester,
+      classSpecialtyId: payload.classSpecialtyId || null,
+      focusLevel: payload.focusLevel || null,
+      targetStudentLevel: payload.targetStudentLevel || null,
     });
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
@@ -294,6 +327,46 @@ export async function assignClassUser(payload: AssignClassDto): Promise<void> {
 export async function unenrollClassUser(enrollmentId: string): Promise<void> {
   try {
     await http.delete(`${ADMIN_CLASS_ENROLLMENTS}/${encodeURIComponent(enrollmentId)}`);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function removeExpertFromClass(classId: string): Promise<void> {
+  try {
+    await http.post(`${CLASS_DASHBOARD}/${encodeURIComponent(classId)}/remove-expert`);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function removeLecturerFromClass(classId: string): Promise<void> {
+  try {
+    await http.post(`${CLASS_DASHBOARD}/${encodeURIComponent(classId)}/remove-lecturer`);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+// ── CLASS SPECIALTY UPDATE ─────────────────────────────────────────────────────
+
+export interface UpdateClassSpecialtyPayload {
+  classId: string;
+  classSpecialtyId?: string | null;
+  focusLevel?: string | null;
+  targetStudentLevel?: string | null;
+  targetPathologyCategories?: string[] | null;
+}
+
+export async function updateClassSpecialty(payload: UpdateClassSpecialtyPayload): Promise<void> {
+  try {
+    await http.put(`${CLASS_DASHBOARD}/${encodeURIComponent(payload.classId)}/specialty`, {
+      classId: payload.classId,
+      classSpecialtyId: payload.classSpecialtyId || null,
+      focusLevel: payload.focusLevel || null,
+      targetStudentLevel: payload.targetStudentLevel || null,
+      targetPathologyCategories: payload.targetPathologyCategories || null,
+    });
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }

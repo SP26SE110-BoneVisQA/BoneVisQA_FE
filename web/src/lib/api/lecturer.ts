@@ -190,6 +190,25 @@ export async function getLecturerCases(): Promise<CaseDto[]> {
   }
 }
 
+export interface PagedCasesResult {
+  items: CaseDto[];
+  totalCount: number;
+  pageIndex: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export async function getLecturerCasesPaged(pageIndex: number, pageSize: number): Promise<PagedCasesResult> {
+  try {
+    const { data } = await http.get<PagedCasesResult>('/api/lecturer/cases/paged', {
+      params: { pageIndex, pageSize }
+    });
+    return data;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
 export async function assignCasesToClass(
   classId: string,
   payload: { caseIds: string[]; dueDate?: string; isMandatory: boolean },

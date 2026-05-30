@@ -476,6 +476,9 @@ export interface LecturerDashboardStats {
   pendingReviews: number;
   /** Backend may return null when no quiz attempts exist. */
   averageQuizScore: number | null;
+  totalQuizAttempts: number;
+  averageTimeMinutes: number | null;
+  participationTrendPercent: number | null;
 }
 
 export interface LecturerLeaderboardEntry {
@@ -610,6 +613,8 @@ export interface AssignedQuizItem {
   attemptId?: string | null;
   /** Quiz creation time — used for sorting by newest first */
   createdAt?: string | null;
+  /** True nếu quiz đã đóng HOẶC lecturer đã release đáp án. Sinh viên chỉ xem được đáp án khi field này = true */
+  answersReleased?: boolean;
 }
 
 export interface QuizSessionDto {
@@ -635,6 +640,8 @@ export interface StudentSessionQuestion {
   optionD: string | null;
   imageUrl?: string | null;
   essayAnswer?: string | null; // Model answer for essay questions (from backend)
+  correctAnswer?: string | null; // Correct answer (available in Practice Mode after submit)
+  explanation?: string | null; // Explanation of correct answer (available in Practice Mode)
 }
 
 export interface StudentSubmitQuestionDto {
@@ -865,6 +872,12 @@ export interface QuizDto {
   timeLimit: number | null;
   passingScore: number | null;
   createdAt: string | null;
+  /** Deep classification - Bone Specialty */
+  boneSpecialtyId?: string | null;
+  boneSpecialtyName?: string | null;
+  /** Deep classification - Pathology Category */
+  pathologyCategoryId?: string | null;
+  pathologyCategoryName?: string | null;
   /** Present when API returns aggregate question count. */
   questionCount?: number | null;
   quizName?: string | null;
@@ -903,6 +916,8 @@ export interface ClassQuizDto {
   creatorName?: string | null;
   /** Creator type: "Lecturer" or "Expert" */
   creatorType?: string | null;
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number;
 }
 
 export interface AssignedQuizDto {
@@ -919,6 +934,8 @@ export interface AssignedQuizDto {
   isFromExpertLibrary: boolean;
   creatorName?: string | null;
   creatorType?: string | null; // "Expert" or "Lecturer"
+  /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
+  quizMode?: number;
 }
 
 export interface CreateQuizRequest {
@@ -933,6 +950,8 @@ export interface CreateQuizRequest {
   timeLimit?: number;
   passingScore?: number;
   classId: string;
+  boneSpecialtyId?: string;
+  pathologyCategoryId?: string;
 }
 
 export interface QuizQuestionDto {
@@ -971,7 +990,7 @@ export interface CreateQuizQuestionRequest {
   quizId: string;
   caseId?: string;
   questionText: string;
-  type?: string;
+  type: string;
   optionA?: string;
   optionB?: string;
   optionC?: string;

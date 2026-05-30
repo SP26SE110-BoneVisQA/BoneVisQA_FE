@@ -103,10 +103,10 @@ export async function fetchAssignedCases(classId: string): Promise<CaseDto[]> {
     // Map response to CaseDto for compatibility with the UI
     return items.map((item: Record<string, unknown>) => ({
       id: String(item.caseId ?? item.CaseId ?? item.caseID ?? ''),
-      title: String(item.caseTitle ?? item.CaseTitle ?? item.title ?? item.Title ?? ''),
-      description: '',
-      categoryName: '',
-      difficulty: '',
+      title: (item.caseTitle ?? item.CaseTitle ?? item.title ?? item.Title ?? null) as string | null,
+      description: (item.caseDescription ?? item.Description ?? null) as string | null,
+      categoryName: (item.categoryName ?? item.CategoryName ?? null) as string | null,
+      difficulty: (item.difficulty ?? item.Difficulty ?? null) as string | null,
       isActive: true,
       isApproved: true,
       createdAt:

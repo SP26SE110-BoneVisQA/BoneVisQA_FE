@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useLogout } from '@/lib/useLogout';
 import { useAuth, type BackendRole } from '@/lib/useAuth';
-import { LogOut, ChevronLeft, ChevronRight, Stethoscope } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { LogOut, ChevronLeft, ChevronRight, Plus, Stethoscope } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { navByRole, roleMeta, type AppRoleKey, type NavItem } from '@/config/navigation';
 
@@ -44,23 +45,21 @@ export function AppSidebar({
     if (!resolvedRole) return { dashboardItem: null, otherItems: [] as NavItem[] };
     const base = navByRole[resolvedRole] ?? [];
     const dashboard = base.find((item) => item.label.toLowerCase() === 'dashboard') ?? null;
-    const rest = base
-      .filter((item) => item.label.toLowerCase() !== 'dashboard')
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    const rest = base.filter((item) => item.label.toLowerCase() !== 'dashboard');
     return { dashboardItem: dashboard, otherItems: rest };
   }, [resolvedRole]);
   const meta = resolvedRole ? roleMeta[resolvedRole] : null;
 
-  const shellClass = `flex h-full shrink-0 flex-col border-r border-blue-100 bg-[#f0f7ff] text-[#1e293b] shadow-sm transition-[width] duration-200 ease-out ${
+  const shellClass = `fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-[var(--border-color)] bg-[var(--sidebar)] text-[var(--sidebar-text)] shadow-sm transition-[width] duration-200 ease-out ${
     collapsed ? 'w-[72px]' : 'w-[260px]'
   }`;
 
   if (!hasMounted) {
     return (
       <aside className={shellClass}>
-        <div className="h-14 border-b border-blue-100 px-2" />
+        <div className="h-14 border-b border-[var(--border-color)] px-2" />
         <div className="flex-1 px-2 py-3">
-          <div className="h-9 rounded-lg bg-blue-100/60" />
+          <div className="h-9 rounded-lg bg-[var(--muted)]" />
         </div>
       </aside>
     );
@@ -70,38 +69,39 @@ export function AppSidebar({
     return (
       <aside className={shellClass}>
         <div
-          className={`flex shrink-0 items-center border-b border-blue-100 py-2 ${
+          className={`flex shrink-0 items-center border-b border-[var(--border-color)] py-2 ${
             collapsed ? 'flex-col gap-2 px-1' : 'h-14 justify-between px-2'
           }`}
         >
           <div className={`flex items-center gap-2 ${collapsed ? 'flex-col' : 'min-w-0 flex-1'}`}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-blue-200 bg-white">
-              <Stethoscope className="h-5 w-5 text-[#0055ff]" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border-color)] bg-[var(--surface)]">
+              <Stethoscope className="h-5 w-5 text-[var(--primary)]" />
             </div>
             {!collapsed ? (
               <div className="min-w-0">
-                <h1 className="truncate text-sm font-semibold text-[#1e293b]">BoneVisQA</h1>
-                <p className="truncate text-[11px] text-[#1e293b]/70">Radiology Education</p>
+                <h1 className="truncate text-sm font-semibold text-[var(--sidebar-text)]">BoneVisQA</h1>
+                <p className="truncate text-[11px] text-[var(--sidebar-text-muted)]">Radiology Education</p>
               </div>
             ) : null}
           </div>
           <button
             type="button"
             onClick={onToggleCollapsed}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#1e293b]/70 hover:bg-blue-100 hover:text-[#1e293b]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--sidebar-text-muted)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--sidebar-text)]"
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
           </button>
+          <ThemeToggle />
         </div>
-        <div className="flex-1 px-2 py-4 text-center text-xs text-[#1e293b]/70">
+        <div className="flex-1 px-2 py-4 text-center text-xs text-[var(--sidebar-text-muted)]">
           {!collapsed ? 'No role-based navigation available.' : '—'}
         </div>
-        <div className="border-t border-blue-100 p-2">
+        <div className="space-y-2 border-t border-[var(--border-color)] p-2">
           <Button
             onClick={logout}
             variant="outline"
-            className="w-full justify-center border-blue-200 bg-white text-[#1e293b] hover:bg-blue-100"
+            className="w-full justify-center border-[var(--border-color)] bg-[var(--surface)] text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)]"
           >
             <LogOut className="h-4 w-4" />
             {!collapsed ? <span className="ml-2">Logout</span> : null}
@@ -114,29 +114,30 @@ export function AppSidebar({
   return (
     <aside className={shellClass}>
       <div
-        className={`flex shrink-0 items-center border-b border-blue-100 py-2 ${
+        className={`flex shrink-0 items-center border-b border-[var(--border-color)] py-2 ${
           collapsed ? 'flex-col gap-2 px-1' : 'h-[4.5rem] justify-between gap-1 px-2'
         }`}
       >
         <div className={`flex items-center gap-2 ${collapsed ? 'flex-col' : 'min-w-0 flex-1'}`}>
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-white">
-            <Stethoscope className="h-5 w-5 text-[#0055ff]" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border-color)] bg-[var(--surface)]">
+            <Stethoscope className="h-5 w-5 text-[var(--primary)]" />
           </div>
           {!collapsed ? (
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold tracking-wide text-[#1e293b]">BoneVisQA</h1>
-              <p className="truncate text-[11px] text-[#1e293b]/70">{meta.label}</p>
+              <h1 className="truncate text-sm font-semibold tracking-wide text-[var(--sidebar-text)]">BoneVisQA</h1>
+              <p className="truncate text-[11px] text-[var(--sidebar-text-muted)]">{meta.label}</p>
             </div>
           ) : null}
         </div>
         <button
           type="button"
           onClick={onToggleCollapsed}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#1e293b]/70 hover:bg-blue-100 hover:text-[#1e293b]"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--sidebar-text-muted)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--sidebar-text)]"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
         </button>
+        <ThemeToggle />
       </div>
 
       <nav className="app-scroll-y flex-1 overflow-y-auto overflow-x-hidden px-2 py-3">
@@ -150,8 +151,8 @@ export function AppSidebar({
                   collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5'
                 } ${
                   pathname === dashboardItem.href
-                    ? 'bg-[#0055ff] text-white'
-                    : 'text-[#1e293b] hover:bg-blue-100 hover:text-[#1e293b]'
+                    ? 'bg-[var(--sidebar-active)] text-white'
+                    : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--sidebar-text)]'
                 }`}
               >
                 <dashboardItem.icon className="h-5 w-5 shrink-0" />
@@ -161,7 +162,7 @@ export function AppSidebar({
           ) : null}
           {!collapsed ? (
             <li className="my-2 px-3" aria-hidden>
-              <div className="border-t border-blue-100" />
+              <div className="border-t border-[var(--border-color)]" />
             </li>
           ) : null}
           {otherItems.map((item) => {
@@ -179,8 +180,8 @@ export function AppSidebar({
                     collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5'
                   } ${
                     isActive
-                      ? 'bg-[#0055ff] text-white'
-                      : 'text-[#1e293b] hover:bg-blue-100 hover:text-[#1e293b]'
+                      ? 'bg-[var(--sidebar-active)] text-white'
+                      : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--sidebar-text)]'
                   }`}
                 >
                   <Icon className="h-5 w-5 shrink-0" />
@@ -192,11 +193,17 @@ export function AppSidebar({
         </ul>
       </nav>
 
-      <div className="border-t border-blue-100 p-2">
+      <div className="space-y-2 border-t border-[var(--border-color)] p-2">
+        <Link href={meta.actionHref} className="block" title={collapsed ? meta.actionLabel : undefined}>
+          <Button className={`w-full justify-center ${collapsed ? 'px-2' : ''}`}>
+            <Plus className="h-4 w-4 shrink-0" />
+            {!collapsed ? <span className="ml-2">{meta.actionLabel}</span> : null}
+          </Button>
+        </Link>
         <Button
           onClick={logout}
           variant="outline"
-          className="w-full justify-center border-blue-200 bg-white text-[#1e293b] hover:bg-blue-100"
+          className="w-full justify-center border-[var(--border-color)] bg-[var(--surface)] text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)]"
         >
           <LogOut className="h-4 w-4" />
           {!collapsed ? <span className="ml-2">Logout</span> : null}

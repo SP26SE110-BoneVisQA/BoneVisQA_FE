@@ -36,7 +36,9 @@ interface QuestionEditorDialogProps {
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'MultipleChoice', label: 'Multiple Choice' },
-  { value: 'Annotation', label: 'Identification (Point)' },
+  { value: 'MultiSelect', label: 'Multiple Select' },
+  { value: 'TrueFalse', label: 'True / False' },
+  { value: 'FillInBlank', label: 'Fill in the Blank' },
   { value: 'Essay', label: 'Essay' },
 ];
 
@@ -79,6 +81,8 @@ export default function QuestionEditorDialog({
     essayAnswer: '',
   });
 
+  const [multiSelectCorrect, setMultiSelectCorrect] = useState<OptionKey[]>([]);
+
   const [optionPoints, setOptionPoints] = useState<Record<OptionKey, number>>({
     A: 10,
     B: 0,
@@ -101,6 +105,17 @@ export default function QuestionEditorDialog({
   useEffect(() => {
     if (!open) return;
     if (question) {
+      // Determine correctAnswer based on question type
+      let correctAnswerStr = question.correctAnswer || 'A';
+      
+      // Handle TrueFalse
+      if (question.type === 'TrueFalse' || question.type === 'truefalse') {
+        correctAnswerStr = correctAnswerStr.toLowerCase() === 'true' || correctAnswerStr === '1' ? 'True' : 'False';
+      }
+      
+      // Handle FillInBlank - keep the full text
+      // For other types, take first char for backward compatibility
+      
       setFormData({
         questionText: question.questionText,
         type: question.type || 'MultipleChoice',
@@ -108,7 +123,7 @@ export default function QuestionEditorDialog({
         optionB: question.optionB || '',
         optionC: question.optionC || '',
         optionD: question.optionD || '',
-        correctAnswer: (question.correctAnswer || 'A').toUpperCase().slice(0, 1),
+        correctAnswer: correctAnswerStr,
         essayAnswer: (question as any).essayAnswer || (question as any).EssayAnswer || '',
       });
       const filled = [question.optionA, question.optionB, question.optionC, question.optionD].filter(
@@ -116,6 +131,15 @@ export default function QuestionEditorDialog({
       ).length;
       setVisibleMcCount(Math.min(4, Math.max(3, filled || 3)));
       syncPointsFromCorrect(question.correctAnswer || 'A');
+
+      // Handle MultiSelect correct answers (comma-separated like "A,B")
+      if (question.type === 'MultiSelect' || question.type === 'multi-select') {
+        const correct = (question.correctAnswer || '').toUpperCase();
+        const correctKeys = correct.split(',').map(k => k.trim()).filter(k => ['A', 'B', 'C', 'D'].includes(k)) as OptionKey[];
+        setMultiSelectCorrect(correctKeys.length > 0 ? correctKeys : []);
+      } else {
+        setMultiSelectCorrect([]);
+      }
     } else {
       setFormData({
         questionText: '',
@@ -129,6 +153,7 @@ export default function QuestionEditorDialog({
       });
       setVisibleMcCount(3);
       setOptionPoints({ A: 10, B: 0, C: 0, D: 0 });
+      setMultiSelectCorrect([]);
     }
     const qImg =
       question?.imageUrl ??
@@ -154,15 +179,31 @@ export default function QuestionEditorDialog({
     setError(null);
 
     try {
+      // Build correctAnswer based on question type
+      let correctAnswerValue: string | undefined;
+      if (formData.type === 'Essay') {
+        correctAnswerValue = undefined;
+      } else if (formData.type === 'TrueFalse') {
+        correctAnswerValue = formData.correctAnswer; // "True" or "False"
+      } else if (formData.type === 'FillInBlank') {
+        correctAnswerValue = formData.correctAnswer;
+      } else if (formData.type === 'MultiSelect') {
+        correctAnswerValue = multiSelectCorrect.join(','); // "A,C"
+      } else if (formData.type === 'MultipleChoice') {
+        correctAnswerValue = formData.correctAnswer;
+      } else {
+        correctAnswerValue = formData.correctAnswer;
+      }
+
       const basePayload = {
         quizId: quizId === 'temp' ? '' : quizId,
         questionText: formData.questionText,
         type: formData.type,
-        optionA: formData.optionA,
-        optionB: formData.optionB,
-        optionC: formData.type === 'MultipleChoice' ? formData.optionC : undefined,
-        optionD: formData.type === 'MultipleChoice' ? formData.optionD : undefined,
-        correctAnswer: formData.type === 'Essay' ? undefined : formData.correctAnswer,
+        optionA: (isMc || isMultiSelect) ? formData.optionA : undefined,
+        optionB: (isMc || isMultiSelect) ? formData.optionB : undefined,
+        optionC: (isMc || isMultiSelect) ? formData.optionC : undefined,
+        optionD: (isMc || isMultiSelect) ? formData.optionD : undefined,
+        correctAnswer: correctAnswerValue,
         essayAnswer: formData.type === 'Essay' ? formData.essayAnswer : undefined,
         imageUrl: imageUrl || undefined,
       };
@@ -179,11 +220,11 @@ export default function QuestionEditorDialog({
         const payload: UpdateQuizQuestionRequest = {
           questionText: formData.questionText,
           type: formData.type,
-          correctAnswer: formData.type === 'Essay' ? undefined : formData.correctAnswer,
-          optionA: formData.optionA,
-          optionB: formData.optionB,
-          optionC: formData.type === 'MultipleChoice' ? formData.optionC : undefined,
-          optionD: formData.type === 'MultipleChoice' ? formData.optionD : undefined,
+          correctAnswer: correctAnswerValue,
+          optionA: (isMc || isMultiSelect) ? formData.optionA : undefined,
+          optionB: (isMc || isMultiSelect) ? formData.optionB : undefined,
+          optionC: (isMc || isMultiSelect) ? formData.optionC : undefined,
+          optionD: (isMc || isMultiSelect) ? formData.optionD : undefined,
           essayAnswer: formData.type === 'Essay' ? formData.essayAnswer : undefined,
           imageUrl: imageUrl || undefined,
         };
@@ -202,6 +243,9 @@ export default function QuestionEditorDialog({
   };
 
   const isMc = formData.type === 'MultipleChoice';
+  const isMultiSelect = formData.type === 'MultiSelect';
+  const isTrueFalse = formData.type === 'TrueFalse';
+  const isFillInBlank = formData.type === 'FillInBlank';
   const isEssay = formData.type === 'Essay';
 
   const mcKeys: OptionKey[] = ['A', 'B', 'C', 'D'].slice(0, visibleMcCount) as OptionKey[];
@@ -210,6 +254,16 @@ export default function QuestionEditorDialog({
     const k = key.toUpperCase().slice(0, 1) as OptionKey;
     setFormData((prev) => ({ ...prev, correctAnswer: k }));
     syncPointsFromCorrect(k);
+  };
+
+  const toggleMultiSelect = (key: OptionKey) => {
+    setMultiSelectCorrect((prev) => {
+      if (prev.includes(key)) {
+        return prev.filter((k) => k !== key);
+      } else {
+        return [...prev, key];
+      }
+    });
   };
 
   const addMcRow = () => {
@@ -511,10 +565,54 @@ export default function QuestionEditorDialog({
                   </div>
                 )}
 
-                {formData.type === 'Annotation' && (
+                {/* TrueFalse Question Type */}
+                {isTrueFalse && (
+                  <div className="space-y-4">
+                    <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
+                      Correct Answer
+                    </label>
+                    <div className="flex gap-4">
+                      <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
+                        formData.correctAnswer === 'True'
+                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
+                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="trueFalse"
+                          value="True"
+                          checked={formData.correctAnswer === 'True'}
+                          onChange={() => setFormData({ ...formData, correctAnswer: 'True' })}
+                          className="sr-only"
+                        />
+                        <span className="text-2xl font-bold">T</span>
+                        <span className="font-semibold">True</span>
+                      </label>
+                      <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
+                        formData.correctAnswer === 'False'
+                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
+                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="trueFalse"
+                          value="False"
+                          checked={formData.correctAnswer === 'False'}
+                          onChange={() => setFormData({ ...formData, correctAnswer: 'False' })}
+                          className="sr-only"
+                        />
+                        <span className="text-2xl font-bold">F</span>
+                        <span className="font-semibold">False</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* FillInBlank Question Type */}
+                {isFillInBlank && (
                   <div className="space-y-3">
                     <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      Reference answer
+                      Correct Answer
                     </label>
                     <input
                       type="text"
@@ -523,8 +621,79 @@ export default function QuestionEditorDialog({
                         setFormData({ ...formData, correctAnswer: e.target.value })
                       }
                       className="w-full rounded-xl border-0 bg-[#eceef0] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#00478d]/20"
-                      placeholder="Expected identification or label"
+                      placeholder="Enter the correct answer for the blank"
                     />
+                    <p className="text-xs text-[#727783]">
+                      Students will see the question with a blank and must type the correct answer.
+                    </p>
+                  </div>
+                )}
+
+                {/* MultiSelect Question Type */}
+                {isMultiSelect && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-xs font-bold uppercase tracking-widest text-[#727783]">
+                        Select All Correct Answers
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-[#00478d]">
+                          {multiSelectCorrect.length} selected
+                        </span>
+                        {visibleMcCount < 4 && (
+                          <button
+                            type="button"
+                            onClick={addMcRow}
+                            className="flex items-center gap-1 text-xs font-bold text-[#00478d] hover:underline"
+                          >
+                            <PlusCircle className="h-4 w-4" />
+                            Add Option
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {mcKeys.map((key) => {
+                        const isCorrect = multiSelectCorrect.includes(key);
+                        const field = `option${key}` as keyof typeof formData;
+                        return (
+                          <div
+                            key={key}
+                            className={`flex items-center gap-3 rounded-2xl p-3 transition-colors ${
+                              isCorrect
+                                ? 'border border-[#00478d]/10 bg-white shadow-[0_4px_12px_rgba(0,0,0,0.03)]'
+                                : 'border border-transparent bg-[#eceef0]/50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isCorrect}
+                              onChange={() => toggleMultiSelect(key)}
+                              className="h-5 w-5 shrink-0 rounded border-[#c2c6d4] text-[#00478d] focus:ring-[#00478d]"
+                            />
+                            <input
+                              type="text"
+                              value={formData[field] as string}
+                              onChange={(e) =>
+                                setFormData({ ...formData, [field]: e.target.value })
+                              }
+                              placeholder={`Option ${key}`}
+                              className={`min-w-0 flex-1 border-0 bg-transparent p-0 text-sm font-medium outline-none ring-0 focus:ring-0 ${
+                                isCorrect ? 'text-[#191c1e]' : 'text-[#424752]'
+                              }`}
+                            />
+                            {isCorrect && (
+                              <span className="shrink-0 rounded-full bg-[#006a68] px-2 py-1 text-[10px] font-bold uppercase text-white">
+                                Correct
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-[#727783]">
+                      Select one or more correct answers. All selected options will be marked as correct.
+                    </p>
                   </div>
                 )}
 

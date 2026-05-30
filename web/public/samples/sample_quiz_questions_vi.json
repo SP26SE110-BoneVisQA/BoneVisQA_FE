@@ -1,0 +1,145 @@
+[
+  {
+    "questionText": "Trên X-quang thẳng đầu gối, dấu hiệu Joint Space Narrowing thường liên quan đến bệnh lý nào?",
+    "type": "MultipleChoice",
+    "optionA": "Viêm khớp dạng thấp (Rheumatoid Arthritis)",
+    "optionB": "Thoái hóa khớp (Osteoarthritis)",
+    "optionC": "Gút (Gout)",
+    "optionD": "Viêm khớp nhiễm trùng (Septic Arthritis)",
+    "correctAnswer": "B",
+    "hint": "Nhìn vào mức độ hẹp khe khớp để suy luận",
+    "explanation": "Đây là dấu hiệu đặc trưng của thoái hóa khớp, khi sụn khớp mòn dần."
+  },
+  {
+    "questionText": "Đặc điểm X-quang nào giúp phân biệt gãy xương lành tính (Greenstick) với gãy xương thông thường ở trẻ em?",
+    "type": "MultipleChoice",
+    "optionA": "Có nhiều mảnh gãy",
+    "optionB": "Chỉ một bên vỏ xương gãy, bên kia cong gãy",
+    "optionC": "Xương bị di lệch hoàn toàn",
+    "optionD": "Có tổn thương mô mềm kèm theo",
+    "correctAnswer": "B",
+    "hint": "Gãy Greenstick chỉ xảy ra ở trẻ em với xương còn mềm",
+    "explanation": "Đây là gãy không hoàn toàn, chỉ một phần xương bị gãy."
+  },
+  {
+    "questionText": "Góc di lệch bao nhiêu độ được coi là chấp nhận được ở người lớn khi gãy xương cánh tay?",
+    "type": "MultipleChoice",
+    "optionA": "5-10 độ",
+    "optionB": "15-20 độ",
+    "optionC": "25-30 độ",
+    "optionD": "Dưới 5 độ",
+    "correctAnswer": "B",
+    "hint": "Xem xét chức năng vận động sau điều trị",
+    "explanation": "Góc lệch 15-20 độ thường được chấp nhận ở người lớn."
+  },
+  {
+    "questionText": "Dấu hiệu Codman Triangle trên X-quang thường gợi ý bệnh lý ác tính nào của xương?",
+    "type": "MultipleChoice",
+    "optionA": "Ung thư xương nguyên phát (Osteosarcoma)",
+    "optionB": "U xương lành tính (Osteoid Osteoma)",
+    "optionC": "Di căn xương (Bone Metastasis)",
+    "optionD": "Bệnh Paget của xương",
+    "correctAnswer": "A",
+    "hint": "Một góc tam giác tạo bởi xương và mô mềm",
+    "explanation": "Codman Triangle là dấu hiệu kinh điển của Osteosarcoma."
+  },
+  {
+    "questionText": "Đặc điểm X-quang nào là dấu hiệu đặc trưng của bệnh Perthes ở trẻ em?",
+    "type": "MultipleChoice",
+    "optionA": "Đầu xương đùi bị dẹt và teo",
+    "optionB": "Khe khớp rộng bất thường",
+    "optionC": "Có dị vật trong khớp",
+    "optionD": "Xương bị calcification tăng",
+    "correctAnswer": "A",
+    "hint": "Bệnh Perthes ảnh hưởng đến đầu xương đùi ở trẻ",
+    "explanation": "Đây là bệnh hoại tử vô mạch đầu xương đùi."
+  },
+  {
+    "questionText": "Tổn thương Egg-shell Appearance trên X-quang là đặc trưng của loại u xương nào?",
+    "type": "MultipleChoice",
+    "optionA": "Osteosarcoma",
+    "optionB": "Giant Cell Tumor",
+    "optionC": "Aneurysmal Bone Cyst",
+    "optionD": "Enchondroma",
+    "correctAnswer": "C",
+    "hint": "Lớp vỏ mỏng bao quanh tổn thương",
+    "explanation": "Đây là dấu hiệu đặc trưng của Aneurysmal Bone Cyst."
+  },
+  {
+    "questionText": "Trên X-quang cột sống cổ, góc Pavlov ratio nhỏ hơn bao nhiêu được coi là bất thường?",
+    "type": "MultipleChoice",
+    "optionA": "0.5",
+    "optionB": "0.7",
+    "optionC": "0.8",
+    "optionD": "1.0",
+    "correctAnswer": "C",
+    "hint": "Đo tỷ lệ khoảng đốt sống so với thân đốt",
+    "explanation": "Góc Pavlov ratio < 0.8 gợi ý bất ổn định cột sống cổ."
+  },
+  {
+    "questionText": "Dấu hiệu Snowstorm Appearance trên X-quang thường gặp trong bệnh lý nào?",
+    "type": "MultipleChoice",
+    "optionA": "Bệnh Huntington",
+    "optionB": "Bệnh Paget của xương",
+    "optionC": "Bệnh cò xương (Rickets)",
+    "optionD": "Loãng xương (Osteoporosis)",
+    "correctAnswer": "B",
+    "hint": "Hình ảnh xương bị thay đổi cấu trúc toàn bộ",
+    "explanation": "Bệnh Paget gây ra sự thay thế xương bình thường bất thường."
+  },
+  {
+    "questionText": "Đặc điểm nào trên X-quang giúp phân biệt gãy xương mới với gãy xương cũ đã liền?",
+    "type": "MultipleChoice",
+    "optionA": "Đường gãy sắc nét",
+    "optionB": "Có Calhoun callus",
+    "optionC": "Xương bị lệch trục",
+    "optionD": "Mất vỏ xương tại chỗ gãy",
+    "correctAnswer": "B",
+    "hint": "Callus xương hình thành khi xương đang liền",
+    "explanation": "Calhoun callus là dấu hiệu xương đang trong quá trình liền."
+  },
+  {
+    "questionText": "Thương tổn lamelar (Layered) hay Onion Skin trên CT scan thường gợi ý loại u nào?",
+    "type": "MultipleChoice",
+    "optionA": "Osteosarcoma",
+    "optionB": "Ewing Sarcoma",
+    "optionC": "Chondrosarcoma",
+    "optionD": "Metastatic Disease",
+    "correctAnswer": "B",
+    "hint": "Nhiều lớp xương mới xếp lớp",
+    "explanation": "Onion Skin là dấu hiệu đặc trưng của Ewing Sarcoma."
+  },
+  {
+    "questionText": "Trên X-quang ngực, sụn treo (Hanging Tomp) sign gợi ý bệnh lý gì?",
+    "type": "MultipleChoice",
+    "optionA": "Gãy xương sườn",
+    "optionB": "Gãy mỏm vai (Clavicle)",
+    "optionC": "Trật khớp vai",
+    "optionD": "Gãy xương ức",
+    "correctAnswer": "B",
+    "hint": "Mảnh xương di lệch từ mỏm vai",
+    "explanation": "Dấu hiệu này thường do gãy 1/3 ngoài xương đòn."
+  },
+  {
+    "questionText": "Dấu hiệu Hill-Sachs defect trên X-quang thường gặp trong chấn thương nào?",
+    "type": "MultipleChoice",
+    "optionA": "Gãy xương đùi",
+    "optionB": "Trật khớp vai",
+    "optionC": "Kẹt khớp gối",
+    "optionD": "Gãy cột sống",
+    "correctAnswer": "B",
+    "hint": "Sụt lõm trên bề mặt đầu xương vai",
+    "explanation": "Đây là tổn thương sụn xương do trật khớp vai trước."
+  },
+  {
+    "questionText": "X-quang cho thấy xương dài bất thường với giường tủy mở rộng. Đây là đặc điểm của bệnh nào?",
+    "type": "MultipleChoice",
+    "optionA": "Achondroplasia",
+    "optionB": "Osteopetrosis",
+    "optionC": "Marfan Syndrome",
+    "optionD": "Osteogenesis Imperfecta",
+    "correctAnswer": "C",
+    "hint": "Xem xét tỷ lệ chiều dài xương so với thân",
+    "explanation": "Marfan Syndrome gây tăng chiều cao với xương dài bất thường."
+  }
+]

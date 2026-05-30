@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Plus, X, BookOpen, Loader2 } from 'lucide-react';
 import { ListPageLayout } from '@/components/layouts';
 import { ClassManagementTable } from '@/components/admin/classes/ClassManagementTable';
-import { ClassEnrollmentsDialog } from '@/components/admin/classes/ClassEnrollmentsDialog';
+import { ClassSpecialtyDialog } from '@/components/admin/classes/ClassSpecialtyDialog';
 import { DestructiveConfirmDialog } from '@/components/shared/DestructiveConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,11 +22,13 @@ export function AdminClassesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [newSemester, setNewSemester] = useState('');
-  const [enrollmentsTarget, setEnrollmentsTarget] = useState<AdminClassModel | null>(null);
   const [editTarget, setEditTarget] = useState<AdminClassModel | null>(null);
   const [editName, setEditName] = useState('');
   const [editSemester, setEditSemester] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminClassModel | null>(null);
+  const [specialtyDialogOpen, setSpecialtyDialogOpen] = useState(false);
+  const [specialtyDialogClass, setSpecialtyDialogClass] = useState<AdminClassModel | null>(null);
+  const [filterSpecialtyId, setFilterSpecialtyId] = useState<string | null>(null);
 
   const classesQuery = useAdminClasses();
   const createMutation = useCreateAdminClass();
@@ -112,9 +114,14 @@ export function AdminClassesPage() {
 
       <ClassManagementTable
         classes={classes}
-        onManageEnrollments={(cls) => setEnrollmentsTarget(cls)}
         onEdit={openEdit}
         onDelete={(cls) => setDeleteTarget(cls)}
+        onManageSpecialty={(cls) => {
+          setSpecialtyDialogClass(cls);
+          setSpecialtyDialogOpen(true);
+        }}
+        filterSpecialtyId={filterSpecialtyId}
+        onFilterSpecialtyChange={setFilterSpecialtyId}
       />
 
       {createOpen ? (
@@ -249,9 +256,17 @@ export function AdminClassesPage() {
         </div>
       ) : null}
 
-      {enrollmentsTarget ? (
-        <ClassEnrollmentsDialog cls={enrollmentsTarget} onCancel={() => setEnrollmentsTarget(null)} />
-      ) : null}
+      <ClassSpecialtyDialog
+        open={specialtyDialogOpen}
+        onOpenChange={(open) => {
+          setSpecialtyDialogOpen(open);
+          if (!open) {
+            setSpecialtyDialogClass(null);
+            void classesQuery.refetch();
+          }
+        }}
+        classData={specialtyDialogClass}
+      />
 
       <DestructiveConfirmDialog
         open={Boolean(deleteTarget)}

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLogout } from '@/lib/useLogout';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import {
   LayoutDashboard,
   FolderOpen,
@@ -14,7 +15,6 @@ import {
 
 const expertMenuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/expert/dashboard' },
-  { icon: FileText, label: 'Quiz', href: '/expert/quizzes' },
   { icon: MessageSquareText, label: 'Reviews', href: '/expert/reviews' },
   { icon: FolderOpen, label: 'Medical case', href: '/expert/cases' },
 ];
@@ -70,6 +70,11 @@ export default function ExpertSidebar() {
 
       {/* User & Logout */}
       <div className="px-3 py-4 border-t border-white/10">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="bg-white rounded-lg p-0.5 shadow-sm overflow-hidden">
+            <ThemeToggle />
+          </div>
+        </div>
         <Link
           href="/profile"
           className="flex items-center gap-3 px-4 py-3 mb-2 rounded-lg hover:bg-sidebar-hover transition-colors duration-150"

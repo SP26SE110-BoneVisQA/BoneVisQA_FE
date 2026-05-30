@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useLogout } from '@/lib/useLogout';
 import { getStoredUserInfo } from '@/lib/getStoredUserInfo';
+import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import {
   LayoutDashboard,
   Users,
@@ -15,6 +17,11 @@ import {
   Stethoscope,
   Database,
   BadgeCheck,
+  BookOpen,
+  FileBarChart,
+  Shield,
+  Archive,
+  ScrollText,
 } from 'lucide-react';
 
 export default function AdminSidebar() {
@@ -39,11 +46,16 @@ export default function AdminSidebar() {
     { icon: Users, label: t('nav.users', 'Users'), href: '/admin/users' },
     {
       icon: BadgeCheck,
-      label: t('nav.medicalVerifications', 'Medical Student Verification'),
+      label: t('nav.medicalVerifications', 'Medical Verifications'),
       href: '/admin/verifications',
     },
+    { icon: BookOpen, label: t('nav.classes', 'Classes'), href: '/admin/classes' },
     { icon: Database, label: t('nav.documents', 'Documents'), href: '/admin/documents' },
     { icon: FileText, label: t('nav.cases', 'Cases'), href: '/admin/cases' },
+    { icon: ScrollText, label: t('nav.logs', 'System Logs'), href: '/admin/logs' },
+    { icon: Shield, label: t('nav.systemConfig', 'System Config'), href: '/admin/system-config' },
+    { icon: FileBarChart, label: t('nav.reports', 'Reports'), href: '/admin/reports' },
+    { icon: Archive, label: t('nav.backup', 'Backup/Export'), href: '/admin/backup' },
     { icon: BrainCircuit, label: t('nav.aiConfig', 'AI Config'), href: '/admin/ai-config' },
     { icon: Settings, label: t('nav.settings', 'Settings'), href: '/admin/settings' },
   ];
@@ -94,6 +106,14 @@ export default function AdminSidebar() {
       {/* User profile */}
       {stored.fullName && (
         <div className="border-t border-white/10 px-3 py-4">
+          <div className="mb-4 flex justify-center gap-2 border-b border-white/10 pb-4">
+            <div className="overflow-hidden rounded-lg bg-white p-0.5 shadow-sm">
+              <ThemeToggle />
+            </div>
+            <div className="overflow-hidden rounded-lg bg-white p-0.5 shadow-sm">
+              <LanguageSwitcher />
+            </div>
+          </div>
           <div className="flex items-center gap-3 rounded-xl px-3 py-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs font-bold text-white">
               {initials}

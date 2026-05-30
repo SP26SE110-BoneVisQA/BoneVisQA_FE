@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { useState, type CSSProperties, type ElementType, type ReactNode } from 'react';
 import { DashboardOverviewLayout } from '@/components/layouts';
 import { useLecturerDashboardQueries } from '@/features/lecturer/hooks/useLecturerDashboardQueries';
+import TeachingObjectives from '@/components/lecturer/TeachingObjectives';
+import StudentProgress from '@/components/lecturer/StudentProgress';
+import { useToast } from '@/components/ui/toast';
 import {
   Users,
   GraduationCap,
@@ -122,6 +125,7 @@ function topicBarColor(avgScore: number): string {
 }
 
 export default function LecturerDashboardPage() {
+  const toast = useToast();
   const {
     setSelectedClassId,
     effectiveClassId,
@@ -272,6 +276,19 @@ export default function LecturerDashboardPage() {
                 <p className="py-4 text-center text-sm text-muted-foreground">No topic data</p>
               )}
             </CollapsibleCard>
+
+            {effectiveClassId ? (
+              <>
+                <TeachingObjectives
+                  classId={effectiveClassId}
+                  onError={(error) => toast.error(error)}
+                />
+                <StudentProgress
+                  classId={effectiveClassId}
+                  onError={(error) => toast.error(error)}
+                />
+              </>
+            ) : null}
           </div>
 
           <div className="space-y-4">

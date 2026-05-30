@@ -22,12 +22,14 @@ import {
   Contrast,
   Ruler,
   Mail,
-  Eye,
   Hand,
+  ChevronRight,
+  Eye,
+  Lightbulb,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getAssignedQuizzes, startQuizSession, submitQuizSession, fetchQuizAttemptReview, requestRetake } from '@/lib/api/student';
-import type { QuizAttemptReview } from '@/lib/api/student';
+import { getAssignedQuizzes, startQuizSession, submitQuizSession, requestRetake, fetchQuizAttemptReview } from '@/lib/api/student';
 import { resolveApiAssetUrl, getApiErrorMessage } from '@/lib/api/client';
 import type { StudentQuizResultDto } from '@/lib/api/types';
 import type { AssignedQuizItem, QuizSessionDto, StudentSubmitQuestionDto } from '@/lib/api/types';
@@ -43,14 +45,43 @@ interface QuizModeQuestion {
   caseId?: string | null;
   caseTitle?: string | null;
   imageUrl?: string | null;
-  explanation?: string;
-  correctAnswer?: string;
-  essayAnswer?: string; // Model answer for essay questions
+  explanation?: string | null;
+  correctAnswer?: string | null;
+  essayAnswer?: string | null;
+  hint?: string | null;
+  hintAvailable?: boolean;
+  correctAnswers?: string | null;
+  acceptedAnswers?: string | null;
 }
 
 type AnswerState = 'unanswered' | 'correct' | 'incorrect';
 
 const ZOOM_LEVELS = [1, 1.25, 1.5, 2, 2.5];
+
+// Image enhancement state
+interface ImageEnhancement {
+  brightness: number;
+  contrast: number;
+  invert: boolean;
+  grayscale: boolean;
+}
+
+const DEFAULT_ENHANCEMENT: ImageEnhancement = {
+  brightness: 1,
+  contrast: 1,
+  invert: false,
+  grayscale: false,
+};
+
+function getImageStyle(enhancement: ImageEnhancement, highContrast: boolean): React.CSSProperties {
+  const filters = [
+    `brightness(${enhancement.brightness})`,
+    `contrast(${enhancement.contrast * (highContrast ? 1.25 : 1)})`,
+    enhancement.invert ? 'invert(1)' : '',
+    enhancement.grayscale ? 'grayscale(1)' : '',
+  ].filter(Boolean);
+  return { filter: filters.join(' ') };
+}
 
 function formatMmSs(totalSeconds: number): string {
   const m = Math.floor(Math.max(0, totalSeconds) / 60);
@@ -76,27 +107,41 @@ export default function QuizSessionPage({
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [multiSelectAnswers, setMultiSelectAnswers] = useState<Record<string, string[]>>({});
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
+  const [shownHints, setShownHints] = useState<Record<string, boolean>>({});
   const [answerStates, setAnswerStates] = useState<Record<string, AnswerState>>({});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [quizResult, setQuizResult] = useState<StudentQuizResultDto | null>(null);
-  const [quizReview, setQuizReview] = useState<QuizAttemptReview | null>(null);
+  const [reviewData, setReviewData] = useState<{ correctAnswer: string }[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
   const [requestingRetake, setRequestingRetake] = useState(false);
   const [retakeSent, setRetakeSent] = useState(false);
+
+  // Review pagination (5 questions per page)
+  const [reviewPage, setReviewPage] = useState(1);
+  const REVIEW_PAGE_SIZE = 5;
+
+  // Helper function to get essay model answer from reviewData
+  const getEssayModelAnswer = useCallback((questionId: string): string | null => {
+    if (!reviewData || reviewData.length === 0) return null;
+    const question = reviewData.find((q) => (q as unknown as { questionId: string }).questionId === questionId);
+    return question?.correctAnswer ?? null;
+  }, [reviewData]);
 
   const [zoomIndex, setZoomIndex] = useState(0);
   const [showFeedback, setShowFeedback] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [highContrastImg, setHighContrastImg] = useState(false);
   const [straightenActive, setStraightenActive] = useState(false);
-  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [enhancement, setEnhancement] = useState<ImageEnhancement>(DEFAULT_ENHANCEMENT);
   const [isPanning, setIsPanning] = useState(false);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
   const timeUpAutoSubmitTriggered = useRef(false);
-  const retakeRequestedRef = useRef(false); // Prevent duplicate retake requests
+  const retakeRequestedRef = useRef(false);
 
   // Tải lại thông tin quiz từ server để lấy trạng thái cập nhật (isCompleted, score)
   const reloadQuizInfo = useCallback(async () => {
@@ -131,6 +176,24 @@ export default function QuizSessionPage({
     }
   }, [submitted, reloadQuizInfo]);
 
+  // Auto-reveal feedback after submit: populate answerStates and show feedback
+  useEffect(() => {
+    if (!submitted || !session) return;
+    // Build answer states based on session's correctAnswer (Practice Mode)
+    const newStates: Record<string, AnswerState> = {};
+    session.questions.forEach((q) => {
+      const correctAnswer = q.correctAnswer;
+      const selected = answers[q.questionId];
+      if (correctAnswer) {
+        newStates[q.questionId] = selected === correctAnswer ? 'correct' : 'incorrect';
+      }
+    });
+    setAnswerStates(newStates);
+    setShowFeedback(true);
+    setReviewPage(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitted]);
+
   // Xử lý yêu cầu làm lại quiz từ tham số URL
   useEffect(() => {
     if (isRetakeRequested && quizInfo?.isCompleted && !retakeRequestedRef.current) {
@@ -151,19 +214,47 @@ export default function QuizSessionPage({
     caseId: q.caseId ?? null,
     caseTitle: q.caseTitle ?? null,
     imageUrl: q.imageUrl ?? null,
+    explanation: (q as any).explanation ?? null,
+    correctAnswer: q.correctAnswer ?? null,
+    essayAnswer: q.essayAnswer ?? null,
+    hint: (q as any).hint ?? null,
+    hintAvailable: (q as any).hintAvailable ?? false,
+    correctAnswers: (q as any).correctAnswers ?? null,
+    acceptedAnswers: (q as any).acceptedAnswers ?? null,
   }));
   const currentQ = questions[currentIndex];
   const totalQ = questions.length;
-  const answeredCount = Object.keys(answers).length;
+  // ================================================================
+  // ĐẾM SỐ CÂU HỎI ĐÃ TRẢ LỜI
+  // ================================================================
+  // Logic đếm khác nhau theo loại câu hỏi:
+  // - Multi-select: đếm nếu có ít nhất 1 đáp án được chọn
+  // - Essay: KHÔNG đếm trong answeredCount (cần lecturer chấm)
+  // - Các loại khác (MCQ, True/False, Fill-in-blank): đếm nếu có đáp án
+  //
+  // LƯU Ý: answeredCount dùng để:
+  // 1. Hiển thị tiến độ "X/Y answered"
+  // 2. Kiểm tra canSubmit (phải trả lời ít nhất 1 câu)
+  // 3. KHÔNG ảnh hưởng đến tính điểm (điểm do backend tính)
+  // ================================================================
+  const answeredCount = (() => {
+    let count = 0;
+    for (const q of session?.questions ?? []) {
+      const qType = q.type?.toLowerCase();
+      if (qType === 'multiselect' || qType === 'multi-select') {
+        // Multi-select: count question as answered if at least 1 option selected
+        const selected = multiSelectAnswers[q.questionId];
+        if (selected && selected.length > 0) count++;
+      } else if (qType !== 'essay') {
+        // Other types: count if answer exists
+        if (answers[q.questionId]) count++;
+      }
+    }
+    return count;
+  })();
   const positionPct = totalQ > 0 ? Math.round(((currentIndex + 1) / totalQ) * 100) : 0;
   const moduleLabel = session?.topic ?? quizInfo?.className ?? 'Clinical module';
 
-  // Get essay model answer from review data if available
-  const getEssayModelAnswer = (questionId: string): string | null | undefined => {
-    if (!quizReview) return undefined;
-    const reviewQ = quizReview.questions.find(q => q.questionId === questionId);
-    return reviewQ?.essayAnswer;
-  };
   const rawTimeLimit = session?.timeLimit ?? quizInfo?.timeLimit;
   const timeLimitMinutes =
     rawTimeLimit != null && Number(rawTimeLimit) > 0 ? Math.round(Number(rawTimeLimit)) : null;
@@ -226,6 +317,19 @@ export default function QuizSessionPage({
     setIsPanning(false);
   }, [currentIndex]);
 
+  // ================================================================
+  // HÀM SUBMIT QUIZ - XỬ LÝ NỘP BÀI VÀ NHẬN KẾT QUẢ
+  // ================================================================
+  // 1. Build payload: chuẩn bị data từng câu hỏi và đáp án student
+  // 2. Gọi API submitQuizSession()
+  // 3. Nhận về quizResult chứa:
+  //    - score: điểm phần trăm (0-100)
+  //    - passed: true/false
+  //    - correctAnswers: số câu đúng
+  //    - totalQuestions: tổng câu hỏi
+  //    - passingScore: ngưỡng pass
+  //    - ungradedEssayCount: số essay chưa chấm
+  // ================================================================
   const handleSubmit = useCallback(async () => {
     if (!session) return;
     setSubmitting(true);
@@ -234,28 +338,24 @@ export default function QuizSessionPage({
       const payload: StudentSubmitQuestionDto[] = session.questions.map((q) => {
         const answer = answers[q.questionId] || '';
         const isEssay = q.type?.toLowerCase() === 'essay';
+        const isMultiSelect = q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select';
         return {
           questionId: q.questionId,
           studentAnswer: isEssay ? '' : answer,
           essayAnswer: isEssay ? answer : undefined,
+          selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : undefined,
         };
       });
       const result = await submitQuizSession(session.attemptId, payload);
       setQuizResult(result);
       setSubmitted(true);
-      try {
-        const review = await fetchQuizAttemptReview(session.attemptId);
-        setQuizReview(review);
-      } catch {
-        // Việc tải review thất bại là không quan trọng
-      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Failed to submit: ${msg}`);
     } finally {
       setSubmitting(false);
     }
-  }, [session, answers, toast]);
+  }, [session, answers, multiSelectAnswers, toast]);
 
   const handleStart = async () => {
     setLoadingSession(true);
@@ -471,66 +571,101 @@ export default function QuizSessionPage({
             </div>
           </div>
 
-          {/* Quiz đã hoàn thành - hiển thị thông báo và nút Back */}
+          {/* ================================================================
+              MÀN HÌNH PRE-START: HIỂN THỊ ĐIỂM SỐ CỦA QUIZ ĐÃ HOÀN THÀNH
+              ================================================================
+              Khi quiz đã được nộp (isCompleted = true):
+              - Lấy điểm từ quizInfo.score (đã được tính ở backend)
+              - Format: hiển thị dạng phần trăm với 1 chữ số thập phân
+              - Nếu score = null (chưa có điểm): hiển thị '—'
+              
+              LƯU Ý QUAN TRỌNG VỀ CÁCH TÍNH ĐIỂM:
+              - Backend tính điểm: total quiz score = 100
+              - Chia đều cho tất cả câu hỏi
+              - Ví dụ: 4 câu hỏi, mỗi câu = 25 điểm
+              - Điểm hiển thị ở đây là PERCENTAGE (0-100%)
+              ================================================================ */}
           {quizInfo?.isCompleted ? (
-            <>
-              <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3">
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                  This quiz has already been completed
-                </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Score: {quizInfo.score != null
-                    ? `${quizInfo.score.toFixed(1)}%`
-                    : 'N/A'}
-                </p>
+            <div className="space-y-4">
+              {/* Score Badge - Hiển thị điểm phần trăm */}
+              <div className="flex items-center justify-center gap-3 rounded-xl bg-primary/5 border border-primary/20 px-6 py-4">
+                <div className="text-center">
+                  {/* 
+                    quizInfo.score: số thập phân từ 0-100
+                    Ví dụ: 85.5 nghĩa là 85.5%
+                    toFixed(1): làm tròn 1 chữ số thập phân
+                  */}
+                  <p className="text-4xl font-black text-primary">
+                    {quizInfo.score != null ? quizInfo.score.toFixed(1) : '—'}%
+                  </p>
+                  <p className="text-xs font-semibold text-muted-foreground">Your Score</p>
+                </div>
               </div>
-              <div className="flex flex-col gap-3">
-                {!retakeSent ? (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (retakeRequestedRef.current) return;
-                      retakeRequestedRef.current = true;
-                      setRequestingRetake(true);
-                      try {
-                        await requestRetake(quizId);
-                        setRetakeSent(true);
-                        toast.success('Retake request sent to your lecturer.');
-                      } catch (e) {
-                        toast.error(getApiErrorMessage(e));
-                        retakeRequestedRef.current = false;
-                        setRequestingRetake(false);
-                      }
-                    }}
-                    disabled={requestingRetake}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              {/* Nếu đáp án đã được công bố - cho phép xem lại đáp án */}
+              {/* Action Buttons Row - Chỉ hiện khi lecturer đã release đáp án */}
+              {quizInfo?.answersReleased && (
+                <div className="space-y-2">
+                  {/* Link đến trang review chi tiết */}
+                  <Link
+                    href={`/student/quiz/${quizId}/review`}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-[#007BFF] hover:opacity-95 text-white px-4 py-3 text-sm font-bold transition-colors shadow-lg shadow-primary/20"
                   >
-                    {requestingRetake ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Mail className="h-4 w-4" />
-                    )}
-                    {requestingRetake ? 'Sending…' : 'Request retake'}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2 rounded-xl bg-success/10 px-4 py-3">
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
-                    <div className="text-left">
-                      <p className="text-sm font-semibold text-success">Request sent!</p>
-                      <p className="text-xs text-on-surface-variant">
-                        Your lecturer has been notified. You can retake the quiz once retake is enabled.
-                      </p>
-                    </div>
-                  </div>
-                )}
-                <Link href="/student/quizzes">
-                  <Button variant="outline" className="h-12 w-full rounded-xl border-outline-variant/30 font-bold">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to Quizzes
-                  </Button>
-                </Link>
-              </div>
-            </>
+                    <Sparkles className="h-4 w-4" />
+                    View Detailed Review
+                  </Link>
+                  {/* Nút Reveal Answers - Chuyển đến trang review */}
+                  <Link
+                    href={`/student/quiz/${quizId}/review`}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-4 py-2.5 text-sm font-semibold transition-colors"
+                  >
+                    <Eye className="h-4 w-4" />
+                    Reveal Answers
+                  </Link>
+                </div>
+              )}
+
+              {/* Request Retake */}
+              {retakeSent ? (
+                <div className="flex items-center gap-2 rounded-xl bg-success/10 px-4 py-3">
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
+                  <p className="text-sm font-semibold text-success">Retake request sent!</p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (retakeRequestedRef.current) return;
+                    retakeRequestedRef.current = true;
+                    setRequestingRetake(true);
+                    try {
+                      await requestRetake(quizId);
+                      setRetakeSent(true);
+                      toast.success('Retake request sent to your lecturer.');
+                    } catch (e) {
+                      toast.error(getApiErrorMessage(e));
+                      retakeRequestedRef.current = false;
+                      setRequestingRetake(false);
+                    }
+                  }}
+                  disabled={requestingRetake}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-low hover:bg-surface-container-high px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {requestingRetake ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}
+                  {requestingRetake ? 'Sending…' : 'Request Retake'}
+                </button>
+              )}
+
+              <Link href="/student/quizzes">
+                <Button variant="outline" className="h-10 w-full rounded-xl font-medium">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Quizzes
+                </Button>
+              </Link>
+            </div>
           ) : (
             <>
               <p className="text-sm leading-relaxed text-on-surface-variant">
@@ -539,11 +674,20 @@ export default function QuizSessionPage({
               <div className="flex flex-col gap-3">
                 <Button
                   onClick={() => void handleStart()}
-                  isLoading={loadingSession}
+                  disabled={loadingSession}
                   className="h-12 rounded-xl bg-gradient-to-br from-primary to-primary-container text-base font-bold text-white shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  {!loadingSession && <PlayCircle className="h-5 w-5" />}
-                  {loadingSession ? 'Preparing…' : 'Begin assessment'}
+                  {loadingSession ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Preparing…
+                    </>
+                  ) : (
+                    <>
+                      <PlayCircle className="h-5 w-5" />
+                      Begin assessment
+                    </>
+                  )}
                 </Button>
                 <Link href="/student/quizzes">
                   <Button variant="outline" className="h-12 w-full rounded-xl border-outline-variant/30 font-bold">
@@ -570,6 +714,9 @@ export default function QuizSessionPage({
       </div>
     );
   }
+
+  const isTrueFalse =
+    currentQ.type?.toLowerCase() === 'truefalse' || currentQ.type?.toLowerCase() === 'true/false';
 
   const questionTag =
     currentQ.type && currentQ.type.toLowerCase().includes('multiple')
@@ -751,10 +898,8 @@ export default function QuizSessionPage({
                       <img
                         src={resolveApiAssetUrl(currentQ.imageUrl)}
                         alt={currentQ.caseTitle ?? 'Case image'}
-                        className={`max-h-[70vh] w-full max-w-full object-contain opacity-95 transition-all duration-300 group-hover:opacity-100 ${
-                          highContrastImg ? 'contrast-[1.25] saturate-[1.25]' : ''
-                        }`}
-                        style={{ maxHeight: '70vh' }}
+                        className="max-h-[70vh] w-full max-w-full object-contain opacity-95 transition-all duration-300 group-hover:opacity-100"
+                        style={{ maxHeight: '70vh', ...getImageStyle(enhancement, highContrastImg) }}
                       />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center px-6">
@@ -816,6 +961,27 @@ export default function QuizSessionPage({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setEnhancement(prev => ({ ...prev, invert: !prev.invert }))}
+                    className={`rounded-full p-2 transition-colors hover:bg-surface-container-high ${
+                      enhancement.invert ? 'bg-secondary/20 text-secondary' : 'text-on-surface'
+                    }`}
+                    title="Invert Colors"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" stroke="none">
+                      <circle cx="12" cy="12" r="10" fill="currentColor" />
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="rgba(0,0,0,0.6)" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEnhancement({ brightness: 1.5, contrast: 2, invert: true, grayscale: false })}
+                    className="rounded-full px-2 py-1 text-xs font-bold text-on-surface bg-blue-500/20 hover:bg-blue-500/30 transition-colors"
+                    title="X-ray Mode: Light background with dark bones"
+                  >
+                    X
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setStraightenActive((v) => !v)}
                     className={`rounded-full p-2 font-bold transition-colors hover:bg-surface-container-high ${
                       straightenActive ? 'bg-secondary/20 text-secondary' : 'text-on-surface'
@@ -831,6 +997,8 @@ export default function QuizSessionPage({
                       setZoomIndex(0);
                       setPanOffset({ x: 0, y: 0 });
                       setStraightenActive(false);
+                      setEnhancement(DEFAULT_ENHANCEMENT);
+                      setHighContrastImg(false);
                     }}
                     className="rounded-full px-2 py-1.5 font-headline text-xs font-bold text-on-surface hover:bg-surface-container-high"
                     title="Reset view"
@@ -857,7 +1025,45 @@ export default function QuizSessionPage({
                     {currentQ.type}
                   </span>
                 )}
+                {currentQ.type?.toLowerCase() === 'truefalse' && (
+                  <span className="inline-flex items-center rounded-xl bg-orange-100 px-4 py-2 text-xs font-bold text-orange-900">
+                    True/False
+                  </span>
+                )}
+                {currentQ.type?.toLowerCase() === 'multiselect' && (
+                  <span className="inline-flex items-center rounded-xl bg-blue-100 px-4 py-2 text-xs font-bold text-blue-900">
+                    Multi-Select
+                  </span>
+                )}
+                {currentQ.type?.toLowerCase() === 'fillinblank' && (
+                  <span className="inline-flex items-center rounded-xl bg-green-100 px-4 py-2 text-xs font-bold text-green-900">
+                    Fill in Blank
+                  </span>
+                )}
               </div>
+
+              {/* Hint Button */}
+              {!submitted && currentQ.hintAvailable && currentQ.hint && !shownHints[currentQ.questionId] && (
+                <button
+                  type="button"
+                  onClick={() => setShownHints(prev => ({ ...prev, [currentQ.questionId]: true }))}
+                  className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 hover:bg-amber-100"
+                >
+                  <Lightbulb className="h-5 w-5" />
+                  Show Hint
+                </button>
+              )}
+
+              {/* Hint Display */}
+              {!submitted && currentQ.hintAvailable && currentQ.hint && shownHints[currentQ.questionId] && (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                  <div>
+                    <span className="mb-1 block font-bold">Hint:</span>
+                    {currentQ.hint}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <h4 className="mb-4 flex items-center gap-2 font-headline text-base font-bold text-on-surface">
@@ -900,67 +1106,186 @@ export default function QuizSessionPage({
               </p>
             </div>
 
-            <div className="space-y-4">
-              {(
-                [
-                  { key: 'A' as const, text: currentQ.optionA },
-                  { key: 'B' as const, text: currentQ.optionB },
-                  { key: 'C' as const, text: currentQ.optionC },
-                  { key: 'D' as const, text: currentQ.optionD },
-                ] as const
-              ).map(({ key, text }) => {
-                if (!text) return null;
-
-                const isSelected = currentAnswer === key;
-                const state = currentState;
-                const isCorrect = currentQ.correctAnswer === key;
-
-                let row = 'border-outline-variant/15 bg-surface-container-lowest hover:border-primary/30 hover:bg-primary/5';
-                let letter = 'bg-surface-container text-on-surface-variant group-hover:bg-primary group-hover:text-white';
-
-                if (state !== 'unanswered' && isCorrect) {
-                  row = 'border-2 border-success/50 bg-success/10';
-                  letter = 'bg-success text-white';
-                } else if (state === 'incorrect' && isSelected) {
-                  row = 'border-2 border-destructive/50 bg-destructive/10';
-                  letter = 'bg-destructive text-white';
-                } else if (isSelected && state === 'unanswered') {
-                  row = 'border-2 border-primary bg-primary/10';
-                  letter = 'bg-primary text-white';
-                }
-
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled={submitted}
-                    onClick={() => handleSelect(key)}
-                    className={`group flex w-full items-center rounded-xl border-2 p-5 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${row}`}
-                  >
-                    <span
-                      className={`mr-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors ${letter}`}
+            {/* True/False Options */}
+            {(currentQ.type?.toLowerCase() === 'truefalse' || currentQ.type?.toLowerCase() === 'true/false') && (
+              <div className="flex gap-4">
+                {(['True', 'False'] as const).map((opt) => {
+                  const isSelected = currentAnswer === opt;
+                  const isCorrect = currentQ.correctAnswer?.toLowerCase() === opt.toLowerCase();
+                  let row = 'border-outline-variant/15 bg-surface-container-lowest hover:border-primary/30 hover:bg-primary/5';
+                  if (currentState !== 'unanswered' && isCorrect) {
+                    row = 'border-2 border-success/50 bg-success/10';
+                  } else if (currentState === 'incorrect' && isSelected) {
+                    row = 'border-2 border-destructive/50 bg-destructive/10';
+                  } else if (isSelected && currentState === 'unanswered') {
+                    row = 'border-2 border-primary bg-primary/10';
+                  }
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      disabled={submitted}
+                      onClick={() => handleSelect(opt)}
+                      className={`flex flex-1 items-center justify-center rounded-xl border-2 p-6 text-base font-bold transition-all disabled:cursor-not-allowed disabled:opacity-60 ${row}`}
                     >
-                      {key}
-                    </span>
-                    <span className="flex-1 font-semibold text-on-surface">
-                      {text}
-                    </span>
-                    {state === 'unanswered' && isSelected && (
-                      <CheckCircle2 className="ml-2 h-6 w-6 shrink-0 text-primary" />
-                    )}
-                    {state !== 'unanswered' && isCorrect && (
-                      <CheckCircle2 className="ml-2 h-6 w-6 shrink-0 text-success" />
-                    )}
-                    {state === 'incorrect' && isSelected && !isCorrect && (
-                      <XCircle className="ml-2 h-6 w-6 shrink-0 text-destructive" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                      {opt}
+                      {currentState !== 'unanswered' && isCorrect && (
+                        <CheckCircle2 className="ml-2 h-6 w-6 text-success" />
+                      )}
+                      {currentState === 'incorrect' && isSelected && (
+                        <XCircle className="ml-2 h-6 w-6 text-destructive" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Multi-Select Options */}
+            {(currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select') && (
+              <div className="space-y-3">
+                <p className="text-sm text-on-surface-variant">Select all that apply:</p>
+                {(['A', 'B', 'C', 'D'] as const).map((key) => {
+                  const optionValue = currentQ[`option${key}` as keyof typeof currentQ] as string | null;
+                  if (!optionValue) return null;
+                  const selectedAnswers = multiSelectAnswers[currentQ.questionId] || [];
+                  const isSelected = selectedAnswers.includes(key);
+                  // Parse correctAnswers from JSON string (stored as ["A","C"])
+                  const correctAnswersArray: string[] = currentQ.correctAnswers ? JSON.parse(currentQ.correctAnswers) : [];
+                  let row = 'border-outline-variant/15 bg-surface-container-lowest hover:border-primary/30 hover:bg-primary/5';
+                  if (currentState !== 'unanswered' && correctAnswersArray.includes(key)) {
+                    row = 'border-2 border-success/50 bg-success/10';
+                  } else if (currentState !== 'unanswered' && isSelected && !correctAnswersArray.includes(key)) {
+                    row = 'border-2 border-destructive/50 bg-destructive/10';
+                  } else if (isSelected && currentState === 'unanswered') {
+                    row = 'border-2 border-primary bg-primary/10';
+                  }
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      disabled={submitted}
+                      onClick={() => {
+                        setMultiSelectAnswers(prev => {
+                          const current = prev[currentQ.questionId] || [];
+                          const newAnswers = isSelected
+                            ? current.filter(k => k !== key)
+                            : [...current, key];
+                          return { ...prev, [currentQ.questionId]: newAnswers };
+                        });
+                        // Also update answers for counting
+                        setAnswers(prev => ({ ...prev, [currentQ.questionId]: isSelected ? '' : key }));
+                      }}
+                      className={`group flex w-full items-center gap-3 rounded-xl border-2 p-5 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${row}`}
+                    >
+                      <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 ${
+                        isSelected ? 'border-primary bg-primary' : 'border-outline-variant/30'
+                      }`}>
+                        {isSelected && (
+                          <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container text-sm font-bold text-on-surface-variant group-hover:bg-primary group-hover:text-white">
+                        {key}
+                      </span>
+                      <span className="flex-1 font-semibold text-on-surface">{optionValue}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Fill-in-Blank Input */}
+            {(currentQ.type?.toLowerCase() === 'fillinblank' || currentQ.type?.toLowerCase() === 'fill-in-blank') && (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-on-surface">Type your answer:</label>
+                <input
+                  type="text"
+                  value={textAnswers[currentQ.questionId] || ''}
+                  onChange={(e) => {
+                    setTextAnswers(prev => ({ ...prev, [currentQ.questionId]: e.target.value }));
+                    setAnswers(prev => ({ ...prev, [currentQ.questionId]: e.target.value }));
+                  }}
+                  disabled={submitted}
+                  className="w-full rounded-xl border-2 border-outline-variant/20 bg-surface-container-lowest px-4 py-4 text-sm outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Enter your answer..."
+                />
+                {currentState !== 'unanswered' && (
+                  <div className="mt-2">
+                    <p className="text-sm font-semibold text-on-surface">Accepted answers:</p>
+                    <p className="text-sm text-on-surface-variant">
+                      {currentQ.acceptedAnswers ? JSON.parse(currentQ.acceptedAnswers).join(', ') : 'N/A'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Default Multiple Choice Options */}
+            {!['truefalse', 'true/false', 'multiselect', 'multi-select', 'fillinblank', 'fill-in-blank', 'essay'].includes(currentQ.type?.toLowerCase() || '') && (
+              <div className="space-y-4">
+                {(
+                  [
+                    { key: 'A' as const, text: currentQ.optionA },
+                    { key: 'B' as const, text: currentQ.optionB },
+                    { key: 'C' as const, text: currentQ.optionC },
+                    { key: 'D' as const, text: currentQ.optionD },
+                  ] as const
+                ).map(({ key, text }) => {
+                  if (!text) return null;
+
+                  const isSelected = currentAnswer === key;
+                  const isCorrect = currentQ.correctAnswer === key;
+
+                  let row = 'border-outline-variant/15 bg-surface-container-lowest hover:border-primary/30 hover:bg-primary/5';
+                  let letter = 'bg-surface-container text-on-surface-variant group-hover:bg-primary group-hover:text-white';
+
+                  if (currentState !== 'unanswered' && isCorrect) {
+                    row = 'border-2 border-success/50 bg-success/10';
+                    letter = 'bg-success text-white';
+                  } else if (currentState === 'incorrect' && isSelected) {
+                    row = 'border-2 border-destructive/50 bg-destructive/10';
+                    letter = 'bg-destructive text-white';
+                  } else if (isSelected && currentState === 'unanswered') {
+                    row = 'border-2 border-primary bg-primary/10';
+                    letter = 'bg-primary text-white';
+                  }
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      disabled={submitted}
+                      onClick={() => handleSelect(key)}
+                      className={`group flex w-full items-center rounded-xl border-2 p-5 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${row}`}
+                    >
+                      <span
+                        className={`mr-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors ${letter}`}
+                      >
+                        {key}
+                      </span>
+                      <span className="flex-1 font-semibold text-on-surface">
+                        {text}
+                      </span>
+                      {currentState === 'unanswered' && isSelected && (
+                        <CheckCircle2 className="ml-2 h-6 w-6 shrink-0 text-primary" />
+                      )}
+                      {currentState !== 'unanswered' && isCorrect && (
+                        <CheckCircle2 className="ml-2 h-6 w-6 shrink-0 text-success" />
+                      )}
+                      {currentState === 'incorrect' && isSelected && !isCorrect && (
+                        <XCircle className="ml-2 h-6 w-6 shrink-0 text-destructive" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Essay Answer Textarea - shown only for Essay type questions */}
-            {currentQ.type === 'Essay' && (
+            {currentQ.type?.toLowerCase() === 'essay' && (
               <div className="space-y-3 rounded-2xl border border-outline-variant/15 bg-surface-container-low p-6">
                 <label className="block text-xs font-bold uppercase tracking-widest text-primary">
                   Your Essay Response
@@ -1038,165 +1363,37 @@ export default function QuizSessionPage({
               </div>
             )}
 
-            {showFeedback && (
-              <div
-                className={`rounded-2xl border p-6 sm:p-8 ${
-                  currentState === 'correct'
-                    ? 'border-emerald-500/30 bg-emerald-50'
-                    : 'border-amber-500/30 bg-amber-50'
-                }`}
-              >
-                <div className="mb-3 flex items-center gap-3">
-                  {currentState === 'correct' ? (
-                    <>
-                      <CheckCircle2 className="h-7 w-7 text-emerald-600" />
-                      <span className="font-headline text-lg font-bold text-emerald-800">
-                        Correct
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="h-7 w-7 text-amber-600" />
-                      <span className="font-headline text-lg font-bold text-amber-800">
-                        Incorrect
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                {currentQ.explanation && (
-                  <p className="text-sm leading-relaxed text-on-surface-variant">{currentQ.explanation}</p>
-                )}
-
-                {/* Essay question: show student's answer and model answer */}
-                {currentQ.type === 'Essay' && (
-                  <div className="mt-4 space-y-4">
-                    <div className="rounded-xl bg-surface-container-low p-4">
-                      <h5 className="mb-2 text-xs font-bold uppercase tracking-widest text-primary">
-                        Your Essay Response
-                      </h5>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-on-surface">
-                        {answers[currentQ.questionId] || '(No answer provided)'}
-                      </p>
-                    </div>
-                    {getEssayModelAnswer(currentQ.questionId) && (
-                      <div className="rounded-xl bg-primary/5 p-4">
-                        <h5 className="mb-2 text-xs font-bold uppercase tracking-widest text-primary">
-                          Reference / Model Answer
-                        </h5>
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-on-surface-variant">
-                          {getEssayModelAnswer(currentQ.questionId)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Multiple choice / Annotation: show ABCD answer */}
-                {currentQ.type !== 'Essay' && currentState === 'incorrect' && currentQ.correctAnswer && (
-                  <p className="mt-3 text-sm font-semibold text-on-surface">
-                    Correct answer:{' '}
-                    <span className="text-success">
-                      {currentQ.correctAnswer}.{' '}
-                      {String(currentQ[`option${currentQ.correctAnswer}` as keyof QuizModeQuestion] ?? '')}
-                    </span>
-                  </p>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (currentIndex < totalQ - 1) handleNext();
-                  }}
-                  className="mt-5 flex items-center gap-2 text-sm font-bold text-primary transition-transform hover:translate-x-1"
-                >
-                  {currentIndex < totalQ - 1 ? (
-                    <>
-                      Next question
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  ) : (
-                    'Review your answers below'
-                  )}
-                </button>
-              </div>
-            )}
-
-            {submitted && quizResult && (
+            {/* ================================================================
+                KẾT QUẢ SAU KHI SUBMIT - HIỂN THỊ THÀNH CÔNG
+                ================================================================
+                Hiển thị thông báo nộp bài thành công cho student
+                ================================================================ */}
+            {submitted && (
               <div className="space-y-6 rounded-2xl border border-primary/25 bg-primary/5 p-8">
-                {/* ⚠️ Warning nếu có essay chưa chấm */}
-                {quizResult.ungradedEssayCount && quizResult.ungradedEssayCount > 0 && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-                      <div>
-                        <p className="font-bold">
-                          Essay awaiting instructor grading
-                        </p>
-                        <p className="mt-1 text-sm">
-                          Your submission has {quizResult.ungradedEssayCount} essay question(s) not yet graded.
-                          Current score does not include the essay portion. The instructor will grade and update later.
-                        </p>
-                      </div>
-                    </div>
+                <div className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/50 p-8 text-center">
+                  <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-lg shadow-emerald-500/30">
+                    <CheckCircle2 className="h-10 w-10 text-white" />
                   </div>
-                )}
-
-                {/* Hiển thị điểm - thang điểm 100 */}
-                <div className="flex flex-col items-center justify-center rounded-xl bg-surface p-6">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Your Score</p>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className={`text-5xl font-black ${quizResult.passed ? 'text-success' : 'text-destructive'}`}>
-                      {quizResult.score != null ? quizResult.score.toFixed(1) : '—'}
-                    </span>
-                    <span className="text-2xl font-bold text-on-surface-variant">/100</span>
-                  </div>
-                  <p className={`mt-2 rounded-full px-4 py-1 text-sm font-bold ${quizResult.passed ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                    {quizResult.passed ? '✓ PASSED' : '✗ NEEDS IMPROVEMENT'}
+                  <h3 className="mb-2 font-headline text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+                    Quiz submitted successfully!
+                  </h3>
+                  <p className="text-sm text-emerald-600/80 dark:text-emerald-400/70">
+                    Your quiz has been sent successfully. Score will be updated after the instructor grades.
                   </p>
-                  {quizResult.passingScore != null && (
-                    <p className="mt-2 text-sm text-on-surface-variant">
-                      Passing: {quizResult.passingScore}%
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <p className="text-center font-headline text-lg font-bold text-on-surface">Quiz submitted</p>
-                  <p className="mt-1 text-center text-sm text-on-surface-variant">
+                  <p className="mt-2 text-xs text-emerald-600/70 dark:text-emerald-400/60">
                     {answeredCount}/{totalQ} questions answered
                   </p>
+                  {quizResult?.ungradedEssayCount != null && quizResult.ungradedEssayCount > 0 && (
+                    <div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>{quizResult.ungradedEssayCount} essay question(s) waiting for instructor grading</span>
+                    </div>
+                  )}
                 </div>
-
-                <div className="grid grid-cols-2 gap-4 rounded-2xl bg-surface-container-low/80 p-4">
-                  <div className="text-center">
-                    <p className="text-3xl font-black text-primary">
-                      {quizResult.correctAnswers}/{quizResult.totalQuestions}
-                    </p>
-                    <p className="text-xs text-on-surface-variant">MCQ correct</p>
-                  </div>
-                  <div className="text-center">
-                    <p
-                      className={`text-3xl font-black ${quizResult.passed ? 'text-success' : 'text-destructive'}`}
-                    >
-                      {quizResult.passed ? 'PASSED' : 'RETRY'}
-                    </p>
-                    <p className="text-xs text-on-surface-variant">
-                      {quizResult.totalQuestions} total questions
-                    </p>
-                  </div>
-                </div>
-                {(quizResult.ungradedEssayCount ?? 0) > 0 && (
-                  <p className="mt-2 text-center text-xs text-amber-600 dark:text-amber-400">
-                    * {quizResult.ungradedEssayCount} essay(s) pending grading. Score will update after grading.
-                  </p>
-                )}
 
                 <div className="flex flex-wrap justify-center gap-3">
                   <Link href="/student/quizzes">
-                    <Button variant="outline" className="rounded-xl font-bold">
-                      Back to quizzes
-                    </Button>
+                    <Button variant="outline" className="rounded-xl font-bold">Back to quizzes</Button>
                   </Link>
                 </div>
               </div>
@@ -1204,12 +1401,95 @@ export default function QuizSessionPage({
           </div>
         </div>
 
-        {/* Question Navigation */}
+        {/* Question Navigation with Pagination */}
         <div className="mt-10 border-t border-outline-variant/10 pt-10">
         <h4 className="mb-4 flex items-center gap-2 font-headline text-base font-bold text-on-surface">
           <span className="h-1 w-6 rounded-full bg-primary" />
           Question Navigation
+          {totalQ > REVIEW_PAGE_SIZE && (
+            <span className="ml-2 text-xs font-normal text-on-surface-variant">
+              Page {reviewPage} of {Math.ceil(totalQ / REVIEW_PAGE_SIZE)}
+            </span>
+          )}
         </h4>
+
+        {totalQ > REVIEW_PAGE_SIZE ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {questions
+                .slice((reviewPage - 1) * REVIEW_PAGE_SIZE, reviewPage * REVIEW_PAGE_SIZE)
+                .map((q, i) => {
+                  const globalIndex = (reviewPage - 1) * REVIEW_PAGE_SIZE + i;
+                  const state = answerStates[q.questionId];
+                  const isCurrent = globalIndex === currentIndex;
+
+                  let cls = 'border-outline-variant/30 bg-surface-container-low text-on-surface-variant';
+                  if (state === 'correct') {
+                    cls = 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600';
+                  } else if (state === 'incorrect') {
+                    cls = 'border-destructive/40 bg-destructive/10 text-destructive';
+                  } else if (answers[q.questionId]) {
+                    cls = 'border-primary/40 bg-primary/10 text-primary';
+                  }
+
+                  if (isCurrent) {
+                    cls += ' ring-2 ring-primary ring-offset-2 ring-offset-background';
+                  }
+
+                  return (
+                    <button
+                      key={q.questionId}
+                      type="button"
+                      onClick={() => {
+                        setCurrentIndex(globalIndex);
+                        setShowFeedback(false);
+                      }}
+                      className={`flex h-10 w-10 items-center justify-center rounded-xl border-2 text-sm font-bold transition-all ${cls}`}
+                    >
+                      {globalIndex + 1}
+                    </button>
+                  );
+                })}
+            </div>
+            {/* Pagination Controls */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setReviewPage(p => Math.max(1, p - 1))}
+                disabled={reviewPage === 1}
+                className="flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-2 text-sm font-bold text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Previous
+              </button>
+              <div className="flex gap-2">
+                {Array.from({ length: Math.ceil(totalQ / REVIEW_PAGE_SIZE) }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setReviewPage(page)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold transition-colors ${
+                      page === reviewPage
+                        ? 'bg-primary text-white'
+                        : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewPage(p => Math.min(Math.ceil(totalQ / REVIEW_PAGE_SIZE), p + 1))}
+                disabled={reviewPage === Math.ceil(totalQ / REVIEW_PAGE_SIZE)}
+                className="flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-2 text-sm font-bold text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ) : (
           <div className="flex flex-wrap gap-2">
             {questions.map((q, i) => {
               const state = answerStates[q.questionId];
@@ -1244,6 +1524,8 @@ export default function QuizSessionPage({
               );
             })}
           </div>
+        )}
+
         </div>
       </div>
 
@@ -1256,11 +1538,15 @@ export default function QuizSessionPage({
           <Link href="/student/quizzes" className="text-xs font-bold text-on-surface-variant hover:text-primary">
             Back to quizzes
           </Link>
-          <Link href="/student/quizzes/history" className="text-xs font-bold text-on-surface-variant hover:text-primary">
+          <Link href="/student/quizzes?tab=history" className="text-xs font-bold text-on-surface-variant hover:text-primary">
             Quiz history
+          </Link>
+          <Link href="/student/flashcards" className="text-xs font-bold text-on-surface-variant hover:text-primary">
+            My Flashcards
           </Link>
         </div>
       </footer>
+
     </div>
   );
 }

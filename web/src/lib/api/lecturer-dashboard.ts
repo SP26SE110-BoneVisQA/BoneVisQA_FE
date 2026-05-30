@@ -427,3 +427,589 @@ export async function updateAdminProfile(
 }
 
 export { fetchLecturerTriageList } from './lecturer-triage';
+
+// ── Teaching Objectives ─────────────────────────────────────────────────────────
+
+export interface TeachingObjectiveItem {
+  id: string;
+  topic: string;
+  objective: string;
+  level: string;
+  order: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TeachingObjectivesDto {
+  classId: string;
+  className?: string;
+  lecturerId: string;
+  lecturerName?: string;
+  expertId?: string;
+  expertName?: string;
+  objectives: TeachingObjectiveItem[];
+  totalObjectives: number;
+  activeObjectives: number;
+  lastUpdated?: string;
+}
+
+export interface TeachingObjectiveSuggestionDto {
+  id: string;
+  classId: string;
+  className?: string;
+  expertId: string;
+  expertName?: string;
+  topic: string;
+  objective: string;
+  level: string;
+  status: string;
+  rejectionReason?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export interface UpdateTeachingObjectivesRequestDto {
+  objectives: TeachingObjectiveItem[];
+  replaceAll: boolean;
+}
+
+export interface ConfirmSuggestionRequestDto {
+  suggestionId: string;
+  approve: boolean;
+  rejectionReason?: string;
+  order?: number;
+}
+
+export async function fetchTeachingObjectives(classId?: string): Promise<TeachingObjectivesDto> {
+  try {
+    const url = classId
+      ? `/api/lecturer/classes/${classId}/objectives`
+      : '/api/lecturer/class/objectives';
+    const { data } = await http.get<unknown>(url);
+    return mapTeachingObjectives(data as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function updateTeachingObjectives(
+  classId: string,
+  request: UpdateTeachingObjectivesRequestDto
+): Promise<TeachingObjectivesDto> {
+  try {
+    const { data } = await http.put<unknown>(`/api/lecturer/classes/${classId}/objectives`, request);
+    return mapTeachingObjectives(data as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchExpertSuggestions(classId: string): Promise<TeachingObjectiveSuggestionDto[]> {
+  try {
+    const { data } = await http.get<unknown[]>(`/api/lecturer/classes/${classId}/objectives/suggestions`);
+    return (data as unknown[]).map((item) => mapSuggestion(item as Record<string, unknown>));
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function confirmSuggestion(
+  classId: string,
+  suggestionId: string,
+  request: ConfirmSuggestionRequestDto
+): Promise<TeachingObjectiveSuggestionDto> {
+  try {
+    const { data } = await http.post<unknown>(
+      `/api/lecturer/classes/${classId}/objectives/suggestions/${suggestionId}/confirm`,
+      request
+    );
+    return mapSuggestion(data as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+function mapTeachingObjectives(raw: Record<string, unknown>): TeachingObjectivesDto {
+  const objectives = Array.isArray(raw.objectives ?? raw.Objectives)
+    ? (raw.objectives as unknown[]).map(mapObjectiveItem)
+    : [];
+  return {
+    classId: String(raw.classId ?? raw.ClassId ?? ''),
+    className: optStr(raw.className ?? raw.ClassName),
+    lecturerId: String(raw.lecturerId ?? raw.LecturerId ?? ''),
+    lecturerName: optStr(raw.lecturerName ?? raw.LecturerName),
+    expertId: raw.expertId ? String(raw.expertId) : undefined,
+    expertName: optStr(raw.expertName ?? raw.ExpertName),
+    objectives,
+    totalObjectives: Number(raw.totalObjectives ?? raw.TotalObjectives ?? objectives.length),
+    activeObjectives: Number(raw.activeObjectives ?? raw.ActiveObjectives ?? objectives.filter((o: TeachingObjectiveItem) => o.isActive).length),
+    lastUpdated: optStr(raw.lastUpdated ?? raw.LastUpdated),
+  };
+}
+
+function mapObjectiveItem(raw: unknown): TeachingObjectiveItem {
+  const o = raw as Record<string, unknown>;
+  return {
+    id: String(o.id ?? o.Id ?? ''),
+    topic: String(o.topic ?? o.Topic ?? ''),
+    objective: String(o.objective ?? o.Objective ?? ''),
+    level: String(o.level ?? o.Level ?? 'Basic'),
+    order: Number(o.order ?? o.Order ?? 0),
+    isActive: Boolean(o.isActive ?? o.IsActive ?? true),
+    createdAt: optStr(o.createdAt ?? o.CreatedAt),
+    updatedAt: optStr(o.updatedAt ?? o.UpdatedAt),
+  };
+}
+
+function mapSuggestion(raw: Record<string, unknown>): TeachingObjectiveSuggestionDto {
+  return {
+    id: String(raw.id ?? ''),
+    classId: String(raw.classId ?? raw.ClassId ?? ''),
+    className: optStr(raw.className ?? raw.ClassName),
+    expertId: String(raw.expertId ?? raw.ExpertId ?? ''),
+    expertName: optStr(raw.expertName ?? raw.ExpertName),
+    topic: String(raw.topic ?? raw.Topic ?? ''),
+    objective: String(raw.objective ?? raw.Objective ?? ''),
+    level: String(raw.level ?? raw.Level ?? 'Basic'),
+    status: String(raw.status ?? raw.Status ?? 'Pending'),
+    rejectionReason: optStr(raw.rejectionReason ?? raw.RejectionReason),
+    createdAt: String(raw.createdAt ?? raw.CreatedAt ?? ''),
+    reviewedAt: optStr(raw.reviewedAt ?? raw.ReviewedAt),
+  };
+}
+
+// ── Student Progress ────────────────────────────────────────────────────────────
+
+export interface StudentProgressSummaryDto {
+  classId: string;
+  className?: string;
+  totalStudents: number;
+  activeStudents: number;
+  students: StudentProgressItemDto[];
+  overview: {
+    classAverageScore: number;
+    classAverageProgress: number;
+    totalQuizzes: number;
+    totalCases: number;
+    quizCompletionRate: number;
+    caseCompletionRate: number;
+    calculatedAt: string;
+  };
+}
+
+export interface StudentProgressItemDto {
+  studentId: string;
+  studentName?: string;
+  email?: string;
+  avatarUrl?: string;
+  averageScore: number;
+  quizzesCompleted: number;
+  totalQuizzes: number;
+  casesViewed: number;
+  totalCases: number;
+  overallProgress: number;
+  progressStatus: string;
+  competencies: CompetencyScoreDto[];
+  lastActivity?: string;
+}
+
+export interface StudentProgressDetailDto {
+  studentId: string;
+  studentName?: string;
+  email?: string;
+  classId: string;
+  enrolledAt: string;
+  lastActivity?: string;
+  quizProgress: QuizProgressDetailDto;
+  caseProgress: CaseProgressDetailDto;
+  competencyDetail: CompetencyDetailDto;
+  recentActivities: RecentActivityDto[];
+}
+
+export interface QuizProgressDetailDto {
+  totalQuizzes: number;
+  completedQuizzes: number;
+  pendingQuizzes: number;
+  averageScore: number;
+  highestScore: number;
+  lowestScore: number;
+  quizScores: QuizScoreItemDto[];
+}
+
+export interface QuizScoreItemDto {
+  quizId: string;
+  quizTitle?: string;
+  topic?: string;
+  score: number;
+  maxScore: number;
+  percentage: number;
+  completedAt?: string;
+  isPassed: boolean;
+}
+
+export interface CaseProgressDetailDto {
+  totalAssignedCases: number;
+  viewedCases: number;
+  completedCases: number;
+  completionRate: number;
+  recentCases: CaseViewItemDto[];
+}
+
+export interface CaseViewItemDto {
+  caseId: string;
+  caseTitle?: string;
+  caseImageUrl?: string;
+  viewedAt?: string;
+  viewCount: number;
+  isCompleted: boolean;
+}
+
+export interface CompetencyDetailDto {
+  overallCompetency: number;
+  competencies: CompetencyScoreDto[];
+  topicMasteries: TopicMasteryDto[];
+  history: CompetencyHistoryDto[];
+}
+
+export interface CompetencyScoreDto {
+  competencyId: string;
+  competencyName?: string;
+  score: number;
+  maxScore: number;
+  percentage: number;
+  level: string;
+  iconUrl?: string;
+}
+
+export interface ClassCompetencyOverviewDto {
+  classId: string;
+  className?: string;
+  totalStudents: number;
+  averageCompetency: number;
+  classCompetencies: CompetencyScoreDto[];
+  topicMasteries: TopicMasteryDto[];
+  competencyDistribution: CompetencyDistributionDto[];
+  weakTopics: WeakTopicDto[];
+  strongTopics: StrongTopicDto[];
+}
+
+export interface TopicMasteryDto {
+  topicId: string;
+  topicName?: string;
+  category?: string;
+  masteryScore: number;
+  maxScore: number;
+  masteryPercentage: number;
+  masteryLevel: string;
+  studentsAssessed: number;
+  classAverage: number;
+}
+
+export interface CompetencyDistributionDto {
+  level: string;
+  studentCount: number;
+  percentage: number;
+}
+
+export interface WeakTopicDto {
+  topicName: string;
+  averageScore: number;
+  studentsNeedingHelp: number;
+  recommendation: string;
+}
+
+export interface StrongTopicDto {
+  topicName: string;
+  averageScore: number;
+  studentsMastered: number;
+}
+
+export interface RecentActivityDto {
+  activityId: string;
+  activityType: string;
+  type?: string;
+  description?: string;
+  timestamp: string;
+  score?: number;
+}
+
+export async function fetchStudentProgressSummary(classId: string): Promise<StudentProgressSummaryDto> {
+  try {
+    const { data } = await http.get<unknown>(`/api/lecturer/dashboard/classes/${classId}/student-progress`);
+    return mapStudentProgressSummary(data as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchStudentProgressDetail(
+  classId: string,
+  studentId: string
+): Promise<StudentProgressDetailDto> {
+  try {
+    const { data } = await http.get<unknown>(
+      `/api/lecturer/dashboard/classes/${classId}/students/${studentId}/progress`
+    );
+    return mapStudentProgressDetail(data as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchClassCompetencyOverview(classId: string): Promise<ClassCompetencyOverviewDto> {
+  try {
+    const { data } = await http.get<unknown>(`/api/lecturer/dashboard/classes/${classId}/competency-overview`);
+    return mapCompetencyOverview(data as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchClassTopicsMastery(classId: string): Promise<TopicMasteryDto[]> {
+  try {
+    const { data } = await http.get<unknown[]>(`/api/lecturer/dashboard/classes/${classId}/topics-mastery`);
+    return (data as unknown[]).map(mapTopicMastery);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+function mapStudentProgressSummary(raw: Record<string, unknown>): StudentProgressSummaryDto {
+  const overview = raw.overview ?? raw.Overview ?? {};
+  const o = overview as Record<string, unknown>;
+  return {
+    classId: String(raw.classId ?? raw.ClassId ?? ''),
+    className: optStr(raw.className ?? raw.ClassName),
+    totalStudents: Number(raw.totalStudents ?? raw.TotalStudents ?? 0),
+    activeStudents: Number(raw.activeStudents ?? raw.ActiveStudents ?? 0),
+    students: Array.isArray(raw.students ?? raw.Students)
+      ? (raw.students as unknown[]).map(mapStudentProgressItem)
+      : [],
+    overview: {
+      classAverageScore: Number(o.classAverageScore ?? o.ClassAverageScore ?? 0),
+      classAverageProgress: Number(o.classAverageProgress ?? o.ClassAverageProgress ?? 0),
+      totalQuizzes: Number(o.totalQuizzes ?? o.TotalQuizzes ?? 0),
+      totalCases: Number(o.totalCases ?? o.TotalCases ?? 0),
+      quizCompletionRate: Number(o.quizCompletionRate ?? o.QuizCompletionRate ?? 0),
+      caseCompletionRate: Number(o.caseCompletionRate ?? o.CaseCompletionRate ?? 0),
+      calculatedAt: String(o.calculatedAt ?? o.CalculatedAt ?? new Date().toISOString()),
+    },
+  };
+}
+
+function mapStudentProgressItem(raw: unknown): StudentProgressItemDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    studentId: String(o.studentId ?? o.StudentId ?? ''),
+    studentName: optStr(o.studentName ?? o.StudentName),
+    email: optStr(o.email ?? o.Email),
+    avatarUrl: optStr(o.avatarUrl ?? o.AvatarUrl),
+    averageScore: Number(o.averageScore ?? o.AverageScore ?? 0),
+    quizzesCompleted: Number(o.quizzesCompleted ?? o.QuizzesCompleted ?? 0),
+    totalQuizzes: Number(o.totalQuizzes ?? o.TotalQuizzes ?? 0),
+    casesViewed: Number(o.casesViewed ?? o.CasesViewed ?? 0),
+    totalCases: Number(o.totalCases ?? o.TotalCases ?? 0),
+    overallProgress: Number(o.overallProgress ?? o.OverallProgress ?? 0),
+    progressStatus: String(o.progressStatus ?? o.ProgressStatus ?? 'NotStarted'),
+    competencies: Array.isArray(o.competencies ?? o.Competencies)
+      ? (o.competencies as unknown[]).map(mapCompetencyScore)
+      : [],
+    lastActivity: optStr(o.lastActivity ?? o.LastActivity),
+  };
+}
+
+function mapStudentProgressDetail(raw: Record<string, unknown>): StudentProgressDetailDto {
+  const quizProgress = raw.quizProgress ?? raw.QuizProgress ?? {};
+  const caseProgress = raw.caseProgress ?? raw.CaseProgress ?? {};
+  const competencyDetail = raw.competencyDetail ?? raw.CompetencyDetail ?? {};
+  return {
+    studentId: String(raw.studentId ?? raw.StudentId ?? ''),
+    studentName: optStr(raw.studentName ?? raw.StudentName),
+    email: optStr(raw.email ?? raw.Email),
+    classId: String(raw.classId ?? raw.ClassId ?? ''),
+    enrolledAt: String(raw.enrolledAt ?? raw.EnrolledAt ?? ''),
+    lastActivity: optStr(raw.lastActivity ?? raw.LastActivity),
+    quizProgress: mapQuizProgress(quizProgress as Record<string, unknown>),
+    caseProgress: mapCaseProgress(caseProgress as Record<string, unknown>),
+    competencyDetail: mapCompetencyDetail(competencyDetail as Record<string, unknown>),
+    recentActivities: Array.isArray(raw.recentActivities ?? raw.RecentActivities)
+      ? (raw.recentActivities as unknown[]).map(mapRecentActivity)
+      : [],
+  };
+}
+
+function mapQuizProgress(raw: Record<string, unknown>): QuizProgressDetailDto {
+  return {
+    totalQuizzes: Number(raw.totalQuizzes ?? raw.TotalQuizzes ?? 0),
+    completedQuizzes: Number(raw.completedQuizzes ?? raw.CompletedQuizzes ?? 0),
+    pendingQuizzes: Number(raw.pendingQuizzes ?? raw.PendingQuizzes ?? 0),
+    averageScore: Number(raw.averageScore ?? raw.AverageScore ?? 0),
+    highestScore: Number(raw.highestScore ?? raw.HighestScore ?? 0),
+    lowestScore: Number(raw.lowestScore ?? raw.LowestScore ?? 0),
+    quizScores: Array.isArray(raw.quizScores ?? raw.QuizScores)
+      ? (raw.quizScores as unknown[]).map(mapQuizScore)
+      : [],
+  };
+}
+
+function mapQuizScore(raw: unknown): QuizScoreItemDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    quizId: String(o.quizId ?? o.QuizId ?? ''),
+    quizTitle: optStr(o.quizTitle ?? o.QuizTitle),
+    topic: optStr(o.topic ?? o.Topic),
+    score: Number(o.score ?? o.Score ?? 0),
+    maxScore: Number(o.maxScore ?? o.MaxScore ?? 100),
+    percentage: Number(o.percentage ?? o.Percentage ?? 0),
+    completedAt: optStr(o.completedAt ?? o.CompletedAt),
+    isPassed: Boolean(o.isPassed ?? o.IsPassed ?? false),
+  };
+}
+
+function mapCaseProgress(raw: Record<string, unknown>): CaseProgressDetailDto {
+  return {
+    totalAssignedCases: Number(raw.totalAssignedCases ?? raw.TotalAssignedCases ?? 0),
+    viewedCases: Number(raw.viewedCases ?? raw.ViewedCases ?? 0),
+    completedCases: Number(raw.completedCases ?? raw.CompletedCases ?? 0),
+    completionRate: Number(raw.completionRate ?? raw.CompletionRate ?? 0),
+    recentCases: Array.isArray(raw.recentCases ?? raw.RecentCases)
+      ? (raw.recentCases as unknown[]).map(mapCaseView)
+      : [],
+  };
+}
+
+function mapCaseView(raw: unknown): CaseViewItemDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    caseId: String(o.caseId ?? o.CaseId ?? ''),
+    caseTitle: optStr(o.caseTitle ?? o.CaseTitle),
+    caseImageUrl: optStr(o.caseImageUrl ?? o.CaseImageUrl),
+    viewedAt: optStr(o.viewedAt ?? o.ViewedAt),
+    viewCount: Number(o.viewCount ?? o.ViewCount ?? 1),
+    isCompleted: Boolean(o.isCompleted ?? o.IsCompleted ?? false),
+  };
+}
+
+function mapCompetencyDetail(raw: Record<string, unknown>): CompetencyDetailDto {
+  return {
+    overallCompetency: Number(raw.overallCompetency ?? raw.OverallCompetency ?? 0),
+    competencies: Array.isArray(raw.competencies ?? raw.Competencies)
+      ? (raw.competencies as unknown[]).map(mapCompetencyScore)
+      : [],
+    topicMasteries: Array.isArray(raw.topicMasteries ?? raw.TopicMasteries)
+      ? (raw.topicMasteries as unknown[]).map(mapTopicMastery)
+      : [],
+    history: Array.isArray(raw.history ?? raw.History)
+      ? (raw.history as unknown[]).map(mapCompetencyHistory)
+      : [],
+  };
+}
+
+function mapCompetencyScore(raw: unknown): CompetencyScoreDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    competencyId: String(o.competencyId ?? o.CompetencyId ?? ''),
+    competencyName: optStr(o.competencyName ?? o.CompetencyName),
+    score: Number(o.score ?? o.Score ?? 0),
+    maxScore: Number(o.maxScore ?? o.MaxScore ?? 100),
+    percentage: Number(o.percentage ?? o.Percentage ?? 0),
+    level: String(o.level ?? o.Level ?? 'Beginner'),
+    iconUrl: optStr(o.iconUrl ?? o.IconUrl),
+  };
+}
+
+function mapTopicMastery(raw: unknown): TopicMasteryDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    topicId: String(o.topicId ?? o.TopicId ?? ''),
+    topicName: optStr(o.topicName ?? o.TopicName),
+    category: optStr(o.category ?? o.Category),
+    masteryScore: Number(o.masteryScore ?? o.MasteryScore ?? 0),
+    maxScore: Number(o.maxScore ?? o.MaxScore ?? 100),
+    masteryPercentage: Number(o.masteryPercentage ?? o.MasteryPercentage ?? 0),
+    masteryLevel: String(o.masteryLevel ?? o.MasteryLevel ?? 'Beginner'),
+    studentsAssessed: Number(o.studentsAssessed ?? o.StudentsAssessed ?? 0),
+    classAverage: Number(o.classAverage ?? o.ClassAverage ?? 0),
+  };
+}
+
+function mapCompetencyHistory(raw: unknown): CompetencyHistoryDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    date: String(o.date ?? o.Date ?? ''),
+    score: Number(o.score ?? o.Score ?? 0),
+    activityType: optStr(o.activityType ?? o.ActivityType),
+    description: optStr(o.description ?? o.Description),
+  };
+}
+
+interface CompetencyHistoryDto {
+  date: string;
+  score: number;
+  activityType?: string;
+  description?: string;
+}
+
+function mapRecentActivity(raw: unknown): RecentActivityDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    activityId: String(o.activityId ?? o.ActivityId ?? ''),
+    activityType: String(o.activityType ?? o.ActivityType ?? ''),
+    description: optStr(o.description ?? o.Description),
+    timestamp: String(o.timestamp ?? o.Timestamp ?? ''),
+    score: o.score != null ? Number(o.score) : undefined,
+  };
+}
+
+function mapCompetencyOverview(raw: Record<string, unknown>): ClassCompetencyOverviewDto {
+  return {
+    classId: String(raw.classId ?? raw.ClassId ?? ''),
+    className: optStr(raw.className ?? raw.ClassName),
+    totalStudents: Number(raw.totalStudents ?? raw.TotalStudents ?? 0),
+    averageCompetency: Number(raw.averageCompetency ?? raw.AverageCompetency ?? 0),
+    classCompetencies: Array.isArray(raw.classCompetencies ?? raw.ClassCompetencies)
+      ? (raw.classCompetencies as unknown[]).map(mapCompetencyScore)
+      : [],
+    topicMasteries: Array.isArray(raw.topicMasteries ?? raw.TopicMasteries)
+      ? (raw.topicMasteries as unknown[]).map(mapTopicMastery)
+      : [],
+    competencyDistribution: Array.isArray(raw.competencyDistribution ?? raw.CompetencyDistribution)
+      ? (raw.competencyDistribution as unknown[]).map(mapCompetencyDistribution)
+      : [],
+    weakTopics: Array.isArray(raw.weakTopics ?? raw.WeakTopics)
+      ? (raw.weakTopics as unknown[]).map(mapWeakTopic)
+      : [],
+    strongTopics: Array.isArray(raw.strongTopics ?? raw.StrongTopics)
+      ? (raw.strongTopics as unknown[]).map(mapStrongTopic)
+      : [],
+  };
+}
+
+function mapCompetencyDistribution(raw: unknown): CompetencyDistributionDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    level: String(o.level ?? o.Level ?? ''),
+    studentCount: Number(o.studentCount ?? o.StudentCount ?? 0),
+    percentage: Number(o.percentage ?? o.Percentage ?? 0),
+  };
+}
+
+function mapWeakTopic(raw: unknown): WeakTopicDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    topicName: String(o.topicName ?? o.TopicName ?? ''),
+    averageScore: Number(o.averageScore ?? o.AverageScore ?? 0),
+    studentsNeedingHelp: Number(o.studentsNeedingHelp ?? o.StudentsNeedingHelp ?? 0),
+    recommendation: String(o.recommendation ?? o.Recommendation ?? ''),
+  };
+}
+
+function mapStrongTopic(raw: unknown): StrongTopicDto {
+  const o = raw as Record<string, unknown>;
+  return {
+    topicName: String(o.topicName ?? o.TopicName ?? ''),
+    averageScore: Number(o.averageScore ?? o.AverageScore ?? 0),
+    studentsMastered: Number(o.studentsMastered ?? o.StudentsMastered ?? 0),
+  };
+}

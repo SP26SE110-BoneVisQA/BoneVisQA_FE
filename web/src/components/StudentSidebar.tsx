@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLogout } from '@/lib/useLogout';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import {
   LayoutDashboard,
   BookOpen,
@@ -22,10 +23,9 @@ const studentMenuItems = [
   { icon: BookOpen, label: 'Case Catalog', href: '/student/catalog' },
   { icon: ClipboardList, label: 'History', href: '/student/history' },
   { icon: BotMessageSquare, label: 'Visual QA', href: '/student/visual-qa/workspace' },
-  { icon: Trophy, label: 'Quizzes', href: '/student/quiz' },
-  { icon: Eye, label: 'Review', href: '/student/quiz/history' },
-  // TODO: Uncomment when AI Quiz is ready for production
-  // { icon: Sparkles, label: 'AI Quiz', href: '/student/ai-quiz' },
+  { icon: Trophy, label: 'Quizzes', href: '/student/quizzes' },
+  { icon: Eye, label: 'Flashcards', href: '/student/review' },
+  // { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
   { icon: UserCircle, label: 'Profile', href: '/student/profile' },
   { icon: Settings, label: 'Settings', href: '/student/settings' },
 ];
@@ -81,6 +81,11 @@ export default function StudentSidebar() {
 
       {/* User & Logout */}
       <div className="px-3 py-4 border-t border-white/10">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="bg-white rounded-lg p-0.5 shadow-sm overflow-hidden">
+            <ThemeToggle />
+          </div>
+        </div>
         <Link
           href="/student/settings"
           className="flex items-center gap-3 px-4 py-3 mb-2 rounded-lg hover:bg-sidebar-hover transition-colors duration-150"

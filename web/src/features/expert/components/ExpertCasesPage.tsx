@@ -150,7 +150,7 @@ export function ExpertCasesPage() {
       {assetsCaseId ? (
         <CaseAssetsDialog
           caseId={assetsCaseId}
-          mode="annotation"
+          mode="annotations"
           allowModeSwitch
           onClose={() => setAssetsCaseId(null)}
         />

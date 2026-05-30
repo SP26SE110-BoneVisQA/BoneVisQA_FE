@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { http, getApiErrorMessage } from './client';
 
 export interface ExpertDashboardStats {
@@ -205,7 +204,6 @@ export async function fetchExpertPendingReviews(): Promise<ExpertPendingReview[]
     throw new Error(getApiErrorMessage(e));
   }
 }
-
 export async function fetchExpertRecentCases(): Promise<ExpertRecentCase[]> {
   try {
     const { data } = await http.get<unknown>('/api/expert/dashboard/recent-cases', {
@@ -215,10 +213,10 @@ export async function fetchExpertRecentCases(): Promise<ExpertRecentCase[]> {
       .map(mapRecentCase)
       .filter((item): item is ExpertRecentCase => item !== null);
   } catch (e) {
-    if (axios.isAxiosError(e)) throw e;
     throw new Error(getApiErrorMessage(e));
   }
 }
+
 
 export async function fetchExpertActivity(): Promise<ExpertActivity> {
   try {
@@ -260,4 +258,154 @@ export async function fetchExpertDashboardBundle(): Promise<ExpertDashboardBundl
     fetchExpertActivity(),
   ]);
   return { stats, pendingReviews, recentCases, activity };
+}
+
+export interface ExpertPerformanceMetrics {
+  avgReviewTimeMinutes: number;
+  approvalRate: number;
+  qualityScore: number;
+  avgStudentScore: number;
+  expertRanking: number;
+  totalReviewsThisMonth: number;
+  humanOverrideCount: number;
+  humanOverrideRate: number;
+}
+
+export interface WeekComparison {
+  currentPeriodReviews: number;
+  previousPeriodReviews: number;
+  percentageChange: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
+export interface MonthlyDataPoint {
+  month: string;
+  reviews: number;
+  cases: number;
+}
+
+export interface MonthTrend {
+  dataPoints: MonthlyDataPoint[];
+  average: number;
+  growthRate: number;
+}
+
+export interface ExpertComparativeAnalytics {
+  weekOverWeek: WeekComparison;
+  monthOverMonth: WeekComparison;
+  monthlyTrend: MonthTrend;
+}
+
+export interface ExpertAiConfidenceInsights {
+  lowConfidenceCount: number;
+  avgAiConfidence: number;
+  totalAiAssistedAnswers: number;
+  highConfidenceCount: number;
+}
+
+export interface CategoryMetric {
+  category: string;
+  reviewCount: number;
+  avgReviewTimeMinutes: number;
+  percentage: number;
+}
+
+export interface ExpertCategoryBreakdown {
+  boneLocationBreakdown: CategoryMetric[];
+  lesionTypeBreakdown: CategoryMetric[];
+}
+
+export interface QuickActionItem {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'high' | 'normal' | 'low';
+  type: 'review' | 'confidence';
+}
+
+export interface ExpertQuickActions {
+  urgentReviews: QuickActionItem[];
+  lowConfidenceItems: QuickActionItem[];
+  totalActionableItems: number;
+}
+
+export async function fetchExpertPerformanceMetrics(): Promise<ExpertPerformanceMetrics> {
+  try {
+    const { data } = await http.get<unknown>('/api/expert/dashboard/performance-metrics', { skipApiToast: true });
+    if (data && typeof data === 'object' && 'result' in data) {
+      return (data as { result: ExpertPerformanceMetrics }).result;
+    }
+    return data as ExpertPerformanceMetrics;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchExpertComparativeAnalytics(): Promise<ExpertComparativeAnalytics> {
+  try {
+    const { data } = await http.get<unknown>('/api/expert/dashboard/comparative-analytics', { skipApiToast: true });
+    if (data && typeof data === 'object' && 'result' in data) {
+      return (data as { result: ExpertComparativeAnalytics }).result;
+    }
+    return data as ExpertComparativeAnalytics;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchExpertAiConfidenceInsights(): Promise<ExpertAiConfidenceInsights> {
+  try {
+    const { data } = await http.get<unknown>('/api/expert/dashboard/ai-confidence-insights', { skipApiToast: true });
+    if (data && typeof data === 'object' && 'result' in data) {
+      return (data as { result: ExpertAiConfidenceInsights }).result;
+    }
+    return data as ExpertAiConfidenceInsights;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchExpertCategoryBreakdown(): Promise<ExpertCategoryBreakdown> {
+  try {
+    const { data } = await http.get<unknown>('/api/expert/dashboard/category-breakdown', { skipApiToast: true });
+    if (data && typeof data === 'object' && 'result' in data) {
+      return (data as { result: ExpertCategoryBreakdown }).result;
+    }
+    return data as ExpertCategoryBreakdown;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchExpertQuickActions(): Promise<ExpertQuickActions> {
+  try {
+    const { data } = await http.get<unknown>('/api/expert/dashboard/quick-actions', { skipApiToast: true });
+    if (data && typeof data === 'object' && 'result' in data) {
+      return (data as { result: ExpertQuickActions }).result;
+    }
+    return data as ExpertQuickActions;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export type ExpertDashboardFullBundle = ExpertDashboardBundle & {
+  performanceMetrics: ExpertPerformanceMetrics;
+  comparativeAnalytics: ExpertComparativeAnalytics;
+  aiConfidenceInsights: ExpertAiConfidenceInsights;
+};
+
+export async function fetchExpertDashboardFullBundle(): Promise<ExpertDashboardFullBundle> {
+  const [bundle, performanceMetrics, comparativeAnalytics, aiConfidenceInsights] = await Promise.all([
+    fetchExpertDashboardBundle(),
+    fetchExpertPerformanceMetrics(),
+    fetchExpertComparativeAnalytics(),
+    fetchExpertAiConfidenceInsights(),
+  ]);
+  return {
+    ...bundle,
+    performanceMetrics,
+    comparativeAnalytics,
+    aiConfidenceInsights,
+  };
 }

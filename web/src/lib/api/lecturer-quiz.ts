@@ -26,6 +26,8 @@ export interface UpdateQuizRequest {
   topic?: string | null;
   difficulty?: string | null;
   classification?: string | null;
+  boneSpecialtyId?: string | null;
+  pathologyCategoryId?: string | null;
 }
 
 // ========== Quiz Management ==========
@@ -43,6 +45,7 @@ function normalizeClassQuizDto(raw: ClassQuizDto & Record<string, unknown>): Cla
     CloseTime?: string | null;
     QuestionCount?: number;
     IsFromExpertLibrary?: boolean;
+    QuizMode?: number;
   };
   return {
     classId: raw.classId ?? r.ClassId ?? '',
@@ -55,6 +58,7 @@ function normalizeClassQuizDto(raw: ClassQuizDto & Record<string, unknown>): Cla
     closeTime: raw.closeTime ?? r.CloseTime ?? null,
     questionCount: raw.questionCount ?? r.QuestionCount,
     isFromExpertLibrary: raw.isFromExpertLibrary ?? r.IsFromExpertLibrary ?? false,
+    quizMode: raw.quizMode ?? r.QuizMode ?? 1,
   };
 }
 
@@ -167,6 +171,11 @@ export function normalizeQuizDto(raw: unknown): QuizDto {
     questionCount: (r.questionCount ?? r.QuestionCount ?? undefined) as number | undefined,
     quizName: (r.quizName ?? r.QuizName ?? null) as string | null,
     isFromExpertLibrary: Boolean(r.isFromExpertLibrary ?? r.IsFromExpertLibrary ?? false),
+    // Deep classification fields
+    boneSpecialtyId: (r.boneSpecialtyId ?? r.BoneSpecialtyId ?? null) as string | null,
+    boneSpecialtyName: (r.boneSpecialtyName ?? r.BoneSpecialtyName ?? null) as string | null,
+    pathologyCategoryId: (r.pathologyCategoryId ?? r.PathologyCategoryId ?? null) as string | null,
+    pathologyCategoryName: (r.pathologyCategoryName ?? r.PathologyCategoryName ?? null) as string | null,
   };
 }
 
@@ -410,6 +419,59 @@ export async function aiCreateQuiz(
     const { data } = await http.post<{ quizId: string; title: string; questionsCreated: number; message: string }>(
       '/api/lecturer/ai/create-quiz',
       request
+    );
+    return data;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+// ========== Release/Hide Answers ==========
+
+export interface QuizReleaseStatus {
+  classId: string;
+  quizId: string;
+  quizTitle: string;
+  isReleased: boolean;
+  releasedAt: string | null;
+  isQuizClosed: boolean;
+}
+
+/**
+ * Get release status for a quiz in a class.
+ */
+export async function getQuizReleaseStatus(classId: string, quizId: string): Promise<QuizReleaseStatus> {
+  try {
+    const { data } = await http.get<QuizReleaseStatus>(
+      `/api/lecturer/classes/${classId}/assignments/quizzes/${quizId}/release-status`
+    );
+    return data;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+/**
+ * Release quiz answers for all students in a class.
+ */
+export async function releaseQuizAnswers(classId: string, quizId: string): Promise<{ message: string }> {
+  try {
+    const { data } = await http.post<{ message: string }>(
+      `/api/lecturer/classes/${classId}/assignments/quizzes/${quizId}/release-answers`
+    );
+    return data;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+/**
+ * Hide quiz answers (undo release) for all students in a class.
+ */
+export async function hideQuizAnswers(classId: string, quizId: string): Promise<{ message: string }> {
+  try {
+    const { data } = await http.post<{ message: string }>(
+      `/api/lecturer/classes/${classId}/assignments/quizzes/${quizId}/hide-answers`
     );
     return data;
   } catch (e) {
