@@ -84,6 +84,12 @@ const DIFFICULTY_OPTIONS = [
   { value: 'Hard', label: 'Hard' },
 ] as const;
 
+const QUIZ_MODE_OPTIONS = [
+  { value: 1, label: 'Exam Mode', description: 'Formal assessment with time limit', color: 'bg-red-50 border-red-200 text-red-700' },
+  { value: 2, label: 'Practice Mode', description: 'Practice without time pressure', color: 'bg-green-50 border-green-200 text-green-700' },
+  { value: 3, label: 'Adaptive Mode', description: 'AI-powered personalized difficulty', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+] as const;
+
 export function LecturerQuizCreatePage() {
   const router = useRouter();
   const toast = useToast();
@@ -106,6 +112,7 @@ export function LecturerQuizCreatePage() {
     closeTime: '',
     timeLimit: '30',
     passingScore: '80',
+    quizMode: 1,
   });
 
   const [classification, setClassification] = useState<(typeof CLASSIFICATION_OPTIONS)[number]>(
@@ -209,6 +216,7 @@ export function LecturerQuizCreatePage() {
     closeTime: toUTC(formData.closeTime),
     timeLimit: formData.timeLimit ? parseInt(formData.timeLimit, 10) : undefined,
     passingScore: formData.passingScore ? parseInt(formData.passingScore, 10) : undefined,
+    quizMode: formData.quizMode,
   });
 
   // ========== AI Quiz Handlers ==========
@@ -896,6 +904,30 @@ export function LecturerQuizCreatePage() {
                   placeholder="Description..."
                   className="w-full resize-none rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs outline-none transition-all focus:border-primary"
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-muted-foreground">Quiz Mode</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {QUIZ_MODE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, quizMode: opt.value })}
+                      className={`flex flex-col items-start gap-0.5 rounded-lg border p-2.5 text-left transition-all ${
+                        formData.quizMode === opt.value
+                          ? `${opt.color} border-2 shadow-sm`
+                          : 'border-border bg-muted/30 hover:border-muted-foreground/30'
+                      }`}
+                    >
+                      <span className={`text-xs font-bold ${formData.quizMode === opt.value ? '' : 'text-foreground'}`}>
+                        {opt.label}
+                      </span>
+                      <span className={`text-[10px] ${formData.quizMode === opt.value ? 'opacity-80' : 'text-muted-foreground'}`}>
+                        {opt.description}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

@@ -857,69 +857,53 @@ export default function QuestionEditorDialog({
                   </div>
                 )}
 
-                {/* HINT AND EXPLANATION SECTION - For Practice Mode */}
-                <div className="space-y-4 rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50 p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-amber-200 px-2 py-1 text-xs font-bold text-amber-900">PRACTICE MODE</span>
-                    <span className="text-xs text-amber-800">Hint và Explanation chỉ hiện khi quiz ở Practice Mode</span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      <span className="rounded bg-amber-200 px-2 py-0.5 text-amber-900">HINT</span>
-                      Gợi ý cho sinh viên (tùy chọn)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.hint || ''}
-                      onChange={(e) => setFormData({ ...formData, hint: e.target.value })}
-                      className="w-full rounded-xl border-0 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-                      placeholder="VD: Xem xét kỹ vị trí gãy trên hình X-ray..."
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      <span className="rounded bg-blue-200 px-2 py-0.5 text-blue-900">EXPLANATION</span>
-                      Giải thích đáp án đúng (tùy chọn)
+                {isEssay && (
+                  <div className="space-y-3">
+                    <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
+                      Model Answer / Guidelines
                     </label>
                     <textarea
-                      value={formData.explanation || ''}
-                      onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
-                      className="w-full resize-none rounded-xl border-0 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-                      rows={3}
-                      placeholder="VD: Đáp án đúng là A vì xương đùi gãy ở 1/3 giữa là phổ biến nhất do..."
+                      value={formData.essayAnswer || ''}
+                      onChange={(e) =>
+                        setFormData({ ...formData, essayAnswer: e.target.value })
+                      }
+                      className="w-full resize-none rounded-xl border-0 bg-[#eceef0] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#00478d]/20"
+                      rows={5}
+                      placeholder="Enter a model answer or grading guidelines for the essay question..."
                     />
+                    <p className="text-xs text-[#727783]">
+                      This will be used as a reference for grading the essay response.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between border-t border-[#c2c6d4]/50 bg-[#eceef0] -mx-10 px-10 py-6 mt-6">
+                  <div className="flex items-center text-[#727783]">
+                    <Info className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">
+                      Changes autosaved to draft
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      disabled={loading}
+                      className="rounded-full px-6 py-3 text-sm font-bold text-[#424752] transition-colors hover:bg-[#e6e8ea] disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex items-center justify-center gap-2 rounded-full bg-gradient-to-br from-[#00478d] to-[#005eb8] px-8 py-3 text-sm font-bold text-white shadow-lg shadow-[#00478d]/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                    >
+                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Save Question
+                    </button>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between border-t border-[#c2c6d4]/50 bg-[#eceef0] px-10 py-6">
-            <div className="flex items-center text-[#727783]">
-              <Info className="mr-2 h-4 w-4 shrink-0" />
-              <span className="text-[10px] font-bold uppercase tracking-wider">
-                Changes autosaved to draft
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="rounded-full px-6 py-3 text-sm font-bold text-[#424752] transition-colors hover:bg-[#e6e8ea] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex items-center justify-center gap-2 rounded-full bg-gradient-to-br from-[#00478d] to-[#005eb8] px-8 py-3 text-sm font-bold text-white shadow-lg shadow-[#00478d]/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Save Question
-              </button>
             </div>
           </div>
         </form>
