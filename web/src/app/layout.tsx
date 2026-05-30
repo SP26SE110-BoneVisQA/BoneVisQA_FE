@@ -14,8 +14,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning className="font-sans antialiased">
+    <html lang="en" className="light" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{document.documentElement.classList.remove('dark');localStorage.removeItem('bonevisqa-theme');}catch(e){}})();`,
+          }}
+        />
+      </head>
+      <body suppressHydrationWarning className="font-sans antialiased bg-background text-text-main">
         <AppProviders>
           <I18nProvider>{children}</I18nProvider>
         </AppProviders>

@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useLogout } from '@/lib/useLogout';
 import { useAuth, type BackendRole } from '@/lib/useAuth';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { LogOut, ChevronLeft, ChevronRight, Plus, Stethoscope } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { navByRole, roleMeta, type AppRoleKey, type NavItem } from '@/config/navigation';
@@ -50,7 +49,7 @@ export function AppSidebar({
   }, [resolvedRole]);
   const meta = resolvedRole ? roleMeta[resolvedRole] : null;
 
-  const shellClass = `fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-[var(--border-color)] bg-[var(--sidebar)] text-[var(--sidebar-text)] shadow-sm transition-[width] duration-200 ease-out ${
+  const shellClass = `sticky top-0 z-40 flex h-screen shrink-0 flex-col border-r border-[var(--border-color)] bg-[var(--sidebar)] text-[var(--sidebar-text)] shadow-sm transition-[width] duration-200 ease-out ${
     collapsed ? 'w-[72px]' : 'w-[260px]'
   }`;
 
@@ -92,7 +91,6 @@ export function AppSidebar({
           >
             {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
           </button>
-          <ThemeToggle />
         </div>
         <div className="flex-1 px-2 py-4 text-center text-xs text-[var(--sidebar-text-muted)]">
           {!collapsed ? 'No role-based navigation available.' : '—'}
@@ -137,7 +135,6 @@ export function AppSidebar({
         >
           {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
         </button>
-        <ThemeToggle />
       </div>
 
       <nav className="app-scroll-y flex-1 overflow-y-auto overflow-x-hidden px-2 py-3">

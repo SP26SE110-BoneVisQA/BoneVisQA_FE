@@ -41,15 +41,22 @@ export default function TeachingObjectives({ classId, onError }: TeachingObjecti
       const objData = await fetchTeachingObjectives(classId);
       setObjectives(objData);
       setEditedObjectives(objData.objectives);
-      if (classId) {
-        const sugData = await fetchExpertSuggestions(classId);
-        setSuggestions(sugData);
-      }
     } catch (err) {
       onError?.(err instanceof Error ? err.message : 'Failed to load teaching objectives');
-    } finally {
-      setLoading(false);
     }
+
+    if (classId) {
+      try {
+        const sugData = await fetchExpertSuggestions(classId);
+        setSuggestions(sugData);
+      } catch {
+        setSuggestions([]);
+      }
+    } else {
+      setSuggestions([]);
+    }
+
+    setLoading(false);
   };
 
   const handleSave = async () => {
@@ -336,7 +343,7 @@ export default function TeachingObjectives({ classId, onError }: TeachingObjecti
                 {pendingSuggestions.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                    <p>No pending suggestions from experts</p>
+                    <p>No suggestions available</p>
                   </div>
                 ) : (
                   pendingSuggestions.map((suggestion) => (

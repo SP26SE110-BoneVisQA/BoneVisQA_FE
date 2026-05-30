@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { http, getApiErrorMessage } from './client';
 import type { LecturerDashboardStats, LecturerLeaderboardEntry } from './types';
 
@@ -507,9 +508,15 @@ export async function updateTeachingObjectives(
 
 export async function fetchExpertSuggestions(classId: string): Promise<TeachingObjectiveSuggestionDto[]> {
   try {
-    const { data } = await http.get<unknown[]>(`/api/lecturer/classes/${classId}/objectives/suggestions`);
+    const { data } = await http.get<unknown[]>(
+      `/api/lecturer/classes/${classId}/objectives/suggestions`,
+      { skipApiToast: true },
+    );
     return (data as unknown[]).map((item) => mapSuggestion(item as Record<string, unknown>));
   } catch (e) {
+    if (axios.isAxiosError(e) && e.response?.status === 404) {
+      return [];
+    }
     throw new Error(getApiErrorMessage(e));
   }
 }

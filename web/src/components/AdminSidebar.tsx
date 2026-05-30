@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { useLogout } from '@/lib/useLogout';
 import { getStoredUserInfo } from '@/lib/getStoredUserInfo';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import {
   LayoutDashboard,
   Users,
@@ -107,9 +106,6 @@ export default function AdminSidebar() {
       {stored.fullName && (
         <div className="border-t border-white/10 px-3 py-4">
           <div className="mb-4 flex justify-center gap-2 border-b border-white/10 pb-4">
-            <div className="overflow-hidden rounded-lg bg-white p-0.5 shadow-sm">
-              <ThemeToggle />
-            </div>
             <div className="overflow-hidden rounded-lg bg-white p-0.5 shadow-sm">
               <LanguageSwitcher />
             </div>
