@@ -110,7 +110,7 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [gsiScriptReady, setGsiScriptReady] = useState(false);
-  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const gsiPromptRef = useRef<(() => void) | null>(null);
   const isGsiInitialized = useRef(false);
 
   useEffect(() => {
@@ -235,24 +235,11 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   }, [handleLoginSuccess, router]);
 
   const triggerGoogleSignIn = useCallback(() => {
-    const tryClick = (attempt: number) => {
-      const root = googleButtonRef.current;
-      if (!root) {
-        appToast.error("Google sign-in is still loading. Please try again.");
-        return;
-      }
-      const el = root.querySelector<HTMLElement>('[role="button"]');
-      if (el) {
-        el.click();
-        return;
-      }
-      if (attempt < 15) {
-        window.setTimeout(() => tryClick(attempt + 1), 50);
-        return;
-      }
-      appToast.error("Google sign-in is still loading. Please try again.");
-    };
-    tryClick(0);
+    if (gsiPromptRef.current) {
+      gsiPromptRef.current();
+      return;
+    }
+    appToast.error("Google sign-in is still loading. Please try again.");
   }, []);
 
   useEffect(() => {
@@ -264,10 +251,8 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   useEffect(() => {
     if (!googleEnabled || !googleClientId || isGsiInitialized.current) return;
     const gsi = window.google?.accounts?.id;
-    const target = googleButtonRef.current;
-    if (!gsiScriptReady || !gsi || !target) return;
+    if (!gsiScriptReady || !gsi) return;
 
-    target.innerHTML = "";
     gsi.initialize({
       client_id: googleClientId,
       callback: (response) => {
@@ -277,15 +262,8 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
       auto_select: false,
       cancel_on_tap_outside: true,
     });
-    gsi.renderButton(target, {
-      theme: "outline",
-      size: "large",
-      shape: "pill",
-      type: "standard",
-      text: "signin_with",
-      logo_alignment: "left",
-      width: 300,
-    });
+
+    gsiPromptRef.current = () => gsi.prompt?.();
 
     isGsiInitialized.current = true;
   }, [googleEnabled, googleClientId, gsiScriptReady, handleGoogleLoginSuccess]);
@@ -508,12 +486,6 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
                     <span>Google Login</span>
                   </div>
                   <div className="relative w-full">
-                    <div
-                      ref={googleButtonRef}
-                      className="fixed left-[-10000px] top-0 min-h-[44px] w-[300px] overflow-hidden opacity-0"
-                      aria-hidden
-                      tabIndex={-1}
-                    />
                     <Button
                       type="button"
                       variant="outline"
