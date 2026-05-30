@@ -207,7 +207,7 @@ export default function StudentAnalyticsPage() {
                   <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No quiz data yet. Take some quizzes to see your progress!</p>
                   <Button asChild className="mt-4">
-                    <Link href="/student/quiz">Start Practice</Link>
+                    <Link href="/student/quizzes">Start Practice</Link>
                   </Button>
                 </div>
               )}

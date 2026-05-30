@@ -2,7 +2,14 @@
 
 import axios from 'axios';
 import { getApiErrorMessage, http } from './client';
-import type { CaseDto, ClassItem, QuizDto, StudentEnrollment, ClassQuizSessionDto, ClassCaseAssignmentDto } from './types';
+import type {
+  CaseDto,
+  ClassCaseAssignmentDto,
+  ClassItem,
+  ClassQuizSessionDto,
+  QuizDto,
+  StudentEnrollment,
+} from './types';
 
 export class ForbiddenApiError extends Error {
   constructor(message = 'You are not allowed to access this resource.') {
@@ -102,7 +109,14 @@ export async function fetchAssignedCases(classId: string): Promise<CaseDto[]> {
       difficulty: (item.difficulty ?? item.Difficulty ?? null) as string | null,
       isActive: true,
       isApproved: true,
-      createdAt: (item.createdAt ?? item.CreatedAt ?? null) as string | null,
+      createdAt:
+        item.createdAt != null
+          ? String(item.createdAt)
+          : item.CreatedAt != null
+            ? String(item.CreatedAt)
+            : item.assignedAt != null
+              ? String(item.assignedAt)
+              : null,
     }));
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {

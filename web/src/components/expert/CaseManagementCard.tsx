@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSWRConfig } from 'swr';
 import { Edit, Trash2, Eye, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -75,7 +74,6 @@ export default function CaseManagementCard({
   thumbnailUrl,
 }: CaseManagementCardProps) {
   const toast = useToast();
-  const { mutate } = useSWRConfig();
   const queryClient = useQueryClient();
   const [deleting, setDeleting] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -96,7 +94,6 @@ export default function CaseManagementCard({
       const { message } = await deleteExpertCase(id);
       toast.success(message?.trim() || 'Case deleted.');
       await Promise.all([
-        mutate(EXPERT_CASE_LIBRARY_SWR_KEY),
         queryClient.invalidateQueries({ queryKey: EXPERT_DASHBOARD_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['expert', 'cases'] }),
         queryClient.invalidateQueries({ queryKey: ['expert', 'case'] }),

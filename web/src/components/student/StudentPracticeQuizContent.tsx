@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
@@ -582,10 +581,12 @@ export function StudentPracticeQuizContent({ embedded = false }: { embedded?: bo
   return (
     <div className={embedded ? '' : 'min-h-screen'}>
       {!embedded ? (
-        <Header
-          title="Quiz Arena"
-          subtitle="Practice with live backend quizzes or generate AI-assisted question sets by topic."
-        />
+        <div className="border-b border-border bg-card px-4 py-6 sm:px-6">
+          <h1 className="text-2xl font-bold text-foreground">Quiz Arena</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Practice with live backend quizzes or generate AI-assisted question sets by topic.
+          </p>
+        </div>
       ) : null}
       <div className={embedded ? 'space-y-4' : 'mx-auto max-w-7xl space-y-8 px-4 pb-16 pt-6 sm:px-6'}>
         {/* Embedded compact bar: topic selector + AI config in one row */}

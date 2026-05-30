@@ -1,31 +1,27 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
 import enTranslation from '../locales/en/translation.json';
-import viTranslation from '../locales/vi/translation.json';
 
+/**
+ * System UI is English-only. Vietnamese is reserved for AI chat content (API `locale`).
+ * Do not re-enable browser language detection for shell copy.
+ */
 const resources = {
   en: {
     translation: enTranslation,
   },
-  vi: {
-    translation: viTranslation,
-  },
 };
 
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
+if (!i18n.isInitialized) {
+  i18n.use(initReactI18next).init({
     resources,
+    lng: 'en',
     fallbackLng: 'en',
+    supportedLngs: ['en'],
     interpolation: {
-      escapeValue: false, // React already escapes by default
-    },
-    detection: {
-      order: ['localStorage', 'cookie', 'navigator'],
-      caches: ['localStorage', 'cookie'],
+      escapeValue: false,
     },
   });
+}
 
 export default i18n;

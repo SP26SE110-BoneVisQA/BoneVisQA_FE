@@ -137,11 +137,6 @@ export function ClassManagementTable({
               <TableEmptyState
                 icon={BookOpen}
                 title="No classes found"
-                description={
-                  search
-                    ? 'Try adjusting your search criteria.'
-                    : 'Get started by creating a new class.'
-                }
                 colSpan={colCount}
               />
             ) : (

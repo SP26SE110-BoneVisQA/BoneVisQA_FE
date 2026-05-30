@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import Header from '@/components/Header';
-import { PageLoadingSkeleton, SkeletonBlock } from '@/components/shared/DashboardSkeletons';
+import { DetailPageLayout } from '@/components/layouts';
+import { SkeletonBlock } from '@/components/shared/DashboardSkeletons';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { fetchExpertCase, formatCaseDateForDisplay, type CaseStatus } from '@/lib/api/expert-cases';
@@ -117,26 +117,13 @@ export default function ExpertCaseDetailPage() {
     toast.error(combined);
   }, [error, errorMsg, toast]);
 
-  const headerSubtitle = useMemo(() => {
-    if (isPending) return 'Loading case…';
-    if (!caseRow) return '';
-    const parts = [
-      caseRow.categoryName,
-      caseRow.boneLocation !== '—' ? caseRow.boneLocation : null,
-      caseRow.expertName !== '—' ? caseRow.expertName : null,
-    ].filter(Boolean);
-    return parts.join(' · ') || 'Expert medical case';
-  }, [caseRow, isPending]);
-
   const st = caseRow ? statusBadge[caseRow.status] : null;
   const StatusIcon = st?.Icon ?? Clock;
 
   if (isPending) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header title="Case detail" subtitle="Loading case…" />
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <DetailPageLayout title="Case detail" showBack maxWidthClass="max-w-7xl">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             {/* Left: Image area */}
             <div className="lg:col-span-2 space-y-4">
               <div className="rounded-xl border border-border bg-muted/20 p-8 animate-pulse">
@@ -154,30 +141,22 @@ export default function ExpertCaseDetailPage() {
               <SkeletonBlock className="h-48 w-full rounded-xl" />
               <SkeletonBlock className="h-32 w-full rounded-xl" />
             </div>
-          </div>
         </div>
-      </div>
+      </DetailPageLayout>
     );
   }
 
   if (isError || !caseRow) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header title="Error" subtitle="Failed to load case" />
-        <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
-            {errorMsg}
-          </div>
-        </div>
-      </div>
+      <DetailPageLayout title="Case detail" error={errorMsg} showBack maxWidthClass="max-w-4xl">
+        <div />
+      </DetailPageLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Header title={caseRow.title} subtitle={headerSubtitle || undefined} />
-
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+    <DetailPageLayout title={caseRow.title} showBack maxWidthClass="max-w-7xl">
+      <div>
         {/* Top action bar */}
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
@@ -355,6 +334,6 @@ export default function ExpertCaseDetailPage() {
           </div>
         </div>
       </div>
-    </div>
+    </DetailPageLayout>
   );
 }

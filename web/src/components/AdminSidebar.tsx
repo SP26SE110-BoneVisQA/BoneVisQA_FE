@@ -106,11 +106,11 @@ export default function AdminSidebar() {
       {/* User profile */}
       {stored.fullName && (
         <div className="border-t border-white/10 px-3 py-4">
-          <div className="flex justify-center gap-2 border-b border-white/10 pb-4 mb-4">
-            <div className="bg-white rounded-lg p-0.5 shadow-sm overflow-hidden">
+          <div className="mb-4 flex justify-center gap-2 border-b border-white/10 pb-4">
+            <div className="overflow-hidden rounded-lg bg-white p-0.5 shadow-sm">
               <ThemeToggle />
             </div>
-            <div className="bg-white rounded-lg p-0.5 shadow-sm overflow-hidden">
+            <div className="overflow-hidden rounded-lg bg-white p-0.5 shadow-sm">
               <LanguageSwitcher />
             </div>
           </div>

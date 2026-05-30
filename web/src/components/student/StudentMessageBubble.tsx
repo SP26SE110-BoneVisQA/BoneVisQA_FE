@@ -20,7 +20,7 @@ export function StudentMessageBubble({ content, status, className }: StudentMess
       <div
         className={cn(
           VISUAL_QA_MESSAGE_IN,
-          'max-w-[min(92vw,92%)] overflow-hidden break-words rounded-2xl border border-[#003ebd] bg-[#0055ff] px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm sm:max-w-[92%]',
+          'max-w-[min(92vw,92%)] overflow-hidden break-words rounded-[1.35rem] border border-[#1d4ed8] bg-[linear-gradient(135deg,#1d4ed8,#2563eb)] px-4 py-3 text-sm leading-relaxed text-white shadow-[0_10px_30px_rgba(37,99,235,0.22)] sm:max-w-[92%]',
         )}
       >
         {showStatusLine ? (

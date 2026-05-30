@@ -2,11 +2,11 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ErrorBoundary } from 'react-error-boundary';
 import { AlertTriangle, Loader2, MoreHorizontal } from 'lucide-react';
-import {
-  shouldSuppressLeakedMedicalJsonMarkdown,
-  VisualQaStructuredAnswer,
-} from '@/components/student/VisualQaRichAnswer';
+import { shouldSuppressLeakedMedicalJsonMarkdown } from '@/components/student/VisualQaRichAnswer';
+import { WorkspaceStructuredAnswer } from '@/features/visual-qa/components/WorkspaceStructuredAnswer';
+import { WorkspaceRagSources } from '@/features/visual-qa/components/WorkspaceRagSources';
 import type { Components } from 'react-markdown';
 import { markdownExternalLinkComponents } from '@/components/shared/markdownExternalLinks';
 import type { VisualQaTurn } from '@/lib/api/types';
@@ -17,6 +17,35 @@ import {
   visualQaMdHeadingsBold,
 } from '@/components/student/visualQaMarkdownComponents';
 
+function AnalysisLoadingState({ phase }: { phase: 'upload' | 'analyzing' }) {
+  if (phase === 'upload') {
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-600" aria-busy>
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden />
+        <span>Uploading study image…</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="min-w-[min(280px,70vw)] rounded-xl border border-slate-300 bg-white/90 px-3 py-3 shadow-sm"
+      aria-busy
+      aria-label="AI is analyzing the study"
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+        AI is analyzing the study...
+      </p>
+      <div className="mt-3 space-y-2 animate-pulse">
+        <div className="h-2.5 w-28 rounded-full bg-slate-200" />
+        <div className="h-2.5 w-full rounded-full bg-slate-200" />
+        <div className="h-2.5 w-5/6 rounded-full bg-slate-200" />
+        <div className="h-2.5 w-2/3 rounded-full bg-slate-200" />
+      </div>
+    </div>
+  );
+}
+
 function hasDisplayableAnalysisContent(turn: VisualQaTurn): boolean {
   if (turn.diagnosis?.trim()) return true;
   if (turn.findings?.some((item) => item?.trim())) return true;
@@ -24,10 +53,20 @@ function hasDisplayableAnalysisContent(turn: VisualQaTurn): boolean {
   if (turn.reflectiveQuestions?.some((item) => item?.trim())) return true;
   if (turn.structuredDiagnosis?.trim()) return true;
   if (turn.keyImagingFindings?.trim()) return true;
-  /** Citations alone must not flip to structured layout — avoid empty Diagnosis + duplicate prose. */
+  if ((turn.citations ?? []).length > 0) return true;
   const md = turn.answerText?.trim();
   if (md && !shouldSuppressLeakedMedicalJsonMarkdown(md)) return true;
   return false;
+}
+
+function resolveReviewFeedbackTone(
+  turn: VisualQaTurn,
+  expertSupportInline: ExpertSupportInline | null | undefined,
+): 'success' | 'danger' {
+  if (expertSupportInline?.kind === 'resolved') return expertSupportInline.tone;
+  const rs = (turn.reviewState ?? turn.answerStatus ?? '').trim().toLowerCase();
+  if (rs.includes('reject')) return 'danger';
+  return 'success';
 }
 
 function sanitizeSystemNoticeMarkdownBody(text: string, noticeCode?: string | null): string {
@@ -49,6 +88,28 @@ export type AiResponseKind =
 export type ExpertSupportInline =
   | { kind: 'awaiting' }
   | { kind: 'resolved'; tone: 'success' | 'danger'; text: string };
+
+function AnalysisFallbackBlock({
+  markdown,
+  citations,
+  components,
+}: {
+  markdown: string;
+  citations: VisualQaTurn['citations'];
+  components: Components;
+}) {
+  return (
+    <div className="space-y-2 rounded-[1.15rem] border border-amber-200 bg-amber-50/70 px-3 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
+        Structured response unavailable
+      </p>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {markdown || 'The assistant returned a response, but the structured layout could not be rendered.'}
+      </ReactMarkdown>
+      <WorkspaceRagSources citations={citations ?? []} />
+    </div>
+  );
+}
 
 export type AiMessageBubbleProps = {
   turn: VisualQaTurn;
@@ -111,11 +172,48 @@ export function AiMessageBubble({
       <p className="mb-2 font-medium leading-relaxed text-slate-900 last:mb-0">{children}</p>
     ),
   };
-  const mdInlineFeedback = buildAssistantMarkdownComponents(
-    'mb-2 font-medium text-emerald-900 last:mb-0 leading-relaxed',
-  );
   const mdFallback = buildAssistantMarkdownComponents(
     'mb-2 text-slate-950 last:mb-0 leading-relaxed',
+  );
+  const structuredFallbackMarkdown =
+    safeMarkdownAssistantText ||
+    turn.structuredDiagnosis?.trim() ||
+    turn.diagnosis?.trim() ||
+    turn.keyImagingFindings?.trim() ||
+    'The assistant returned a response.';
+
+  const reviewFeedbackTone = resolveReviewFeedbackTone(turn, expertSupportInline);
+  const reviewFeedbackClass =
+    reviewFeedbackTone === 'danger'
+      ? 'mt-3 rounded-[1rem] border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-900 shadow-sm [&_a]:font-medium [&_a]:text-red-900 [&_a]:underline'
+      : 'mt-3 rounded-[1rem] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 shadow-sm [&_a]:font-medium [&_a]:text-emerald-900 [&_a]:underline';
+  const mdInlineFeedback = buildAssistantMarkdownComponents(
+    reviewFeedbackTone === 'danger'
+      ? 'mb-2 font-medium text-red-900 last:mb-0 leading-relaxed'
+      : 'mb-2 font-medium text-emerald-900 last:mb-0 leading-relaxed',
+  );
+
+  const structuredAnswer = (
+    <ErrorBoundary
+      fallbackRender={() => (
+        <AnalysisFallbackBlock
+          markdown={structuredFallbackMarkdown}
+          citations={turn.citations ?? []}
+          components={mdFallback}
+        />
+      )}
+    >
+      <WorkspaceStructuredAnswer
+        markdown={turn.answerText}
+        diagnosis={turn.diagnosis}
+        structuredDiagnosis={turn.structuredDiagnosis}
+        findings={turn.findings}
+        keyImagingFindings={turn.keyImagingFindings}
+        differentialDiagnoses={turn.differentialDiagnoses}
+        reflectiveQuestions={turn.reflectiveQuestions}
+        citations={turn.citations ?? []}
+      />
+    </ErrorBoundary>
   );
 
   return (
@@ -123,45 +221,23 @@ export function AiMessageBubble({
       <div
         className={cn(
           VISUAL_QA_MESSAGE_IN,
-          'relative max-w-[min(92vw,92%)] overflow-visible break-words rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm leading-relaxed text-slate-950 shadow-sm [&_a]:break-all [&_pre]:overflow-x-auto sm:max-w-[92%]',
+          'relative max-w-[min(92vw,92%)] overflow-visible break-words rounded-[1.35rem] border border-slate-200/80 bg-white/95 px-4 py-3 text-sm leading-relaxed text-slate-950 shadow-[0_8px_30px_rgb(15,23,42,0.06)] [&_a]:break-all [&_pre]:overflow-x-auto sm:max-w-[92%]',
         )}
       >
         {awaitingAssistant ? (
-          chatRequestPhase === 'upload' ? (
-            <div className="flex items-center gap-2 text-sm text-slate-600" aria-busy>
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden />
-              <span>Uploading study image…</span>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-1.5 py-0.5" aria-busy aria-label="Assistant is typing">
-              <span className="messenger-typing-dot" />
-              <span className="messenger-typing-dot" />
-              <span className="messenger-typing-dot" />
-            </div>
-          )
+          <AnalysisLoadingState phase={chatRequestPhase === 'upload' ? 'upload' : 'analyzing'} />
         ) : responseKind === 'analysis' ? (
           !hasDisplayableAnalysisContent(turn) ? (
-            <div className="inline-flex items-center gap-1.5 py-0.5" aria-busy aria-label="Assistant is typing">
-              <span className="messenger-typing-dot" />
-              <span className="messenger-typing-dot" />
-              <span className="messenger-typing-dot" />
-            </div>
+            <AnalysisLoadingState phase="analyzing" />
           ) : (
-            <VisualQaStructuredAnswer
-              markdown={turn.answerText}
-              diagnosis={turn.diagnosis}
-              structuredDiagnosis={turn.structuredDiagnosis}
-              findings={turn.findings}
-              differentialDiagnoses={turn.differentialDiagnoses}
-              reflectiveQuestions={turn.reflectiveQuestions}
-              citations={turn.citations ?? []}
-            />
+            structuredAnswer
           )
         ) : responseKind === 'clarification' || responseKind === 'refusal' ? (
           <div className="space-y-2">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdClarificationRefusal}>
               {safeMarkdownAssistantText || 'The assistant returned a non-analysis response.'}
             </ReactMarkdown>
+            <WorkspaceRagSources citations={turn.citations ?? []} />
           </div>
         ) : responseKind === 'system_notice' ? (
           <div className="space-y-2 rounded-xl border border-slate-300 bg-violet-50 px-3 py-3 shadow-sm">
@@ -184,11 +260,12 @@ export function AiMessageBubble({
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdFallback}>
               {safeMarkdownAssistantText || 'The assistant returned a response.'}
             </ReactMarkdown>
+            <WorkspaceRagSources citations={turn.citations ?? []} />
           </div>
         )}
 
         {inlineReviewFeedbackMarkdown?.trim() ? (
-          <div className="mt-3 rounded-lg border border-emerald-300 bg-emerald-100 px-3 py-2 text-sm font-medium text-emerald-900 shadow-sm [&_a]:font-medium [&_a]:text-emerald-900 [&_a]:underline">
+          <div className={reviewFeedbackClass}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdInlineFeedback}>
               {inlineReviewFeedbackMarkdown}
             </ReactMarkdown>
@@ -196,13 +273,15 @@ export function AiMessageBubble({
         ) : null}
 
         {expertSupportInline?.kind === 'awaiting' ? (
-          <p className="mt-3 text-xs font-medium text-amber-800">Awaiting expert to reply</p>
+          <p className="mt-3 rounded-[1rem] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+            Awaiting expert verification — your preliminary AI analysis remains visible above.
+          </p>
         ) : expertSupportInline?.kind === 'resolved' && !inlineReviewFeedbackMarkdown?.trim() ? (
           <div
             className={
               expertSupportInline.tone === 'danger'
-                ? 'mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-950'
-                : 'mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-950'
+                ? 'mt-3 rounded-[1rem] border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-950'
+                : 'mt-3 rounded-[1rem] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-950'
             }
           >
             {expertSupportInline.text}
@@ -213,18 +292,18 @@ export function AiMessageBubble({
           <div className="absolute right-2 top-2">
             <button
               type="button"
-              className="rounded-md p-1 text-slate-600 opacity-0 transition group-hover:opacity-100 hover:bg-slate-200"
+              className="rounded-xl p-1.5 text-slate-600 opacity-0 transition group-hover:opacity-100 hover:bg-slate-100"
               onClick={onToggleMenu}
               aria-label="More actions"
             >
               <MoreHorizontal className="h-4 w-4" />
             </button>
             {activeMenuTurnKey === turnMenuKey ? (
-              <div className="absolute right-0 z-[100] mt-1 w-52 rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
+              <div className="absolute right-0 z-[100] mt-1 w-52 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
                 <button
                   type="button"
                   disabled={requestingExpertSupport}
-                  className="w-full rounded-md px-3 py-2 text-left text-xs font-medium text-slate-900 hover:bg-muted disabled:opacity-50"
+                  className="w-full rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-900 hover:bg-muted disabled:opacity-50"
                   onClick={() => {
                     onRequestExpertSupport();
                   }}

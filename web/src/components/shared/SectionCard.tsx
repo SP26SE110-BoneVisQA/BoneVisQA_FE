@@ -31,7 +31,7 @@ export function SectionCard({
                   {title}
                 </h2>
               ) : null}
-              {description ? <p className="mt-1 text-sm text-card-foreground">{description}</p> : null}
+              {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
             </div>
           </div>
           {actions ? <div className="shrink-0">{actions}</div> : null}

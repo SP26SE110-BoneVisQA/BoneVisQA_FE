@@ -11,7 +11,7 @@ export function EmptyState({
 }: {
   icon?: ReactNode;
   title: string;
-  description: string;
+  description?: string;
   /** Primary CTA (button or link) — optional. */
   action?: ReactNode;
 }) {
@@ -21,7 +21,9 @@ export function EmptyState({
         {icon ?? <Inbox className="h-7 w-7 opacity-80" />}
       </div>
       <h3 className="text-lg font-semibold tracking-tight text-card-foreground">{title}</h3>
-      <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">{description}</p>
+      {description ? (
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">{description}</p>
+      ) : null}
       {action ? <div className="mt-6 flex flex-wrap items-center justify-center gap-2">{action}</div> : null}
     </div>
   );

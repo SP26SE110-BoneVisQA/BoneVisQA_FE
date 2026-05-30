@@ -33,6 +33,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { useSignalR } from '@/hooks/useSignalR';
 import { cn } from '@/lib/utils';
+import { DestructiveConfirmDialog } from '@/components/shared/DestructiveConfirmDialog';
+import { appToast } from '@/lib/api/errors/app-toast';
 import { toast } from 'sonner';
 import AdminDocumentReplaceFileModal from './AdminDocumentReplaceFileModal';
 import { computePhaseBars, type IndexingPhaseKey } from './documentIndexingPhases';
@@ -64,6 +66,7 @@ export default function DocumentDetail({ id }: { id: string }) {
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [replaceModalAction, setReplaceModalAction] = useState<'replace' | 'reindex'>('replace');
   const [retryBusy, setRetryBusy] = useState(false);
+  const [reindexConfirmOpen, setReindexConfirmOpen] = useState(false);
 
   const applyIngestionSnapshot = useCallback(
     (next: Omit<IngestionSnapshot, 'source'> & { source: IngestionSnapshot['source'] }) => {
@@ -275,42 +278,53 @@ export default function DocumentDetail({ id }: { id: string }) {
   const handleRetryIndexing = async () => {
     setRetryBusy(true);
     try {
-      await reindexAdminDocument(id);
-      applyIngestionSnapshot({
-        source: 'rest',
-        status: 'Processing',
-        currentPageIndexing: 0,
-        totalPages: liveStatus?.totalPages ?? doc?.totalPages,
-        totalChunks: 0,
-        currentOperation: 'Re-index requested…',
-        progressPercentage: 0,
-        errorMessage: undefined,
-      });
-      setDoc((prev) =>
-        prev
-          ? {
-              ...prev,
-              indexingStatus: 'Processing',
-              currentPageIndexing: 0,
-            }
-          : prev,
+      await appToast.promise(
+        (async () => {
+          await reindexAdminDocument(id);
+          applyIngestionSnapshot({
+            source: 'rest',
+            status: 'Processing',
+            currentPageIndexing: 0,
+            totalPages: liveStatus?.totalPages ?? doc?.totalPages,
+            totalChunks: 0,
+            currentOperation: 'Re-index requested…',
+            progressPercentage: 0,
+            errorMessage: undefined,
+          });
+          setDoc((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  indexingStatus: 'Processing',
+                  currentPageIndexing: 0,
+                }
+              : prev,
+          );
+          const [data, status] = await Promise.all([
+            getAdminDocumentById(id),
+            fetchDocumentStatus(id),
+          ]);
+          setDoc(data);
+          applyIngestionSnapshot({
+            source: 'rest',
+            status: status.status || data.indexingStatus,
+            currentPageIndexing: status.currentPageIndexing ?? data.currentPageIndexing,
+            totalPages: status.totalPages ?? data.totalPages,
+            totalChunks: status.totalChunks,
+            currentOperation: status.currentOperation,
+            progressPercentage: status.progressPercentage,
+            errorMessage: undefined,
+          });
+        })(),
+        {
+          loading: 'Indexing document…',
+          success: 'Re-indexing started successfully.',
+          error: 'Could not start re-indexing.',
+        },
       );
-      const [data, status] = await Promise.all([getAdminDocumentById(id), fetchDocumentStatus(id)]);
-      setDoc(data);
-      applyIngestionSnapshot({
-        source: 'rest',
-        status: status.status || data.indexingStatus,
-        currentPageIndexing: status.currentPageIndexing ?? data.currentPageIndexing,
-        totalPages: status.totalPages ?? data.totalPages,
-        totalChunks: status.totalChunks,
-        currentOperation: status.currentOperation,
-        progressPercentage: status.progressPercentage,
-        errorMessage: undefined,
-      });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not refresh document status.');
     } finally {
       setRetryBusy(false);
+      setReindexConfirmOpen(false);
     }
   };
 
@@ -518,7 +532,7 @@ export default function DocumentDetail({ id }: { id: string }) {
                       variant="default"
                       size="sm"
                       disabled={retryBusy}
-                      onClick={() => void handleRetryIndexing()}
+                      onClick={() => setReindexConfirmOpen(true)}
                       className="rounded-xl"
                     >
                       {retryBusy ? (
@@ -626,6 +640,15 @@ export default function DocumentDetail({ id }: { id: string }) {
             });
           })();
         }}
+      />
+
+      <DestructiveConfirmDialog
+        open={reindexConfirmOpen}
+        onOpenChange={setReindexConfirmOpen}
+        title="Re-index this document?"
+        confirmLabel="Start re-indexing"
+        isLoading={retryBusy}
+        onConfirm={() => void handleRetryIndexing()}
       />
     </div>
   );
