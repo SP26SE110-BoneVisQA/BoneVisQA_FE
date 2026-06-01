@@ -117,6 +117,7 @@ export async function fetchAssignedCases(classId: string): Promise<CaseDto[]> {
             : item.assignedAt != null
               ? String(item.assignedAt)
               : null,
+      imageUrl: (item.imageUrl ?? item.ImageUrl ?? null) as string | null,
     }));
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {

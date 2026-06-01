@@ -64,6 +64,7 @@ import type {
   ClassItem,
   ClassStats,
   CreateQuizQuestionRequest,
+  CreateQuizRequest,
   QuizQuestionDto,
   AIQuizQuestion,
 } from '@/lib/api/types';
@@ -262,9 +263,10 @@ export function LecturerQuizCreatePage() {
     return d.toISOString();
   };
 
-  const buildCreatePayload = () => {
-    // Omit classId entirely when empty to avoid Guid parse errors on BE
-    const payload: Record<string, unknown> = {
+  const buildCreatePayload = (): CreateQuizRequest => {
+    // classId is required in CreateQuizRequest but can be empty string
+    const classId = formData.classId.trim() || '00000000-0000-0000-0000-000000000000';
+    return {
       title: formData.title,
       topic: formData.topic || undefined,
       difficulty: formData.difficulty || undefined,
@@ -275,11 +277,8 @@ export function LecturerQuizCreatePage() {
       timeLimit: formData.timeLimit ? parseInt(formData.timeLimit, 10) : undefined,
       passingScore: formData.passingScore ? parseInt(formData.passingScore, 10) : undefined,
       quizMode: formData.quizMode,
+      classId: classId,
     };
-    if (formData.classId.trim()) {
-      payload.classId = formData.classId;
-    }
-    return payload;
   };
 
   // ========== AI Quiz Handlers ==========
@@ -389,9 +388,8 @@ export function LecturerQuizCreatePage() {
     setError(null);
 
     try {
-      const payload = buildCreatePayload();
-      (payload as Record<string, unknown>).isAiGenerated = true;
-      const quiz = await createQuiz(payload as Parameters<typeof createQuiz>[0]);
+      const payload = { ...buildCreatePayload(), isAiGenerated: true };
+      const quiz = await createQuiz(payload);
 
       const payloads: CreateQuizQuestionRequest[] = aiQuestions.map((q) => ({
         quizId: quiz.id,

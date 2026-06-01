@@ -12,9 +12,10 @@ import type {
 
 /** BE có thể trả camelCase hoặc PascalCase tùy cấu hình JSON. */
 function normalizeQuizQuestionDto(q: QuizQuestionDto): QuizQuestionDto {
-  const raw = q as QuizQuestionDto & { ImageUrl?: string | null };
+  const raw = q as QuizQuestionDto & { Id?: string | null; ImageUrl?: string | null };
+  const id = q.id ?? raw.Id ?? '';
   const imageUrl = q.imageUrl ?? raw.ImageUrl ?? null;
-  return { ...q, imageUrl };
+  return { ...q, id, imageUrl };
 }
 
 export interface UpdateQuizRequest {
