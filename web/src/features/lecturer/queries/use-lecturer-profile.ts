@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  fetchLecturerDashboardStats,
   fetchLecturerProfile,
   updateLecturerProfile,
   type UpdateLecturerProfilePayload,
@@ -12,6 +13,14 @@ export function useLecturerProfile() {
   return useQuery({
     queryKey: queryKeys.lecturer.profile(),
     queryFn: fetchLecturerProfile,
+    staleTime: 30_000,
+  });
+}
+
+export function useLecturerDashboardStats() {
+  return useQuery({
+    queryKey: queryKeys.lecturer.dashboard(),
+    queryFn: fetchLecturerDashboardStats,
     staleTime: 30_000,
   });
 }
