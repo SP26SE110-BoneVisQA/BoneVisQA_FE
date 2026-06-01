@@ -1080,7 +1080,7 @@ export function LecturerQuizResultsPage({
                         </button>
                       )}
                       <Link
-                        href={`/lecturer/quizzes/${quizId}/results/${a.attemptId}`}
+                        href={`/lecturer/quizzes/${quizId}/results/${a.attemptId}?classId=${encodeURIComponent(classId)}`}
                         className="mr-2 inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
                       >
                         <Eye className="h-3.5 w-3.5" />

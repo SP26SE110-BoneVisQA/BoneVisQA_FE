@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, ImageIcon } from 'lucide-react';
 import type { CaseDto } from '@/lib/api/types';
 
 const difficultyColors: Record<string, string> = {
@@ -16,6 +16,7 @@ interface CasesTableProps {
   selectedCases: Set<string>;
   onSelectAll: (allIds: Set<string>) => void;
   onSelect: (id: string) => void;
+  showImages?: boolean;
 }
 
 export default function CasesTable({
@@ -23,6 +24,7 @@ export default function CasesTable({
   selectedCases,
   onSelectAll,
   onSelect,
+  showImages = true,
 }: CasesTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -52,6 +54,11 @@ export default function CasesTable({
                 className="w-4 h-4 accent-primary cursor-pointer"
               />
             </th>
+            {showImages && (
+              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Image
+              </th>
+            )}
             <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
               ID
             </th>
@@ -86,6 +93,33 @@ export default function CasesTable({
                     className="w-4 h-4 accent-primary cursor-pointer"
                   />
                 </td>
+                {showImages && (
+                  <td className="px-5 py-3">
+                    <div className="flex items-center justify-center">
+                      {c.imageUrl ? (
+                        <div className="relative group">
+                          <img
+                            src={c.imageUrl}
+                            alt={c.title || 'Case image'}
+                            className="w-16 h-16 object-cover rounded-lg border border-border bg-muted cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              target.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                          <div className="hidden w-16 h-16 items-center justify-center rounded-lg border border-border bg-muted">
+                            <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-16 h-16 flex items-center justify-center rounded-lg border border-border bg-muted">
+                          <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                )}
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">
                     <code className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">

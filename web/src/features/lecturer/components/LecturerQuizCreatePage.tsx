@@ -638,15 +638,23 @@ export function LecturerQuizCreatePage() {
             Save draft
           </button>
           {isQuizOpenTimeReached ? (
-            <button
-              type="button"
-              disabled={loading || allQuestions.length === 0}
-              onClick={handleCreateQuiz}
-              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-medium text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Publish
-            </button>
+            <div className="flex items-center gap-2">
+              {!formData.title.trim() && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-medium text-amber-700">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <span>Enter a title to publish</span>
+                </div>
+              )}
+              <button
+                type="button"
+                disabled={loading || allQuestions.length === 0 || !formData.title.trim()}
+                onClick={handleCreateQuiz}
+                className="flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-medium text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Publish
+              </button>
+            </div>
           ) : (
             <div className="flex items-center gap-2 rounded-xl bg-muted px-5 py-2 text-sm font-medium text-muted-foreground">
               <Calendar className="h-4 w-4" />

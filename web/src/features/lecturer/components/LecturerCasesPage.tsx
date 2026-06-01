@@ -12,6 +12,8 @@ import {
   XCircle,
   Eye,
   Plus,
+  ImageIcon,
+  ImageOff,
 } from 'lucide-react';
 import { useLecturerClasses } from '@/features/lecturer/queries/use-lecturer-classes';
 import { useLecturerCasesList } from '@/features/lecturer/queries/use-lecturer-cases';
@@ -31,6 +33,7 @@ export function LecturerCasesPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [showAssign, setShowAssign] = useState(false);
   const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set());
+  const [showImages, setShowImages] = useState(true);
 
   const cases = casesQuery.data ?? [];
   const classes = classesQuery.data ?? [];
@@ -112,17 +115,37 @@ export function LecturerCasesPage() {
             className="pl-9"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="h-10 rounded-lg border border-border bg-card px-3 text-sm"
-        >
-          <option value="all">All statuses</option>
-          <option value="approved">Approved</option>
-          <option value="unapproved">Unapproved</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
+        <div className="flex items-center gap-3">
+          <Button
+            variant={showImages ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowImages(!showImages)}
+            className="flex items-center gap-2"
+          >
+            {showImages ? (
+              <>
+                <ImageOff className="h-4 w-4" />
+                Hide Images
+              </>
+            ) : (
+              <>
+                <ImageIcon className="h-4 w-4" />
+                Show Images
+              </>
+            )}
+          </Button>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="h-10 rounded-lg border border-border bg-card px-3 text-sm"
+          >
+            <option value="all">All statuses</option>
+            <option value="approved">Approved</option>
+            <option value="unapproved">Unapproved</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
       </div>
 
       {filtered.length === 0 && !casesQuery.isPending ? (
@@ -139,6 +162,7 @@ export function LecturerCasesPage() {
           selectedCases={selectedCases}
           onSelectAll={setSelectedCases}
           onSelect={toggleCaseSelection}
+          showImages={showImages}
         />
       )}
 

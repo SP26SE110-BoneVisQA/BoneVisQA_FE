@@ -55,10 +55,13 @@ function ScoreBadge({ score }: { score: number | null }) {
 
 export function LecturerQuizAttemptDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; attemptId: string }>;
+  searchParams?: Promise<{ classId?: string }>;
 }) {
   const { id: quizId, attemptId } = use(params);
+  const classIdFromUrl = (searchParams ? use(searchParams) : undefined)?.classId;
   const router = useRouter();
   const toast = useToast();
 
@@ -80,8 +83,15 @@ export function LecturerQuizAttemptDetailPage({
   const [saving, setSaving] = useState(false);
   const [classId, setClassId] = useState<string>('');
 
-  // Load quiz to get classId first
+  // Load quiz to get classId first (fallback if not provided in URL)
   useEffect(() => {
+    // If classId is provided in URL, use it directly
+    if (classIdFromUrl) {
+      setClassId(classIdFromUrl);
+      return;
+    }
+
+    // Otherwise, fetch quiz to get classId
     async function loadQuiz() {
       try {
         const quiz = await getQuiz(quizId);
@@ -91,7 +101,7 @@ export function LecturerQuizAttemptDetailPage({
       }
     }
     void loadQuiz();
-  }, [quizId]);
+  }, [quizId, classIdFromUrl, toast]);
 
   // Load attempt detail
   useEffect(() => {

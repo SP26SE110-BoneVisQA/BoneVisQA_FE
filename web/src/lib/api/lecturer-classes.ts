@@ -107,6 +107,7 @@ export async function fetchAssignedCases(classId: string): Promise<CaseDto[]> {
       description: (item.caseDescription ?? item.Description ?? null) as string | null,
       categoryName: (item.categoryName ?? item.CategoryName ?? null) as string | null,
       difficulty: (item.difficulty ?? item.Difficulty ?? null) as string | null,
+      imageUrl: (item.imageUrl ?? item.ImageUrl ?? null) as string | null,
       isActive: true,
       isApproved: true,
       createdAt:

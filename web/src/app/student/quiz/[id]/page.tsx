@@ -128,25 +128,41 @@ export default function QuizSessionPage({
   const [savedFlashcardInfo, setSavedFlashcardInfo] = useState<{ deckId: string; deckName: string; cardCount: number } | null>(null);
   const [customDeckName, setCustomDeckName] = useState('');
 
-  // Track if quiz open time has been reached
-  const [isQuizOpenTimeReached, setIsQuizOpenTimeReached] = useState(false);
+  // Quiz availability status based on openTime/closeTime (ISO UTC from .NET backend)
+  type QuizStatus = 'checking' | 'notOpened' | 'open' | 'closed';
+  const [quizStatus, setQuizStatus] = useState<QuizStatus>('checking');
 
-  // Check if quiz open time has been reached
   useEffect(() => {
-    const checkOpenTime = () => {
-      if (quizInfo?.openTime) {
-        const openTimeDate = new Date(quizInfo.openTime);
-        const now = new Date();
-        setIsQuizOpenTimeReached(now >= openTimeDate);
-      } else {
-        setIsQuizOpenTimeReached(true); // No open time set, allow access
+    const checkQuizStatus = () => {
+      if (!quizInfo) return;
+
+      const now = Date.now();
+
+      if (quizInfo.openTime) {
+        const openMs = new Date(quizInfo.openTime).getTime();
+        if (now < openMs) {
+          setQuizStatus('notOpened');
+          return;
+        }
       }
+
+      if (quizInfo.closeTime) {
+        const closeMs = new Date(quizInfo.closeTime).getTime();
+        if (now > closeMs) {
+          setQuizStatus('closed');
+          return;
+        }
+      }
+
+      setQuizStatus('open');
     };
 
-    checkOpenTime();
-    const interval = setInterval(checkOpenTime, 60000); // Check every minute
-    return () => clearInterval(interval);
-  }, [quizInfo?.openTime]);
+    if (quizInfo) {
+      checkQuizStatus();
+      const interval = setInterval(checkQuizStatus, 30000); // Recheck every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [quizInfo]);
 
   // Review pagination (5 questions per page)
   const [reviewPage, setReviewPage] = useState(1);
@@ -749,53 +765,81 @@ export default function QuizSessionPage({
                 </Button>
               </Link>
             </div>
+          ) : quizStatus === 'checking' ? (
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-on-surface-variant">Checking quiz availability…</p>
+            </div>
+          ) : quizStatus === 'notOpened' ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-6 py-5 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+                <Timer className="h-6 w-6 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-amber-800">Quiz is not yet open</p>
+                <p className="mt-1 text-xs text-amber-700">This assessment will be available on:</p>
+                <p className="mt-1 text-sm font-bold text-amber-900">
+                  {quizInfo?.openTime ? new Date(quizInfo.openTime).toLocaleString('vi-VN', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }) : '—'}
+                </p>
+              </div>
+              <Link href="/student/quizzes" className="w-full">
+                <Button variant="outline" className="h-10 w-full rounded-xl font-medium border-amber-200 text-amber-800 hover:bg-amber-100">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Quizzes
+                </Button>
+              </Link>
+            </div>
+          ) : quizStatus === 'closed' ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-6 py-5 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                <AlertCircle className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-red-800">Quiz has been closed</p>
+                <p className="mt-1 text-xs text-red-700">This assessment is no longer available.</p>
+                {quizInfo?.closeTime && (
+                  <p className="mt-1 text-xs text-red-600">
+                    Closed on: {new Date(quizInfo.closeTime).toLocaleString('vi-VN')}
+                  </p>
+                )}
+              </div>
+              <Link href="/student/quizzes" className="w-full">
+                <Button variant="outline" className="h-10 w-full rounded-xl font-medium border-red-200 text-red-800 hover:bg-red-100">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Quizzes
+                </Button>
+              </Link>
+            </div>
           ) : (
             <>
               <p className="text-sm leading-relaxed text-on-surface-variant">
                 The live session timer starts when you begin. Use a stable connection and a quiet space.
               </p>
               <div className="flex flex-col gap-3">
-                {isQuizOpenTimeReached ? (
-                  <Button
-                    onClick={() => void handleStart()}
-                    disabled={loadingSession}
-                    className="h-12 rounded-xl bg-gradient-to-br from-primary to-primary-container text-base font-bold text-white shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    {loadingSession ? (
-                      <>
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        Preparing…
-                      </>
-                    ) : (
-                      <>
-                        <PlayCircle className="h-5 w-5" />
-                        Begin assessment
-                      </>
-                    )}
-                  </Button>
-                ) : (
-                  <div className="flex flex-col items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-6 py-5 text-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
-                      <Timer className="h-6 w-6 text-amber-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-amber-800">Quiz is not yet open</p>
-                      <p className="mt-1 text-xs text-amber-700">
-                        This assessment will be available on:
-                      </p>
-                      <p className="mt-1 text-sm font-bold text-amber-900">
-                        {quizInfo?.openTime ? new Date(quizInfo.openTime).toLocaleString('vi-VN', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        }) : '—'}
-                      </p>
-                    </div>
-                  </div>
-                )}
+                <Button
+                  onClick={() => void handleStart()}
+                  disabled={loadingSession}
+                  className="h-12 rounded-xl bg-gradient-to-br from-primary to-primary-container text-base font-bold text-white shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  {loadingSession ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Preparing…
+                    </>
+                  ) : (
+                    <>
+                      <PlayCircle className="h-5 w-5" />
+                      Begin assessment
+                    </>
+                  )}
+                </Button>
                 <Link href="/student/quizzes">
                   <Button variant="outline" className="h-12 w-full rounded-xl border-outline-variant/30 font-bold">
                     <ArrowLeft className="h-4 w-4" />
