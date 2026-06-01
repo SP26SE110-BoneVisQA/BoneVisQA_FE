@@ -30,6 +30,9 @@ import { Button } from "@/components/ui/button";
 
 const motionEase = [0.22, 1, 0.36, 1] as const;
 
+let _gsiPromptFn: (() => void) | null = null;
+let _gsiInitialized = false;
+
 type GoogleCredentialResponse = {
   credential?: string;
 };
@@ -109,9 +112,7 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [gsiScriptReady, setGsiScriptReady] = useState(false);
-  const gsiPromptRef = useRef<(() => void) | null>(null);
-  const isGsiInitialized = useRef(false);
+  const gsiScriptReady = useRef(false);
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("rememberedEmail");
@@ -235,8 +236,8 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   }, [handleLoginSuccess, router]);
 
   const triggerGoogleSignIn = useCallback(() => {
-    if (gsiPromptRef.current) {
-      gsiPromptRef.current();
+    if (_gsiPromptFn) {
+      _gsiPromptFn();
       return;
     }
     appToast.error("Google sign-in is still loading. Please try again.");
@@ -244,14 +245,16 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
 
   useEffect(() => {
     if (window.google?.accounts?.id) {
-      setGsiScriptReady(true);
+      gsiScriptReady.current = true;
     }
   }, []);
 
   useEffect(() => {
-    if (!googleEnabled || !googleClientId || isGsiInitialized.current) return;
+    if (!googleEnabled || !googleClientId) return;
+    if (_gsiInitialized) return;
+
     const gsi = window.google?.accounts?.id;
-    if (!gsiScriptReady || !gsi) return;
+    if (!gsiScriptReady.current || !gsi) return;
 
     gsi.initialize({
       client_id: googleClientId,
@@ -263,10 +266,9 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
       cancel_on_tap_outside: true,
     });
 
-    gsiPromptRef.current = () => gsi.prompt?.();
-
-    isGsiInitialized.current = true;
-  }, [googleEnabled, googleClientId, gsiScriptReady, handleGoogleLoginSuccess]);
+    _gsiPromptFn = () => gsi.prompt?.();
+    _gsiInitialized = true;
+  }, [googleEnabled, googleClientId, handleGoogleLoginSuccess]);
 
   return (
     <div className="min-h-[100dvh] w-full bg-slate-950">
