@@ -70,8 +70,8 @@ function normalizeClassItem(raw: unknown): ClassItem | null {
     semester: String(r.semester ?? r.Semester ?? '').trim(),
     lecturerId: String(r.lecturerId ?? r.LecturerId ?? '').trim(),
     createdAt: String(r.createdAt ?? r.CreatedAt ?? '').trim(),
-    expertId: r.expertId ?? r.ExpertId ?? null,
-    expertName: r.expertName ?? r.ExpertName ?? null,
+    expertId: (typeof r.expertId === 'object' && r.expertId !== null) ? null : ((r.expertId ?? r.ExpertId) as string | null),
+    expertName: (typeof r.expertName === 'object' && r.expertName !== null) ? null : ((r.expertName ?? r.ExpertName) as string | null),
   };
 }
 
