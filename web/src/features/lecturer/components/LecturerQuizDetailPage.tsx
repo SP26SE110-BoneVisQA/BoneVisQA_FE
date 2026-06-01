@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   CheckCircle2,
+  CheckSquare,
   Loader2,
   Plus,
   ChevronDown,
@@ -20,8 +21,20 @@ import {
   UploadCloud,
   Eye,
   EyeOff,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { appToast } from '@/lib/api/errors/app-toast';
 import {
   useAssignQuizToClass,
@@ -139,6 +152,12 @@ export function LecturerQuizDetailPage() {
     questionText: string;
   } | null>(null);
   const [deletingQuestion, setDeletingQuestion] = useState(false);
+
+  // Bulk selection state
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Release answers state
   const [releaseStatus, setReleaseStatus] = useState<{
@@ -278,6 +297,59 @@ export function LecturerQuizDetailPage() {
 
   const openDeleteQuestionDialog = (questionId: string, questionText: string) => {
     setDeleteDialog({ questionId, questionText });
+  };
+
+  // Bulk selection handlers
+  const handleToggleSelectionMode = () => {
+    if (isSelectionMode) {
+      setSelectedQuestionIds(new Set());
+    }
+    setIsSelectionMode(!isSelectionMode);
+  };
+
+  const handleSelectQuestion = (questionId: string, selected: boolean) => {
+    setSelectedQuestionIds((prev) => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(questionId);
+      } else {
+        next.delete(questionId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedQuestionIds.size === filtered.length) {
+      setSelectedQuestionIds(new Set());
+    } else {
+      setSelectedQuestionIds(new Set(filtered.map((q) => q.id)));
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedQuestionIds.size === 0) return;
+    setBulkDeleteDialogOpen(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedQuestionIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      const deletePromises = Array.from(selectedQuestionIds).map((questionId) =>
+        deleteQuestionMutation.mutateAsync({ questionId, quizId })
+      );
+      await Promise.all(deletePromises);
+      appToast.success(`${selectedQuestionIds.size} questions deleted successfully.`);
+      setSelectedQuestionIds(new Set());
+      setIsSelectionMode(false);
+      setBulkDeleteDialogOpen(false);
+      refreshQuiz();
+    } catch (err) {
+      appToast.error(err instanceof Error ? err.message : 'Failed to delete some questions');
+    } finally {
+      setBulkDeleting(false);
+    }
   };
 
   const handleAddQuestion = () => {
@@ -668,6 +740,20 @@ export function LecturerQuizDetailPage() {
               <h3 className="flex items-center gap-2 font-semibold text-sm text-card-foreground">
                 <Settings2 className="h-4 w-4 text-primary" />
                 Questions <span className="text-muted-foreground">({filtered.length})</span>
+                {isSelectionMode && filtered.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSelectAll}
+                    className="ml-2 text-xs font-medium text-primary hover:underline"
+                  >
+                    {selectedQuestionIds.size === filtered.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                )}
+                {isSelectionMode && selectedQuestionIds.size > 0 && (
+                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    {selectedQuestionIds.size} selected
+                  </span>
+                )}
               </h3>
               <div className="flex items-center gap-2">
                 <div className="relative">
@@ -680,7 +766,31 @@ export function LecturerQuizDetailPage() {
                   />
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 </div>
-                {quiz && (
+                {questions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectionMode}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${
+                      isSelectionMode
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-muted text-muted-foreground border-border hover:bg-muted/80 hover:text-card-foreground'
+                    }`}
+                  >
+                    <CheckSquare className="h-3.5 w-3.5" />
+                    {isSelectionMode ? 'Cancel' : 'Select'}
+                  </button>
+                )}
+                {isSelectionMode && selectedQuestionIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteSelected}
+                    className="flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-destructive/90"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete ({selectedQuestionIds.size})
+                  </button>
+                )}
+                {quiz && !isSelectionMode && (
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -739,6 +849,9 @@ export function LecturerQuizDetailPage() {
                         variant="curated"
                         topicCategory={TOPIC_ROTATION[idx % TOPIC_ROTATION.length]}
                         points={POINTS_ROTATION[idx % POINTS_ROTATION.length]}
+                        selectable={isSelectionMode}
+                        isSelected={selectedQuestionIds.has(q.id)}
+                        onSelect={handleSelectQuestion}
                         onEdit={handleEditQuestion}
                         onDelete={openDeleteQuestionDialog}
                       />
@@ -833,6 +946,44 @@ export function LecturerQuizDetailPage() {
         cancelText="Cancel"
         dangerLevel="high"
       />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+              <AlertTriangle className="h-7 w-7 text-destructive" />
+            </div>
+            <AlertDialogTitle className="text-center text-xl">
+              Remove {selectedQuestionIds.size} Question{selectedQuestionIds.size > 1 ? 's' : ''}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Are you sure you want to remove {selectedQuestionIds.size} selected question
+              {selectedQuestionIds.size > 1 ? 's' : ''}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel className="flex-1 sm:flex-none">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              className="flex-1 sm:flex-none bg-destructive text-white hover:bg-destructive/90"
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Remove {selectedQuestionIds.size} Question{selectedQuestionIds.size > 1 ? 's' : ''}
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Save success dialog */}
       {savedDialogOpen && (
