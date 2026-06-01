@@ -19,6 +19,7 @@ import {
   Stethoscope,
   Users,
   BarChart3,
+  User,
 } from 'lucide-react';
 
 export type AppRoleKey = 'admin' | 'lecturer' | 'expert' | 'student';
@@ -46,6 +47,7 @@ export const navByRole: Record<AppRoleKey, NavItem[]> = {
   ],
   lecturer: [
     { label: 'Dashboard', href: '/lecturer/dashboard', icon: LayoutDashboard },
+    { label: 'My Profile', href: '/lecturer/profile', icon: User },
     { label: 'Triage Workbench', href: '/lecturer/qa-triage', icon: Stethoscope },
     { label: 'Classes', href: '/lecturer/classes', icon: Users },
     { label: 'Quiz Library', href: '/lecturer/quizzes', icon: FileQuestion },
