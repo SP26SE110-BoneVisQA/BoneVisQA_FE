@@ -192,7 +192,7 @@ export default function QuizSessionPage({
   const reloadQuizInfo = useCallback(async () => {
     try {
       const list = await getAssignedQuizzes();
-      const found = list.find((q) => q.quizId === quizId);
+      const found = list.items.find((q) => q.quizId === quizId);
       setQuizInfo(found ?? null);
     } catch {
       setQuizInfo(null);
@@ -204,7 +204,7 @@ export default function QuizSessionPage({
       setLoadingInfo(true);
       try {
         const list = await getAssignedQuizzes();
-        const found = list.find((q) => q.quizId === quizId);
+        const found = list.items.find((q) => q.quizId === quizId);
         setQuizInfo(found ?? null);
       } catch {
         setQuizInfo(null);
