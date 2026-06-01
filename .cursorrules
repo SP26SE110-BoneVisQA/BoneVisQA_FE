@@ -1,0 +1,15 @@
+# Project: BoneVisQA — Frontend
+# Tech: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, Axios, SignalR
+
+## Quy tắc bắt buộc
+- Luôn đọc `_ai-context/PROJECT_SPEC.md` và `_ai-context/API_CONTRACTS.md` trước khi tạo component hoặc endpoint mới.
+- Gọi API đúng theo contract trong `_ai-context/API_CONTRACTS.md` và triển khai thực tế trong `web/src/lib/api/*` (dùng `http` từ `@/lib/api/client`).
+- Naming convention: **component PascalCase**, **prop camelCase**, file route Next theo convention App Router.
+- Tránh tạo component trùng lặp — tìm trong `web/src/components` và role-specific folders trước.
+- Comment logic phức tạp bằng **tiếng Việt** (ngắn gọn, đúng chỗ).
+- Mã nguồn ứng dụng chính nằm trong thư mục **`web/`** (install và script npm chạy từ `web/`).
+
+## Tham chiếu
+- Hướng dẫn dev (kiến trúc, convention, build): `DEVELOPER_GUIDE.md`
+- Spec dự án: `_ai-context/PROJECT_SPEC.md`
+- Contract API (tổng hợp FE): `_ai-context/API_CONTRACTS.md`

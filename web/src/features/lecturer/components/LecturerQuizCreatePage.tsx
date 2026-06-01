@@ -27,14 +27,26 @@ import {
   UploadCloud,
   Sparkles,
   CheckCircle2,
+  CheckSquare,
   ChevronDown,
   Settings2,
   Plus,
   ChevronLeft,
   ChevronRight,
   Search,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import QuestionEditorDialog from '@/components/lecturer/quizzes/QuestionEditorDialog';
 import QuestionImportDialog from '@/components/lecturer/quizzes/QuestionImportDialog';
 import {
@@ -84,10 +96,11 @@ const DIFFICULTY_OPTIONS = [
   { value: 'Hard', label: 'Hard' },
 ] as const;
 
+// NOTE: Adaptive Mode (value: 3) is temporarily disabled for development
 const QUIZ_MODE_OPTIONS = [
   { value: 1, label: 'Exam Mode', description: 'Formal assessment with time limit', color: 'bg-red-50 border-red-200 text-red-700' },
   { value: 2, label: 'Practice Mode', description: 'Practice without time pressure', color: 'bg-green-50 border-green-200 text-green-700' },
-  { value: 3, label: 'Adaptive Mode', description: 'AI-powered personalized difficulty', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+  // { value: 3, label: 'Adaptive Mode', description: 'AI-powered personalized difficulty', color: 'bg-blue-50 border-blue-200 text-blue-700' },
 ] as const;
 
 export function LecturerQuizCreatePage() {
@@ -148,6 +161,15 @@ export function LecturerQuizCreatePage() {
   const [aiSuggesting, setAiSuggesting] = useState(false);
   const [aiQuestions, setAiQuestions] = useState<AIQuizQuestion[]>([]);
   const [aiSuggestionMode, setAiSuggestionMode] = useState<'auto' | 'suggest' | null>(null);
+
+  // Bulk selection state
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [questionToDelete, setQuestionToDelete] = useState<{ id: string; text: string } | null>(null);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
 
   // Success dialog state
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
@@ -463,10 +485,70 @@ export function LecturerQuizCreatePage() {
     }
   };
 
-  const handleDeleteQuestion = (questionId: string) => {
-    if (!confirm('Remove this question?')) return;
-    setTempQuestions(tempQuestions.filter((_, i) => i.toString() !== questionId));
+  const handleDeleteQuestion = (questionId: string, questionText: string) => {
+    setQuestionToDelete({ id: questionId, text: questionText });
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteQuestion = () => {
+    if (!questionToDelete) return;
+    setTempQuestions(tempQuestions.filter((_, i) => i.toString() !== questionToDelete.id));
     void publishedQuestionsQuery.refetch();
+    setQuestionToDelete(null);
+    setDeleteDialogOpen(false);
+  };
+
+  // Bulk selection handlers
+  const handleToggleSelectionMode = () => {
+    if (isSelectionMode) {
+      setSelectedQuestionIds(new Set());
+    }
+    setIsSelectionMode(!isSelectionMode);
+  };
+
+  const handleSelectQuestion = (questionId: string, selected: boolean) => {
+    setSelectedQuestionIds((prev) => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(questionId);
+      } else {
+        next.delete(questionId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedQuestionIds.size === filteredQuestions.length) {
+      setSelectedQuestionIds(new Set());
+    } else {
+      const allIds = filteredQuestions.map((q, idx) =>
+        !createdQuizId ? String(startIndex + idx) : (q as QuizQuestionDto).id
+      );
+      setSelectedQuestionIds(new Set(allIds));
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedQuestionIds.size === 0) return;
+    setBulkDeleteDialogOpen(true);
+  };
+
+  const confirmBulkDelete = () => {
+    if (selectedQuestionIds.size === 0) return;
+
+    if (!createdQuizId) {
+      const idsToRemove = new Set(selectedQuestionIds);
+      setTempQuestions(tempQuestions.filter((_, i) => !idsToRemove.has(String(i))));
+    } else {
+      const idsToRemove = new Set(selectedQuestionIds);
+      setTempQuestions(tempQuestions.filter((q) => !idsToRemove.has((q as { id?: string }).id ?? '')));
+      void publishedQuestionsQuery.refetch();
+    }
+
+    setSelectedQuestionIds(new Set());
+    setIsSelectionMode(false);
+    setBulkDeleteDialogOpen(false);
   };
 
   const toDraftValues = (payload: CreateQuizQuestionRequest): QuizQuestionDraftValues => ({
@@ -596,6 +678,20 @@ export function LecturerQuizCreatePage() {
               <h3 className="flex items-center gap-2 font-semibold text-sm text-card-foreground">
                 <Settings2 className="h-4 w-4 text-primary" />
                 Questions <span className="text-muted-foreground">({filteredQuestions.length})</span>
+                {isSelectionMode && filteredQuestions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSelectAll}
+                    className="ml-2 text-xs font-medium text-primary hover:underline"
+                  >
+                    {selectedQuestionIds.size === filteredQuestions.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                )}
+                {isSelectionMode && selectedQuestionIds.size > 0 && (
+                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    {selectedQuestionIds.size} selected
+                  </span>
+                )}
               </h3>
               <div className="flex items-center gap-2">
                 <div className="relative">
@@ -608,6 +704,30 @@ export function LecturerQuizCreatePage() {
                   />
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 </div>
+                {allQuestions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectionMode}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${
+                      isSelectionMode
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-muted text-muted-foreground border-border hover:bg-muted/80 hover:text-card-foreground'
+                    }`}
+                  >
+                    <CheckSquare className="h-3.5 w-3.5" />
+                    {isSelectionMode ? 'Cancel' : 'Select'}
+                  </button>
+                )}
+                {isSelectionMode && selectedQuestionIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteSelected}
+                    className="flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-destructive/90"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete ({selectedQuestionIds.size})
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setImportOpen(true)}
@@ -703,27 +823,36 @@ export function LecturerQuizCreatePage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {displayedQuestions.map((question, index) => (
-                    <QuestionCard
-                      key={!createdQuizId ? `t-${startIndex + index}` : (question as QuizQuestionDto).id}
-                      question={question as QuizQuestionDto}
-                      variant="curated"
-                      onEdit={() => {
-                        if (!createdQuizId) {
-                          setEditingQuestion(question as CreateQuizQuestionRequest);
-                          setEditingTempIndex(startIndex + index);
-                          setEditorOpen(true);
-                        } else {
-                          handleEditQuestion(question as QuizQuestionDto);
+                  {displayedQuestions.map((question, index) => {
+                    const qId = !createdQuizId
+                      ? String(startIndex + index)
+                      : (question as QuizQuestionDto).id;
+                    return (
+                      <QuestionCard
+                        key={!createdQuizId ? `t-${startIndex + index}` : (question as QuizQuestionDto).id}
+                        question={question as QuizQuestionDto}
+                        variant="curated"
+                        selectable={isSelectionMode}
+                        isSelected={selectedQuestionIds.has(qId)}
+                        onSelect={handleSelectQuestion}
+                        onEdit={() => {
+                          if (!createdQuizId) {
+                            setEditingQuestion(question as CreateQuizQuestionRequest);
+                            setEditingTempIndex(startIndex + index);
+                            setEditorOpen(true);
+                          } else {
+                            handleEditQuestion(question as QuizQuestionDto);
+                          }
+                        }}
+                        onDelete={() =>
+                          handleDeleteQuestion(
+                            !createdQuizId ? String(startIndex + index) : (question as QuizQuestionDto).id,
+                            (question as QuizQuestionDto).questionText
+                          )
                         }
-                      }}
-                      onDelete={() =>
-                        handleDeleteQuestion(
-                          !createdQuizId ? String(startIndex + index) : (question as QuizQuestionDto).id,
-                        )
-                      }
-                    />
-                  ))}
+                      />
+                    );
+                  })}
 
                   {totalPages > 1 && (
                     <div className="flex items-center justify-center gap-2 pt-4">
@@ -1106,6 +1235,64 @@ export function LecturerQuizCreatePage() {
           </div>
         </div>
       )}
+
+      {/* Delete Question Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+              <Trash2 className="h-7 w-7 text-destructive" />
+            </div>
+            <AlertDialogTitle className="text-center text-xl">Remove Question</AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Are you sure you want to remove this question? This action cannot be undone.
+              {questionToDelete && (
+                <div className="mt-3 rounded-lg bg-muted/50 p-3 text-left">
+                  <p className="line-clamp-2 text-sm font-medium text-foreground">
+                    {questionToDelete.text}
+                  </p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel className="flex-1 sm:flex-none">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteQuestion}
+              className="flex-1 sm:flex-none bg-destructive text-white hover:bg-destructive/90"
+            >
+              Remove Question
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+              <AlertTriangle className="h-7 w-7 text-destructive" />
+            </div>
+            <AlertDialogTitle className="text-center text-xl">
+              Remove {selectedQuestionIds.size} Question{selectedQuestionIds.size > 1 ? 's' : ''}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Are you sure you want to remove {selectedQuestionIds.size} selected question
+              {selectedQuestionIds.size > 1 ? 's' : ''}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel className="flex-1 sm:flex-none">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              className="flex-1 sm:flex-none bg-destructive text-white hover:bg-destructive/90"
+            >
+              Remove {selectedQuestionIds.size} Question{selectedQuestionIds.size > 1 ? 's' : ''}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
