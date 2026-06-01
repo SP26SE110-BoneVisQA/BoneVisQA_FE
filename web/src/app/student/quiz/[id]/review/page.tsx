@@ -58,7 +58,7 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
       try {
         setIsRefreshing(true);
         const quizzes = await getAssignedQuizzes();
-        const quiz = quizzes.find((q) => q.quizId === quizId);
+        const quiz = quizzes.items.find((q) => q.quizId === quizId);
         
         if (quiz?.attemptId && quiz.score !== lastScoreRef.current) {
           // Score has been updated! Refresh the detailed review data
@@ -89,7 +89,7 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
     setLoading(true);
     try {
       const quizzes = await getAssignedQuizzes();
-      const quiz = quizzes.find((q) => q.quizId === quizId);
+      const quiz = quizzes.items.find((q) => q.quizId === quizId);
 
       if (!quiz) {
         toast.error('Quiz not found');

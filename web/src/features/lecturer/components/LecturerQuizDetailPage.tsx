@@ -845,7 +845,6 @@ export function LecturerQuizDetailPage() {
                         key={q.id}
                         question={q}
                         variant="curated"
-                        topicCategory={q.topicCategory || undefined}
                         points={q.maxScore || 10}
                         selectable={isSelectionMode}
                         isSelected={selectedQuestionIds.has(q.id)}

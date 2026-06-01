@@ -445,10 +445,10 @@ export default function QuizSessionPage({
         const isFillInBlank = q.type?.toLowerCase() === 'fillinblank' || q.type?.toLowerCase() === 'fill-in-blank';
         return {
           questionId: q.questionId,
-          studentAnswer: isEssay ? '' : (isFillInBlank ? undefined : answer),
-          essayAnswer: isEssay ? answer : undefined,
-          selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : undefined,
-          textAnswer: isFillInBlank ? (textAnswers[q.questionId] || answer) : undefined,
+          studentAnswer: isEssay ? '' : answer,
+          essayAnswer: isEssay ? answer : '',
+          selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : '',
+          textAnswer: isFillInBlank ? (textAnswers[q.questionId] || answer) : '',
         };
       });
       const result = await submitQuizSession(attemptId, payload);

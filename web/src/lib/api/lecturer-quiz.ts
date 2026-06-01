@@ -133,14 +133,78 @@ export async function getMyQuizzesWithClasses(lecturerId: string): Promise<MyQui
 }
 
 /**
+ * Normalize an AssignedQuizDto from backend (PascalCase) to frontend interface (camelCase).
+ */
+function normalizeAssignedQuizDto(raw: unknown): AssignedQuizDto {
+  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+
+  // Helper to safely get a string value
+  const getStr = (camel: string, pascal: string): string | null => {
+    const v = r[camel] ?? r[pascal];
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s.length ? s : null;
+  };
+
+  // Helper to safely get a date string from PascalCase DateTime
+  const getDateStr = (camel: string, pascal: string): string | null => {
+    const v = r[camel] ?? r[pascal];
+    if (v == null || v === '') return null;
+    // Handle Date objects from JSON, ISO strings, or timestamps
+    if (v instanceof Date) return v.toISOString();
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number') return new Date(v).toISOString();
+    return null;
+  };
+
+  // Helper for boolean
+  const getBool = (camel: string, pascal: string): boolean => {
+    const v = r[camel] ?? r[pascal];
+    return Boolean(v);
+  };
+
+  // Helper for numbers
+  const getNum = (camel: string, pascal: string): number => {
+    const v = r[camel] ?? r[pascal];
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const n = Number(v);
+      return Number.isNaN(n) ? 0 : n;
+    }
+    return 0;
+  };
+
+  return {
+    assignmentId: getStr('assignmentId', 'AssignmentId') ?? '',
+    classId: getStr('classId', 'ClassId') ?? '',
+    quizId: getStr('quizId', 'QuizId') ?? '',
+    quizName: getStr('quizName', 'QuizName'),
+    className: getStr('className', 'ClassName'),
+    topic: getStr('topic', 'Topic'),
+    assignedAt: getDateStr('assignedAt', 'AssignedAt'),
+    openTime: getDateStr('openTime', 'OpenTime'),
+    closeTime: getDateStr('closeTime', 'CloseTime'),
+    questionCount: getNum('questionCount', 'QuestionCount'),
+    isFromExpertLibrary: getBool('isFromExpertLibrary', 'IsFromExpertLibrary'),
+    creatorName: getStr('creatorName', 'CreatorName'),
+    creatorType: getStr('creatorType', 'CreatorType'),
+    quizMode: getNum('quizMode', 'QuizMode') || undefined,
+  };
+}
+
+/**
  * Get assigned quizzes (Assigned Quizzes tab)
  */
 export async function getAssignedQuizzes(lecturerId: string): Promise<AssignedQuizDto[]> {
   try {
-    const { data } = await http.get<AssignedQuizDto[]>('/api/lecturer/quizzes/assigned', {
+    const { data } = await http.get<unknown>('/api/lecturer/quizzes/assigned', {
       params: { lecturerId },
     });
-    return data;
+    // Backend returns PascalCase, normalize to camelCase for frontend
+    if (Array.isArray(data)) {
+      return (data as unknown[]).map(normalizeAssignedQuizDto);
+    }
+    return [];
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }
