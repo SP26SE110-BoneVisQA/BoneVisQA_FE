@@ -61,9 +61,6 @@ export function LecturerQuizAttemptDetailPage({
   searchParams?: Promise<{ classId?: string }>;
 }) {
   const { id: quizId, attemptId } = use(params);
-  // FIX: Call use() unconditionally - searchParams might be undefined, use empty object as fallback
-  const resolvedSearchParams = use(searchParams ?? Promise.resolve({ classId: undefined }));
-  const classIdFromUrl = resolvedSearchParams.classId;
   const router = useRouter();
   const toast = useToast();
 
@@ -83,16 +80,30 @@ export function LecturerQuizAttemptDetailPage({
   const [editAnswers, setEditAnswers] = useState<UpdateAnswerDto[]>([]);
   const [editScore, setEditScore] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // classId: prefer URL query param, fallback to quiz lookup
   const [classId, setClassId] = useState<string>('');
 
-  // Load quiz to get classId first (fallback if not provided in URL)
+  // Resolve classId from URL searchParams first (most reliable)
   useEffect(() => {
-    const abortCtrl = new AbortController();
-    async function loadQuiz() {
+    async function resolveClassId() {
+      if (searchParams) {
+        try {
+          const sp = await searchParams;
+          if (sp?.classId) {
+            setClassId(sp.classId);
+            return;
+          }
+        } catch {
+          // ignore resolution error, fall through to quiz lookup
+        }
+      }
+      // Fallback: load quiz to get classId
+      const abortCtrl = new AbortController();
       try {
         const quiz = await getQuiz(quizId, abortCtrl.signal);
         if (!abortCtrl.signal.aborted) {
-          setClassId(quiz.classId);
+          setClassId(quiz.classId ?? '');
         }
       } catch (e) {
         if (e instanceof Error && e.name !== 'AbortError') {
@@ -100,15 +111,8 @@ export function LecturerQuizAttemptDetailPage({
         }
       }
     }
-    if (classIdFromUrl) {
-      setClassId(classIdFromUrl);
-    } else {
-      void loadQuiz();
-    }
-    return () => {
-      abortCtrl.abort();
-    };
-  }, [quizId, classIdFromUrl]);
+    void resolveClassId();
+  }, [quizId, searchParams, toast]);
 
   // Load attempt detail
   useEffect(() => {
@@ -232,7 +236,7 @@ export function LecturerQuizAttemptDetailPage({
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Link
-              href={`/lecturer/quizzes/${quizId}/results`}
+              href={`/lecturer/quizzes/${quizId}/results${classId ? `?classId=${encodeURIComponent(classId)}` : ''}`}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
