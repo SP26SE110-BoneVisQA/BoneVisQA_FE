@@ -10,11 +10,51 @@ import type {
   AssignedQuizDto,
 } from './types';
 
-/** BE có thể trả camelCase hoặc PascalCase tùy cấu hình JSON. */
-function normalizeQuizQuestionDto(q: QuizQuestionDto): QuizQuestionDto {
-  const raw = q as QuizQuestionDto & { ImageUrl?: string | null };
-  const imageUrl = q.imageUrl ?? raw.ImageUrl ?? null;
-  return { ...q, imageUrl };
+/**
+ * Normalize QuizQuestionDto from backend (PascalCase) to frontend interface (camelCase).
+ * BE trả PascalCase: Id, QuizId, QuizTitle, CaseId, CaseTitle, QuestionText,
+ * Type, OptionA-D, CorrectAnswer, ImageUrl, MaxScore, Hint, Explanation, CorrectAnswers, AcceptedAnswers
+ */
+function normalizeQuizQuestionDto(raw: unknown): QuizQuestionDto {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+
+  const getStr = (camel: string, pascal: string): string | null => {
+    const v = r[camel] ?? r[pascal];
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s.length ? s : null;
+  };
+
+  const getNum = (camel: string, pascal: string): number | undefined => {
+    const v = r[camel] ?? r[pascal];
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const n = Number(v);
+      return Number.isNaN(n) ? undefined : n;
+    }
+    return undefined;
+  };
+
+  return {
+    id: getStr('id', 'Id') ?? '',
+    quizId: getStr('quizId', 'QuizId') ?? '',
+    quizTitle: getStr('quizTitle', 'QuizTitle'),
+    caseId: getStr('caseId', 'CaseId'),
+    caseTitle: getStr('caseTitle', 'CaseTitle'),
+    questionText: getStr('questionText', 'QuestionText') ?? '',
+    type: getStr('type', 'Type'),
+    optionA: getStr('optionA', 'OptionA'),
+    optionB: getStr('optionB', 'OptionB'),
+    optionC: getStr('optionC', 'OptionC'),
+    optionD: getStr('optionD', 'OptionD'),
+    correctAnswer: getStr('correctAnswer', 'CorrectAnswer'),
+    imageUrl: getStr('imageUrl', 'ImageUrl') ?? undefined,
+    hint: getStr('hint', 'Hint'),
+    explanation: getStr('explanation', 'Explanation'),
+    correctAnswers: getStr('correctAnswers', 'CorrectAnswers'),
+    acceptedAnswers: getStr('acceptedAnswers', 'AcceptedAnswers'),
+    maxScore: getNum('maxScore', 'MaxScore'),
+  };
 }
 
 export interface UpdateQuizRequest {
