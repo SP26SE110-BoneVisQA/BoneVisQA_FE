@@ -35,6 +35,7 @@ import {
   ChevronRight,
   Search,
   AlertTriangle,
+  Calendar,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -175,6 +176,25 @@ export function LecturerQuizCreatePage() {
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
   const [lastCreatedQuizId, setLastCreatedQuizId] = useState<string | null>(null);
   const [lastCreatedQuizTitle, setLastCreatedQuizTitle] = useState<string>('');
+
+  // Track if quiz open time has been reached
+  const [isQuizOpenTimeReached, setIsQuizOpenTimeReached] = useState(false);
+
+  useEffect(() => {
+    const checkOpenTime = () => {
+      if (formData.openTime) {
+        const openTimeDate = new Date(formData.openTime);
+        const now = new Date();
+        setIsQuizOpenTimeReached(now >= openTimeDate);
+      } else {
+        setIsQuizOpenTimeReached(false);
+      }
+    };
+
+    checkOpenTime();
+    const interval = setInterval(checkOpenTime, 60000);
+    return () => clearInterval(interval);
+  }, [formData.openTime]);
 
   const allQuestions = createdQuizId ? questions : tempQuestions;
 
@@ -617,15 +637,22 @@ export function LecturerQuizCreatePage() {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save draft
           </button>
-          <button
-            type="button"
-            disabled={loading || allQuestions.length === 0}
-            onClick={handleCreateQuiz}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-medium text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Publish
-          </button>
+          {isQuizOpenTimeReached ? (
+            <button
+              type="button"
+              disabled={loading || allQuestions.length === 0}
+              onClick={handleCreateQuiz}
+              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-medium text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Publish
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 rounded-xl bg-muted px-5 py-2 text-sm font-medium text-muted-foreground">
+              <Calendar className="h-4 w-4" />
+              <span>Quiz will be available at {formData.openTime ? new Date(formData.openTime).toLocaleString('vi-VN') : '—'}</span>
+            </div>
+          )}
         </div>
       </div>
 

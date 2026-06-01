@@ -18,6 +18,8 @@ import {
   Timer,
   PlusCircle,
   UploadCloud,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { appToast } from '@/lib/api/errors/app-toast';
@@ -36,6 +38,7 @@ import QuestionImportDialog from '@/components/lecturer/quizzes/QuestionImportDi
 import type { ParsedQuestion } from '@/components/lecturer/quizzes/QuestionImportDialog';
 import QuestionCard from '@/components/lecturer/quizzes/QuestionCard';
 import { addQuizQuestion } from '@/lib/api/lecturer-quiz';
+import { releaseQuizAnswers, hideQuizAnswers, getQuizReleaseStatus } from '@/lib/api/lecturer-quiz';
 import { getClassStats } from '@/lib/api/lecturer';
 import type { QuizDto, QuizQuestionDto, ClassItem, ClassStats } from '@/lib/api/types';
 
@@ -137,6 +140,14 @@ export function LecturerQuizDetailPage() {
   } | null>(null);
   const [deletingQuestion, setDeletingQuestion] = useState(false);
 
+  // Release answers state
+  const [releaseStatus, setReleaseStatus] = useState<{
+    isReleased: boolean;
+    releasedAt: string | null;
+    isQuizClosed: boolean;
+  } | null>(null);
+  const [releaseLoading, setReleaseLoading] = useState(false);
+
   useEffect(() => {
     if (!quizId) {
       setError('Quiz ID is missing');
@@ -170,6 +181,27 @@ export function LecturerQuizDetailPage() {
       setError(quizQuery.error instanceof Error ? quizQuery.error.message : 'Failed to load quiz');
     }
   }, [quizQuery.error]);
+
+  // Fetch release status when quiz and classId are available
+  useEffect(() => {
+    if (!quiz || !selectedClassId || selectedClassId === '00000000-0000-0000-0000-000000000000') {
+      setReleaseStatus(null);
+      return;
+    }
+    const fetchReleaseStatus = async () => {
+      try {
+        const status = await getQuizReleaseStatus(selectedClassId, quizId);
+        setReleaseStatus({
+          isReleased: status.isReleased,
+          releasedAt: status.releasedAt,
+          isQuizClosed: status.isQuizClosed,
+        });
+      } catch {
+        setReleaseStatus(null);
+      }
+    };
+    void fetchReleaseStatus();
+  }, [quiz, selectedClassId, quizId]);
 
   const refreshQuiz = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.lecturer.quizDetail(quizId) });
@@ -255,6 +287,34 @@ export function LecturerQuizDetailPage() {
 
   const handleQuestionSuccess = () => {
     refreshQuiz();
+  };
+
+  // Release answers handler
+  const handleToggleReleaseAnswers = async () => {
+    if (!selectedClassId || selectedClassId === '00000000-0000-0000-0000-000000000000') {
+      appToast.error('Please assign the quiz to a class first.');
+      return;
+    }
+    setReleaseLoading(true);
+    try {
+      if (releaseStatus?.isReleased) {
+        await hideQuizAnswers(selectedClassId, quizId);
+        appToast.success('Answers hidden from students.');
+      } else {
+        await releaseQuizAnswers(selectedClassId, quizId);
+        appToast.success('Answers released to students.');
+      }
+      const status = await getQuizReleaseStatus(selectedClassId, quizId);
+      setReleaseStatus({
+        isReleased: status.isReleased,
+        releasedAt: status.releasedAt,
+        isQuizClosed: status.isQuizClosed,
+      });
+    } catch (err) {
+      appToast.error(err instanceof Error ? err.message : 'Failed to update release status');
+    } finally {
+      setReleaseLoading(false);
+    }
   };
 
   const handleImportQuestions = async (parsed: ParsedQuestion[]) => {
@@ -343,6 +403,28 @@ export function LecturerQuizDetailPage() {
           >
             Preview
           </button>
+          {/* Release Answers Button */}
+          {quiz && selectedClassId && selectedClassId !== '00000000-0000-0000-0000-000000000000' && (
+            <button
+              type="button"
+              onClick={handleToggleReleaseAnswers}
+              disabled={releaseLoading}
+              className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 ${
+                releaseStatus?.isReleased
+                  ? 'bg-warning hover:bg-warning/90'
+                  : 'bg-secondary hover:bg-secondary/90'
+              }`}
+            >
+              {releaseLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : releaseStatus?.isReleased ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+              {releaseStatus?.isReleased ? 'Hide Answers' : 'Release Answers'}
+            </button>
+          )}
           {quiz && (
             <button
               type="button"
@@ -394,6 +476,21 @@ export function LecturerQuizDetailPage() {
           </div>
           <p className="text-xs font-medium text-muted-foreground">Time Limit</p>
           <p className="text-xl font-bold text-card-foreground">{timeLimit || '—'} min</p>
+        </div>
+        <div className="rounded-2xl border border-border/10 bg-card p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${releaseStatus?.isReleased ? 'bg-green-100' : 'bg-muted'}`}>
+              {releaseStatus?.isReleased ? (
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+              ) : (
+                <Eye className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">Answers</p>
+          <p className={`text-xl font-bold ${releaseStatus?.isReleased ? 'text-green-600' : 'text-card-foreground'}`}>
+            {releaseStatus?.isReleased ? 'Released' : 'Hidden'}
+          </p>
         </div>
       </div>
 
