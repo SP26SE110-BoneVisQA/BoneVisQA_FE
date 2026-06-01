@@ -14,9 +14,11 @@ import {
   Plus,
   ImageIcon,
   ImageOff,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useLecturerClasses } from '@/features/lecturer/queries/use-lecturer-classes';
-import { useLecturerCasesList } from '@/features/lecturer/queries/use-lecturer-cases';
+import { useLecturerCasesPaged, PAGE_SIZE } from '@/features/lecturer/queries/use-lecturer-cases';
 import { appToast } from '@/lib/api/errors/app-toast';
 import { getQueryErrorMessage } from '@/lib/query-utils';
 import type { CaseDto, ClassCaseAssignmentDto } from '@/lib/api/types';
@@ -27,7 +29,8 @@ type StatusFilter = 'all' | 'approved' | 'unapproved' | 'active' | 'inactive';
 
 export function LecturerCasesPage() {
   const router = useRouter();
-  const casesQuery = useLecturerCasesList();
+  const [pageIndex, setPageIndex] = useState(1);
+  const casesQuery = useLecturerCasesPaged(pageIndex);
   const classesQuery = useLecturerClasses();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -35,7 +38,10 @@ export function LecturerCasesPage() {
   const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set());
   const [showImages, setShowImages] = useState(true);
 
-  const cases = casesQuery.data ?? [];
+  const pagedData = casesQuery.data;
+  const cases = pagedData?.items ?? [];
+  const totalCount = pagedData?.totalCount ?? 0;
+  const totalPages = pagedData?.totalPages ?? 0;
   const classes = classesQuery.data ?? [];
 
   const handleAssignSuccess = (assignments: ClassCaseAssignmentDto[]) => {
@@ -83,6 +89,16 @@ export function LecturerCasesPage() {
         )
       : null;
 
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setPageIndex(newPage);
+      setSelectedCases(new Set());
+    }
+  };
+
+  const startItem = totalCount > 0 ? (pageIndex - 1) * PAGE_SIZE + 1 : 0;
+  const endItem = Math.min(pageIndex * PAGE_SIZE, totalCount);
+
   return (
     <ListPageLayout
       title="Cases"
@@ -99,10 +115,10 @@ export function LecturerCasesPage() {
       }
     >
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatMini icon={FolderOpen} value={cases.length} label="Total cases" />
+        <StatMini icon={FolderOpen} value={totalCount} label="Total cases" />
         <StatMini icon={CheckCircle} value={approvedCount} label="Approved" tone="success" />
-        <StatMini icon={XCircle} value={cases.length - approvedCount} label="Pending approval" tone="muted" />
-        <StatMini icon={Eye} value={activeCount} label="Active" />
+        <StatMini icon={XCircle} value={cases.length - approvedCount} label="This page pending" tone="muted" />
+        <StatMini icon={Eye} value={activeCount} label="This page active" />
       </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -153,17 +169,65 @@ export function LecturerCasesPage() {
           <FolderOpen className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
           <h3 className="mb-1 text-lg font-semibold text-card-foreground">No cases found</h3>
           <p className="text-sm text-muted-foreground">
-            {cases.length === 0 ? 'No cases available.' : 'Try adjusting your search or filter.'}
+            {totalCount === 0 ? 'No cases available.' : 'Try adjusting your search or filter.'}
           </p>
         </div>
       ) : (
-        <CasesTable
-          cases={filtered as CaseDto[]}
-          selectedCases={selectedCases}
-          onSelectAll={setSelectedCases}
-          onSelect={toggleCaseSelection}
-          showImages={showImages}
-        />
+        <>
+          <CasesTable
+            cases={filtered as CaseDto[]}
+            selectedCases={selectedCases}
+            onSelectAll={setSelectedCases}
+            onSelect={toggleCaseSelection}
+            showImages={showImages}
+          />
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Showing <span className="font-medium">{startItem}</span> to{' '}
+                <span className="font-medium">{endItem}</span> of{' '}
+                <span className="font-medium">{totalCount}</span> results
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pageIndex - 1)}
+                  disabled={pageIndex <= 1}
+                  className="h-9 px-3"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <Button
+                      key={page}
+                      variant={page === pageIndex ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handlePageChange(page)}
+                      className="h-9 w-9 p-0"
+                    >
+                      {page}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pageIndex + 1)}
+                  disabled={pageIndex >= totalPages}
+                  className="h-9 px-3"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {showAssign ? (

@@ -54,6 +54,7 @@ export const queryKeys = {
   lecturer: {
     all: ['lecturer'] as const,
     dashboard: () => [...queryKeys.lecturer.all, 'dashboard'] as const,
+    dashboardStats: () => [...queryKeys.lecturer.all, 'dashboard-stats'] as const,
     triage: (params?: Record<string, unknown>) =>
       [...queryKeys.lecturer.all, 'triage', params ?? {}] as const,
     triageQueue: (classId: string, status?: string) =>

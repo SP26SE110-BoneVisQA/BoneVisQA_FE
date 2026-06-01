@@ -61,7 +61,9 @@ export function LecturerQuizAttemptDetailPage({
   searchParams?: Promise<{ classId?: string }>;
 }) {
   const { id: quizId, attemptId } = use(params);
-  const classIdFromUrl = (searchParams ? use(searchParams) : undefined)?.classId;
+  // FIX: Call use() unconditionally - searchParams might be undefined, use empty object as fallback
+  const resolvedSearchParams = use(searchParams ?? Promise.resolve({ classId: undefined }));
+  const classIdFromUrl = resolvedSearchParams.classId;
   const router = useRouter();
   const toast = useToast();
 
