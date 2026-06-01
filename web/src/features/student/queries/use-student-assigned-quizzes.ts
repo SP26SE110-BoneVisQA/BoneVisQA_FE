@@ -1,9 +1,23 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { getAssignedQuizzes } from '@/lib/api/student';
 import type { AssignedQuizItem } from '@/lib/api/types';
 import { queryKeys } from '@/lib/query-keys';
+
+export interface AssignedQuizzesPageResult {
+  items: AssignedQuizItem[];
+  totalCount: number;
+  pageIndex: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface UseStudentAssignedQuizzesOptions {
+  pageIndex?: number;
+  pageSize?: number;
+  enabled?: boolean;
+}
 
 function sortAssignedQuizzes(data: AssignedQuizItem[]): AssignedQuizItem[] {
   return [...data].sort((a, b) => {
@@ -14,9 +28,19 @@ function sortAssignedQuizzes(data: AssignedQuizItem[]): AssignedQuizItem[] {
   });
 }
 
-export function useStudentAssignedQuizzes() {
+export function useStudentAssignedQuizzes(options: UseStudentAssignedQuizzesOptions = {}) {
+  const { pageIndex = 0, pageSize = 10, enabled = true } = options;
+
   return useQuery({
-    queryKey: queryKeys.student.assignedQuizzes(),
-    queryFn: async () => sortAssignedQuizzes(await getAssignedQuizzes()),
+    queryKey: queryKeys.student.assignedQuizzes({ pageIndex, pageSize }),
+    queryFn: async () => {
+      const result = await getAssignedQuizzes(pageIndex, pageSize);
+      return {
+        ...result,
+        items: sortAssignedQuizzes(result.items),
+      };
+    },
+    placeholderData: keepPreviousData,
+    enabled,
   });
 }

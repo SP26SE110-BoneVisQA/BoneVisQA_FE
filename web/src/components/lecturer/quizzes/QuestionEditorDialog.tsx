@@ -857,26 +857,6 @@ export default function QuestionEditorDialog({
                   </div>
                 )}
 
-                {isEssay && (
-                  <div className="space-y-3">
-                    <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      Model Answer / Guidelines
-                    </label>
-                    <textarea
-                      value={formData.essayAnswer || ''}
-                      onChange={(e) =>
-                        setFormData({ ...formData, essayAnswer: e.target.value })
-                      }
-                      className="w-full resize-none rounded-xl border-0 bg-[#eceef0] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#00478d]/20"
-                      rows={5}
-                      placeholder="Enter a model answer or grading guidelines for the essay question..."
-                    />
-                    <p className="text-xs text-[#727783]">
-                      This will be used as a reference for grading the essay response.
-                    </p>
-                  </div>
-                )}
-
                 <div className="flex items-center justify-between border-t border-[#c2c6d4]/50 bg-[#eceef0] -mx-10 px-10 py-6 mt-6">
                   <div className="flex items-center text-[#727783]">
                     <Info className="mr-2 h-4 w-4 shrink-0" />

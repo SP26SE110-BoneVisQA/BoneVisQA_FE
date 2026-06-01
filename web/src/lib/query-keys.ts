@@ -21,7 +21,8 @@ export const queryKeys = {
     caseDetail: (caseId: string) => [...queryKeys.student.all, 'case', caseId] as const,
     history: () => [...queryKeys.student.all, 'history'] as const,
     profile: () => [...queryKeys.student.all, 'profile'] as const,
-    assignedQuizzes: () => [...queryKeys.student.all, 'assigned-quizzes'] as const,
+    assignedQuizzes: (params?: { pageIndex?: number; pageSize?: number }) =>
+      [...queryKeys.student.all, 'assigned-quizzes', params ?? {}] as const,
   },
   admin: {
     all: ['admin'] as const,

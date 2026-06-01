@@ -598,18 +598,38 @@ export async function submitStudentQuiz(
   }
 }
 
+export interface AssignedQuizzesPageResult {
+  items: AssignedQuizItem[];
+  totalCount: number;
+  pageIndex: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 /**
  * Get all quizzes assigned to the current student (from enrolled classes).
  */
-export async function getAssignedQuizzes(): Promise<AssignedQuizItem[]> {
+export async function getAssignedQuizzes(
+  pageIndex = 0,
+  pageSize = 10,
+): Promise<AssignedQuizzesPageResult> {
   try {
-    const { data } = await http.get<unknown>('/api/student/quizzes');
-    const list = Array.isArray(data)
-      ? data
-      : data && typeof data === 'object' && 'items' in data
-        ? (data as { items?: unknown[] }).items ?? []
+    const { data } = await http.get<unknown>('/api/student/quizzes', {
+      params: { pageIndex, pageSize },
+    });
+    const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : null;
+    const list = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.items)
+        ? (payload.items as unknown[])
         : [];
-    return (list as Record<string, unknown>[]).map(mapQuizListItem);
+    return {
+      items: (list as Record<string, unknown>[]).map(mapQuizListItem),
+      totalCount: Number(payload?.totalCount ?? payload?.TotalCount ?? list.length),
+      pageIndex: Number(payload?.pageIndex ?? payload?.PageIndex ?? pageIndex),
+      pageSize: Number(payload?.pageSize ?? payload?.PageSize ?? pageSize),
+      totalPages: Number(payload?.totalPages ?? payload?.TotalPages ?? 1),
+    };
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }

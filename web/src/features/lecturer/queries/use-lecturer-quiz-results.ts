@@ -9,6 +9,7 @@ import {
   getQuizAttemptDetail,
   updateQuizAttempt,
 } from '@/lib/api/lecturer';
+import { getQuizReleaseStatus, releaseQuizAnswers, hideQuizAnswers } from '@/lib/api/lecturer-quiz';
 import { queryKeys } from '@/lib/query-keys';
 
 export function useClassQuizAttempts(classId: string, quizId: string) {
@@ -67,5 +68,34 @@ export function useAllowQuizRetakeAll(classId: string, quizId: string) {
 export function useExportQuizResults(classId: string, quizId: string) {
   return useMutation({
     mutationFn: () => exportQuizResultsExcel(classId, quizId),
+  });
+}
+
+export function useQuizReleaseStatus(classId: string, quizId: string) {
+  return useQuery({
+    queryKey: ['quiz-release-status', classId, quizId],
+    queryFn: () => getQuizReleaseStatus(classId, quizId),
+    enabled: Boolean(classId && quizId),
+    staleTime: 60_000,
+  });
+}
+
+export function useReleaseQuizAnswers(classId: string, quizId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => releaseQuizAnswers(classId, quizId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['quiz-release-status', classId, quizId] });
+    },
+  });
+}
+
+export function useHideQuizAnswers(classId: string, quizId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => hideQuizAnswers(classId, quizId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['quiz-release-status', classId, quizId] });
+    },
   });
 }

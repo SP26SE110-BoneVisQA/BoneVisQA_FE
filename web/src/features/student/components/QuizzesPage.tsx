@@ -10,16 +10,32 @@ import { ClipboardList, Sparkles } from 'lucide-react';
 
 type QuizTab = 'assigned' | 'practice';
 
+const DEFAULT_PAGE_SIZE = 5;
+
 export function QuizzesPage() {
   const searchParams = useSearchParams();
   const initialTab: QuizTab = searchParams.get('tab') === 'practice' ? 'practice' : 'assigned';
   const [tab, setTab] = useState<QuizTab>(initialTab);
-  const assignedQuery = useStudentAssignedQuizzes();
+  const [pageIndex, setPageIndex] = useState(0);
+
+  const assignedQuery = useStudentAssignedQuizzes({
+    pageIndex,
+    pageSize: DEFAULT_PAGE_SIZE,
+    enabled: tab === 'assigned',
+  });
 
   useEffect(() => {
     const t = searchParams.get('tab') === 'practice' ? 'practice' : 'assigned';
     setTab(t);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (tab === 'assigned') {
+      setPageIndex(0);
+    }
+  }, [tab]);
+
+  const totalPages = assignedQuery.data?.totalPages ?? 1;
 
   return (
     <ListPageLayout
@@ -66,9 +82,14 @@ export function QuizzesPage() {
     >
       {tab === 'assigned' ? (
         <AssignedQuizzesList
-          items={assignedQuery.data ?? []}
+          items={assignedQuery.data?.items ?? []}
           isPending={assignedQuery.isPending}
           error={assignedQuery.error}
+          pageIndex={pageIndex}
+          pageSize={DEFAULT_PAGE_SIZE}
+          totalCount={assignedQuery.data?.totalCount}
+          totalPages={totalPages}
+          onPageChange={setPageIndex}
         />
       ) : (
         <StudentPracticeQuizContent embedded />

@@ -334,8 +334,12 @@ export default function QuizSessionPage({
         // Multi-select: count question as answered if at least 1 option selected
         const selected = multiSelectAnswers[q.questionId];
         if (selected && selected.length > 0) count++;
+      } else if (qType === 'fillinblank' || qType === 'fill-in-blank') {
+        // Fill-in-Blank: count if text answer exists
+        const textAnswer = textAnswers[q.questionId];
+        if (textAnswer && textAnswer.trim().length > 0) count++;
       } else if (qType !== 'essay') {
-        // Other types: count if answer exists
+        // MC, True/False: count if answer exists
         if (answers[q.questionId]) count++;
       }
     }
@@ -433,16 +437,18 @@ export default function QuizSessionPage({
     
     setSubmitting(true);
     try {
-      // Build payload with proper essayAnswer field for Essay-type questions
+      // Build payload with proper fields for all question types
       const payload: StudentSubmitQuestionDto[] = session.questions.map((q) => {
         const answer = answers[q.questionId] || '';
         const isEssay = q.type?.toLowerCase() === 'essay';
         const isMultiSelect = q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select';
+        const isFillInBlank = q.type?.toLowerCase() === 'fillinblank' || q.type?.toLowerCase() === 'fill-in-blank';
         return {
           questionId: q.questionId,
-          studentAnswer: isEssay ? '' : answer,
+          studentAnswer: isEssay ? '' : (isFillInBlank ? undefined : answer),
           essayAnswer: isEssay ? answer : undefined,
           selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : undefined,
+          textAnswer: isFillInBlank ? (textAnswers[q.questionId] || answer) : undefined,
         };
       });
       const result = await submitQuizSession(attemptId, payload);
@@ -462,7 +468,7 @@ export default function QuizSessionPage({
     } finally {
       setSubmitting(false);
     }
-  }, [session, answers, multiSelectAnswers, toast]);
+  }, [session, answers, multiSelectAnswers, textAnswers, toast]);
 
   const handleStart = async () => {
     setLoadingSession(true);

@@ -188,9 +188,7 @@ export function LecturerQuizAttemptDetailPage({
       setEditMode(false);
       // Reload data
       const data = await getQuizAttemptDetail(classId, quizId, attemptId);
-      setDetail(data);
-      setEditScore(data.score);
-      setEditAnswers(data.questions.map(q => ({
+      const newEditAnswers = data.questions.map(q => ({
         answerId: q.answerId,
         studentAnswer: q.type?.toLowerCase() === 'essay' ? null : q.studentAnswer,
         essayAnswer: q.type?.toLowerCase() === 'essay' ? q.essayAnswer : null,
@@ -198,7 +196,10 @@ export function LecturerQuizAttemptDetailPage({
         scoreAwarded: q.scoreAwarded ?? null,
         lecturerFeedback: q.lecturerFeedback ?? null,
         isGraded: q.isGraded,
-      })));
+      }));
+      setDetail(data);
+      setEditScore(data.score);
+      setEditAnswers(newEditAnswers);
     } catch (e) {
       toast.error(getApiErrorMessage(e));
     } finally {
