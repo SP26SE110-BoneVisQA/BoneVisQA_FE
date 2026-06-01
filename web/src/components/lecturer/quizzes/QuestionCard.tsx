@@ -102,7 +102,7 @@ export default function QuestionCard({
   onDelete,
   points = 10,
   variant = 'default',
-  topicCategory = 'Trauma',
+  topicCategory,
   selectable = false,
   isSelected = false,
   onSelect,
@@ -113,12 +113,13 @@ export default function QuestionCard({
 
   if (variant === 'curated') {
     const topic = topicCategory;
-    const topicClass =
-      topic === 'Imaging'
+    const topicClass = topic
+      ? topic === 'Imaging'
         ? 'bg-orange-100 text-orange-950'
         : topic === 'Joints'
           ? 'bg-teal-100 text-teal-950'
-          : 'bg-emerald-100 text-emerald-950';
+          : 'bg-emerald-100 text-emerald-950'
+      : 'bg-gray-100 text-gray-700';
     const subtitle =
       question.caseTitle ||
       [question.optionA, question.optionB].filter(Boolean).join(' · ') ||
@@ -157,7 +158,7 @@ export default function QuestionCard({
                 <span
                   className={`rounded-full px-4 py-1.5 text-xs font-extrabold uppercase ${topicClass}`}
                 >
-                  {topic}
+                  {topic || 'No Topic'}
                 </span>
                 <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${typeStyle.badgeClass}`}>
                   {typeStyle.label}

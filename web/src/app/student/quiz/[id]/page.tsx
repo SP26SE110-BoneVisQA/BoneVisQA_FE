@@ -249,7 +249,7 @@ export default function QuizSessionPage({
     const pollInterval = setInterval(async () => {
       try {
         const list = await getAssignedQuizzes();
-        const quiz = list.find((q) => q.quizId === quizId);
+        const quiz = list.items.find((q) => q.quizId === quizId);
         
         if (quiz && quiz.score !== lastScoreRef.current) {
           // Score has been updated! Refresh the quiz info
