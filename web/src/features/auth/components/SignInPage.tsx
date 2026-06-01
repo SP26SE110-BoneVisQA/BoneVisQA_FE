@@ -32,6 +32,7 @@ const motionEase = [0.22, 1, 0.36, 1] as const;
 
 let _gsiPromptFn: (() => void) | null = null;
 let _gsiInitialized = false;
+let _gsiInitMarker = false;
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -251,10 +252,12 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
 
   useEffect(() => {
     if (!googleEnabled || !googleClientId) return;
-    if (_gsiInitialized) return;
+    if (_gsiInitialized || _gsiInitMarker) return;
 
     const gsi = window.google?.accounts?.id;
     if (!gsiScriptReady.current || !gsi) return;
+
+    _gsiInitMarker = true;
 
     gsi.initialize({
       client_id: googleClientId,
@@ -268,6 +271,10 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
 
     _gsiPromptFn = () => gsi.prompt?.();
     _gsiInitialized = true;
+
+    return () => {
+      _gsiInitMarker = false;
+    };
   }, [googleEnabled, googleClientId, handleGoogleLoginSuccess]);
 
   return (
@@ -276,7 +283,9 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
         <Script
           src="https://accounts.google.com/gsi/client"
           strategy="afterInteractive"
-          onLoad={() => setGsiScriptReady(true)}
+          onLoad={() => {
+            gsiScriptReady.current = true;
+          }}
         />
       ) : null}
       {/*
