@@ -30,10 +30,6 @@ import { Button } from "@/components/ui/button";
 
 const motionEase = [0.22, 1, 0.36, 1] as const;
 
-let _gsiPromptFn: (() => void) | null = null;
-let _gsiInitialized = false;
-let _gsiInitMarker = false;
-
 type GoogleCredentialResponse = {
   credential?: string;
 };
@@ -113,7 +109,9 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const gsiScriptReady = useRef(false);
+  const [gsiScriptReady, setGsiScriptReady] = useState(false);
+  const gsiPromptRef = useRef<(() => void) | null>(null);
+  const isGsiInitialized = useRef(false);
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("rememberedEmail");
@@ -143,9 +141,7 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
       }
 
       const primaryRole = Array.isArray(data.roles)
-        ? data.roles
-            .map((r) => r.trim().toLowerCase())
-            .find((role) => getRouteForRole(role).activeRole)
+        ? data.roles.find((role: string) => getRouteForRole(role).activeRole)
         : null;
       const { activeRole, route } = getRouteForRole(primaryRole);
 
@@ -239,8 +235,8 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
   }, [handleLoginSuccess, router]);
 
   const triggerGoogleSignIn = useCallback(() => {
-    if (_gsiPromptFn) {
-      _gsiPromptFn();
+    if (gsiPromptRef.current) {
+      gsiPromptRef.current();
       return;
     }
     appToast.error("Google sign-in is still loading. Please try again.");
@@ -248,18 +244,14 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
 
   useEffect(() => {
     if (window.google?.accounts?.id) {
-      gsiScriptReady.current = true;
+      setGsiScriptReady(true);
     }
   }, []);
 
   useEffect(() => {
-    if (!googleEnabled || !googleClientId) return;
-    if (_gsiInitialized || _gsiInitMarker) return;
-
+    if (!googleEnabled || !googleClientId || isGsiInitialized.current) return;
     const gsi = window.google?.accounts?.id;
-    if (!gsiScriptReady.current || !gsi) return;
-
-    _gsiInitMarker = true;
+    if (!gsiScriptReady || !gsi) return;
 
     gsi.initialize({
       client_id: googleClientId,
@@ -271,13 +263,10 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
       cancel_on_tap_outside: true,
     });
 
-    _gsiPromptFn = () => gsi.prompt?.();
-    _gsiInitialized = true;
+    gsiPromptRef.current = () => gsi.prompt?.();
 
-    return () => {
-      _gsiInitMarker = false;
-    };
-  }, [googleEnabled, googleClientId, handleGoogleLoginSuccess]);
+    isGsiInitialized.current = true;
+  }, [googleEnabled, googleClientId, gsiScriptReady, handleGoogleLoginSuccess]);
 
   return (
     <div className="min-h-[100dvh] w-full bg-slate-950">
@@ -285,9 +274,7 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
         <Script
           src="https://accounts.google.com/gsi/client"
           strategy="afterInteractive"
-          onLoad={() => {
-            gsiScriptReady.current = true;
-          }}
+          onLoad={() => setGsiScriptReady(true)}
         />
       ) : null}
       {/*

@@ -107,7 +107,7 @@ function MonthlyTrendChart({ trend }: { trend: MonthTrend }) {
       <div className="flex items-center justify-between mb-3">
         <p className="text-sm text-muted-foreground">6-Month Trend</p>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Avg: {typeof trend.average === 'number' && !isNaN(trend.average) ? Number(trend.average).toFixed(1) : '—'}</span>
+          <span className="text-xs text-muted-foreground">Avg: {trend.average.toFixed(1)}</span>
           <span className={`text-xs font-medium ${trend.growthRate >= 0 ? 'text-success' : 'text-destructive'}`}>
             {trend.growthRate >= 0 ? '+' : ''}{trend.growthRate}%
           </span>

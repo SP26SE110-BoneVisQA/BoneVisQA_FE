@@ -200,32 +200,10 @@ export interface PagedCasesResult {
 
 export async function getLecturerCasesPaged(pageIndex: number, pageSize: number): Promise<PagedCasesResult> {
   try {
-    const { data } = await http.get<unknown>('/api/lecturer/cases/paged', {
+    const { data } = await http.get<PagedCasesResult>('/api/lecturer/cases/paged', {
       params: { pageIndex, pageSize }
     });
-    const r = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
-    const rawItems = Array.isArray(r.items) ? r.items : Array.isArray(r.Items) ? r.Items : [];
-    const items: CaseDto[] = rawItems.map((item) => {
-      const i = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
-      return {
-        id: String(i.id ?? i.Id ?? ''),
-        title: i.title != null ? String(i.title) : (i.Title != null ? String(i.Title) : null),
-        description: i.description != null ? String(i.description) : (i.Description != null ? String(i.Description) : null),
-        difficulty: i.difficulty != null ? String(i.difficulty) : (i.Difficulty != null ? String(i.Difficulty) : null),
-        categoryName: i.categoryName != null ? String(i.categoryName) : (i.CategoryName != null ? String(i.CategoryName) : null),
-        isApproved: Boolean(i.isApproved ?? i.IsApproved ?? false),
-        isActive: Boolean(i.isActive ?? i.IsActive ?? false),
-        createdAt: i.createdAt != null ? String(i.createdAt) : (i.CreatedAt != null ? String(i.CreatedAt) : null),
-        imageUrl: i.imageUrl != null ? String(i.imageUrl) : (i.ImageUrl != null ? String(i.ImageUrl) : null),
-      };
-    });
-    return {
-      items,
-      totalCount: Number(r.totalCount ?? r.TotalCount ?? 0),
-      pageIndex: Number(r.pageIndex ?? r.PageIndex ?? 1),
-      pageSize: Number(r.pageSize ?? r.PageSize ?? pageSize),
-      totalPages: Number(r.totalPages ?? r.TotalPages ?? 1),
-    };
+    return data;
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }
@@ -1170,12 +1148,10 @@ export async function getQuizAttemptDetail(
   classId: string,
   quizId: string,
   attemptId: string,
-  signal?: AbortSignal,
 ): Promise<QuizAttemptDetailDto> {
   try {
     const { data } = await http.get<QuizAttemptDetailDto>(
       `/api/lecturer/classes/${classId}/assignments/quizzes/${quizId}/attempts/${attemptId}`,
-      { signal },
     );
     return data;
   } catch (e) {

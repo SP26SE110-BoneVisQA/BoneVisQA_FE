@@ -58,7 +58,7 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
       try {
         setIsRefreshing(true);
         const quizzes = await getAssignedQuizzes();
-        const quiz = quizzes.items.find((q) => q.quizId === quizId);
+        const quiz = quizzes.find((q) => q.quizId === quizId);
         
         if (quiz?.attemptId && quiz.score !== lastScoreRef.current) {
           // Score has been updated! Refresh the detailed review data
@@ -89,7 +89,7 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
     setLoading(true);
     try {
       const quizzes = await getAssignedQuizzes();
-      const quiz = quizzes.items.find((q) => q.quizId === quizId);
+      const quiz = quizzes.find((q) => q.quizId === quizId);
 
       if (!quiz) {
         toast.error('Quiz not found');
@@ -206,7 +206,7 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
           <div className="flex items-center gap-4">
             {quizInfo?.score != null && (
               <div className="text-right">
-                <p className="text-2xl font-black text-primary">{Number(quizInfo.score).toFixed(1)}%</p>
+                <p className="text-2xl font-black text-primary">{quizInfo.score.toFixed(1)}%</p>
                 <p className="text-xs text-muted-foreground">Your Score</p>
               </div>
             )}

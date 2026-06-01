@@ -43,22 +43,20 @@ function formatDate(dateStr: string | null): string {
 }
 
 function ScoreBadge({ score }: { score: number | null }) {
-  if (score === null || score === undefined) return <span className="text-muted-foreground">Ungraded</span>;
+  if (score === null) return <span className="text-muted-foreground">Ungraded</span>;
   const pct = score;
   const color = pct >= 80 ? 'text-success' : pct >= 60 ? 'text-warning' : 'text-destructive';
   return (
     <span className={`text-2xl font-black ${color}`}>
-      {Number(score).toFixed(1)}%
+      {score.toFixed(1)}%
     </span>
   );
 }
 
 export function LecturerQuizAttemptDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string; attemptId: string }>;
-  searchParams?: Promise<{ classId?: string }>;
 }) {
   const { id: quizId, attemptId } = use(params);
   const router = useRouter();
@@ -80,81 +78,50 @@ export function LecturerQuizAttemptDetailPage({
   const [editAnswers, setEditAnswers] = useState<UpdateAnswerDto[]>([]);
   const [editScore, setEditScore] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // classId: prefer URL query param, fallback to quiz lookup
   const [classId, setClassId] = useState<string>('');
 
-  // Resolve classId from URL searchParams first (most reliable)
+  // Load quiz to get classId first
   useEffect(() => {
-    async function resolveClassId() {
-      if (searchParams) {
-        try {
-          const sp = await searchParams;
-          if (sp?.classId) {
-            setClassId(sp.classId);
-            return;
-          }
-        } catch {
-          // ignore resolution error, fall through to quiz lookup
-        }
-      }
-      // Fallback: load quiz to get classId
-      const abortCtrl = new AbortController();
+    async function loadQuiz() {
       try {
-        const quiz = await getQuiz(quizId, abortCtrl.signal);
-        if (!abortCtrl.signal.aborted) {
-          setClassId(quiz.classId ?? '');
-        }
+        const quiz = await getQuiz(quizId);
+        setClassId(quiz.classId);
       } catch (e) {
-        if (e instanceof Error && e.name !== 'AbortError') {
-          toast.error(e instanceof Error ? e.message : 'Failed to load quiz metadata.');
-        }
+        toast.error(e instanceof Error ? e.message : 'Failed to load quiz metadata.');
       }
     }
-    void resolveClassId();
-  }, [quizId, searchParams, toast]);
+    void loadQuiz();
+  }, [quizId]);
 
   // Load attempt detail
   useEffect(() => {
     if (!classId) return;
-    const abortCtrl = new AbortController();
     async function loadDetail() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getQuizAttemptDetail(classId, quizId, attemptId, abortCtrl.signal);
-        if (!abortCtrl.signal.aborted) {
-          setDetail(data);
-          setEditScore(data.score);
-          setEditAnswers(data.questions.map(q => ({
-            answerId: q.answerId,
-            studentAnswer: q.type?.toLowerCase() === 'essay' ? null : q.studentAnswer,
-            essayAnswer: q.type?.toLowerCase() === 'essay' ? q.essayAnswer : null,
-            isCorrect: q.isCorrect,
-            scoreAwarded: q.scoreAwarded ?? null,
-            lecturerFeedback: q.lecturerFeedback ?? null,
-            isGraded: q.isGraded,
-          })));
-        }
+        const data = await getQuizAttemptDetail(classId, quizId, attemptId);
+        setDetail(data);
+        setEditScore(data.score);
+        setEditAnswers(data.questions.map(q => ({
+          answerId: q.answerId,
+          studentAnswer: q.type?.toLowerCase() === 'essay' ? null : q.studentAnswer,
+          essayAnswer: q.type?.toLowerCase() === 'essay' ? q.essayAnswer : null,
+          isCorrect: q.isCorrect,
+          scoreAwarded: q.scoreAwarded ?? null,
+          lecturerFeedback: q.lecturerFeedback ?? null,
+          isGraded: q.isGraded,
+        })));
       } catch (e) {
-        if (e instanceof Error && e.name !== 'AbortError') {
-          const msg = getApiErrorMessage(e);
-          if (!abortCtrl.signal.aborted) {
-            setError(msg);
-            toast.error(msg);
-          }
-        }
+        const msg = getApiErrorMessage(e);
+        setError(msg);
+        toast.error(msg);
       } finally {
-        if (!abortCtrl.signal.aborted) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     }
     void loadDetail();
-    return () => {
-      abortCtrl.abort();
-    };
-  }, [classId, quizId, attemptId]);
+  }, [classId, quizId, attemptId, toast]);
 
   const currentQ = detail?.questions[currentIndex];
   const totalQ = detail?.questions.length ?? 0;
@@ -188,7 +155,9 @@ export function LecturerQuizAttemptDetailPage({
       setEditMode(false);
       // Reload data
       const data = await getQuizAttemptDetail(classId, quizId, attemptId);
-      const newEditAnswers = data.questions.map(q => ({
+      setDetail(data);
+      setEditScore(data.score);
+      setEditAnswers(data.questions.map(q => ({
         answerId: q.answerId,
         studentAnswer: q.type?.toLowerCase() === 'essay' ? null : q.studentAnswer,
         essayAnswer: q.type?.toLowerCase() === 'essay' ? q.essayAnswer : null,
@@ -196,10 +165,7 @@ export function LecturerQuizAttemptDetailPage({
         scoreAwarded: q.scoreAwarded ?? null,
         lecturerFeedback: q.lecturerFeedback ?? null,
         isGraded: q.isGraded,
-      }));
-      setDetail(data);
-      setEditScore(data.score);
-      setEditAnswers(newEditAnswers);
+      })));
     } catch (e) {
       toast.error(getApiErrorMessage(e));
     } finally {
@@ -237,7 +203,7 @@ export function LecturerQuizAttemptDetailPage({
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Link
-              href={`/lecturer/quizzes/${quizId}/results${classId ? `?classId=${encodeURIComponent(classId)}` : ''}`}
+              href={`/lecturer/quizzes/${quizId}/results`}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />

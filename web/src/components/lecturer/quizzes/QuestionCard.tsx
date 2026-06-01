@@ -6,7 +6,6 @@ import {
   Pencil,
   Trash2,
   CheckCircle2,
-  CheckSquare,
   ZoomIn,
   CircleDot,
   Award,
@@ -28,10 +27,6 @@ interface QuestionCardProps {
   variant?: 'default' | 'manager' | 'curated';
   /** Topic pill for curated variant (e.g. Trauma, Imaging) */
   topicCategory?: string;
-  /** Selection mode for bulk operations */
-  selectable?: boolean;
-  isSelected?: boolean;
-  onSelect?: (questionId: string, selected: boolean) => void;
 }
 
 function formatDisplayId(id: string): string {
@@ -102,10 +97,7 @@ export default function QuestionCard({
   onDelete,
   points = 10,
   variant = 'default',
-  topicCategory,
-  selectable = false,
-  isSelected = false,
-  onSelect,
+  topicCategory = 'Trauma',
 }: QuestionCardProps) {
   const typeStyle = getQuestionTypeStyle(question.type);
   const isTrueFalse =
@@ -113,13 +105,12 @@ export default function QuestionCard({
 
   if (variant === 'curated') {
     const topic = topicCategory;
-    const topicClass = topic
-      ? topic === 'Imaging'
+    const topicClass =
+      topic === 'Imaging'
         ? 'bg-orange-100 text-orange-950'
         : topic === 'Joints'
           ? 'bg-teal-100 text-teal-950'
-          : 'bg-emerald-100 text-emerald-950'
-      : 'bg-gray-100 text-gray-700';
+          : 'bg-emerald-100 text-emerald-950';
     const subtitle =
       question.caseTitle ||
       [question.optionA, question.optionB].filter(Boolean).join(' · ') ||
@@ -129,17 +120,7 @@ export default function QuestionCard({
     const hasRealImage = hasQuizQuestionCustomImage(question, caseThumbnail);
 
     return (
-      <div className={`group flex gap-8 rounded-3xl bg-card p-8 shadow-lg shadow-black/5 transition-all hover:bg-muted/20 hover:shadow-xl hover:shadow-black/10 border border-border/30 ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
-        {selectable && (
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={(e) => onSelect?.(question.id, e.target.checked)}
-              className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-            />
-          </div>
-        )}
+      <div className="group flex gap-8 rounded-3xl bg-card p-8 shadow-lg shadow-black/5 transition-all hover:bg-muted/20 hover:shadow-xl hover:shadow-black/10 border border-border/30">
         <div className="relative h-44 w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-slate-900 shadow-xl">
           <ImageWithFallback
             src={thumbSrc}
@@ -158,7 +139,7 @@ export default function QuestionCard({
                 <span
                   className={`rounded-full px-4 py-1.5 text-xs font-extrabold uppercase ${topicClass}`}
                 >
-                  {topic || 'No Topic'}
+                  {topic}
                 </span>
                 <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${typeStyle.badgeClass}`}>
                   {typeStyle.label}
@@ -207,17 +188,7 @@ export default function QuestionCard({
 
   if (variant === 'manager') {
     return (
-      <div className={`group rounded-[1.75rem] border border-transparent bg-card p-8 shadow-sm transition-all hover:border-[#00478d]/15 hover:shadow-xl hover:shadow-[#00478d]/5 ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
-        {selectable && (
-          <div className="absolute top-4 right-4">
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={(e) => onSelect?.(question.id, e.target.checked)}
-              className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-            />
-          </div>
-        )}
+      <div className="group rounded-[1.75rem] border border-transparent bg-card p-8 shadow-sm transition-all hover:border-[#00478d]/15 hover:shadow-xl hover:shadow-[#00478d]/5">
         <div className="mb-6 flex items-start justify-between">
           <div className="flex flex-wrap items-center gap-3">
             <span
@@ -370,17 +341,7 @@ export default function QuestionCard({
   const defaultHasCustom = hasQuizQuestionCustomImage(question, caseThumbnail);
 
   return (
-    <div className={`bg-card rounded-2xl border-2 border-border p-5 transition-colors hover:bg-accent/5 group ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
-      {selectable && (
-        <div className="flex items-start pt-1">
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={(e) => onSelect?.(question.id, e.target.checked)}
-            className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-          />
-        </div>
-      )}
+    <div className="bg-card rounded-2xl border-2 border-border p-5 transition-colors hover:bg-accent/5 group">
       <div className="flex gap-5">
         <div className="relative h-32 w-44 flex-shrink-0 overflow-hidden rounded-xl bg-muted">
           <ImageWithFallback

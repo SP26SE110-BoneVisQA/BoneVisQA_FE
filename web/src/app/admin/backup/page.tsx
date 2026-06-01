@@ -143,10 +143,10 @@ export default function AdminBackupPage() {
                   </p>
                 </div>
               </div>
-              <p className="text-2xl font-bold text-primary">{typeof storagePercent === 'number' && !isNaN(storagePercent) ? `${Number(storagePercent).toFixed(1)}%` : '—'}</p>
+              <p className="text-2xl font-bold text-primary">{storagePercent.toFixed(1)}%</p>
             </div>
             <div className="h-3 w-full rounded-full bg-muted">
-              <div className="h-3 rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, Math.max(0, storagePercent ?? 0))}%` }} />
+              <div className="h-3 rounded-full bg-primary transition-all" style={{ width: `${storagePercent}%` }} />
             </div>
             {storage && (
               <div className="mt-4 grid grid-cols-4 gap-4 text-center text-sm">

@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchLecturerProfile,
-  fetchLecturerDashboardStats,
   updateLecturerProfile,
   type UpdateLecturerProfilePayload,
 } from '@/lib/api/lecturer-dashboard';
@@ -14,14 +13,6 @@ export function useLecturerProfile() {
     queryKey: queryKeys.lecturer.profile(),
     queryFn: fetchLecturerProfile,
     staleTime: 30_000,
-  });
-}
-
-export function useLecturerDashboardStats() {
-  return useQuery({
-    queryKey: queryKeys.lecturer.dashboardStats(),
-    queryFn: fetchLecturerDashboardStats,
-    staleTime: 60_000,
   });
 }
 

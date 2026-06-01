@@ -50,13 +50,13 @@ export default function CompetencyChart({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground mb-1">Class Average Competency</p>
-            <p className="text-4xl font-bold text-card-foreground">{typeof classAverage === 'number' && !isNaN(classAverage) ? `${Number(classAverage).toFixed(1)}%` : '—'}</p>
+            <p className="text-4xl font-bold text-card-foreground">{classAverage.toFixed(1)}%</p>
           </div>
           <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-            (classAverage ?? 0) >= 70 ? 'bg-success/20' : (classAverage ?? 0) >= 40 ? 'bg-warning/20' : 'bg-destructive/20'
+            classAverage >= 70 ? 'bg-success/20' : classAverage >= 40 ? 'bg-warning/20' : 'bg-destructive/20'
           }`}>
             <Award className={`w-8 h-8 ${
-              (classAverage ?? 0) >= 70 ? 'text-success' : (classAverage ?? 0) >= 40 ? 'text-warning' : 'text-destructive'
+              classAverage >= 70 ? 'text-success' : classAverage >= 40 ? 'text-warning' : 'text-destructive'
             }`} />
           </div>
         </div>
@@ -71,7 +71,7 @@ export default function CompetencyChart({
           </h4>
           <div className="space-y-3">
             {competencies.map((comp, idx) => {
-              const levelConfig = getLevelColor(typeof comp.percentage === 'number' ? comp.percentage : 0);
+              const levelConfig = getLevelColor(comp.percentage);
               return (
                 <div key={comp.competencyName || idx} className="space-y-1">
                   <div className="flex items-center justify-between text-sm">
@@ -80,7 +80,7 @@ export default function CompetencyChart({
                     </span>
                     <div className="flex items-center gap-2">
                       <span className={`${levelConfig.text} font-semibold`}>
-                        {typeof comp.percentage === 'number' ? `${Number(comp.percentage).toFixed(0)}%` : '—'}
+                        {comp.percentage.toFixed(0)}%
                       </span>
                       <span className={`px-2 py-0.5 text-xs rounded-full ${levelConfig.bg}/20 ${levelConfig.text}`}>
                         {levelConfig.label}
@@ -90,7 +90,7 @@ export default function CompetencyChart({
                   <div className="h-3 bg-muted rounded-full overflow-hidden">
                     <div
                       className={`h-full ${levelConfig.bg} transition-all duration-500`}
-                      style={{ width: `${Math.min(100, Math.max(0, typeof comp.percentage === 'number' ? comp.percentage : 0))}%` }}
+                      style={{ width: `${comp.percentage}%` }}
                     />
                   </div>
                 </div>
@@ -120,7 +120,7 @@ export default function CompetencyChart({
                   key={dist.level}
                   className={`p-3 rounded-lg border ${levelConfig.bg}/20 text-center`}
                 >
-                  <p className={`text-lg font-bold ${levelConfig.text}`}>{typeof dist.percentage === 'number' ? `${Number(dist.percentage).toFixed(0)}%` : '—'}</p>
+                  <p className={`text-lg font-bold ${levelConfig.text}`}>{dist.percentage.toFixed(0)}%</p>
                   <p className="text-xs text-muted-foreground">{dist.level}</p>
                   <p className="text-xs text-muted-foreground mt-1">{dist.studentCount} students</p>
                 </div>
@@ -143,7 +143,7 @@ export default function CompetencyChart({
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium text-card-foreground">{topic.topicName}</span>
                   <span className="text-sm font-semibold text-destructive">
-                    {typeof topic.averageScore === 'number' ? `${Number(topic.averageScore).toFixed(0)}%` : '—'}
+                    {topic.averageScore.toFixed(0)}%
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">{topic.recommendation}</p>
@@ -168,7 +168,7 @@ export default function CompetencyChart({
               >
                 <span className="text-sm text-card-foreground">{topic.topicName}</span>
                 <span className="text-sm font-semibold text-success">
-                  {typeof topic.averageScore === 'number' ? `${Number(topic.averageScore).toFixed(0)}%` : '—'}
+                  {topic.averageScore.toFixed(0)}%
                 </span>
               </div>
             ))}

@@ -128,42 +128,6 @@ export default function QuizSessionPage({
   const [savedFlashcardInfo, setSavedFlashcardInfo] = useState<{ deckId: string; deckName: string; cardCount: number } | null>(null);
   const [customDeckName, setCustomDeckName] = useState('');
 
-  // Quiz availability status based on openTime/closeTime (ISO UTC from .NET backend)
-  type QuizStatus = 'checking' | 'notOpened' | 'open' | 'closed';
-  const [quizStatus, setQuizStatus] = useState<QuizStatus>('checking');
-
-  useEffect(() => {
-    const checkQuizStatus = () => {
-      if (!quizInfo) return;
-
-      const now = Date.now();
-
-      if (quizInfo.openTime) {
-        const openMs = new Date(quizInfo.openTime).getTime();
-        if (now < openMs) {
-          setQuizStatus('notOpened');
-          return;
-        }
-      }
-
-      if (quizInfo.closeTime) {
-        const closeMs = new Date(quizInfo.closeTime).getTime();
-        if (now > closeMs) {
-          setQuizStatus('closed');
-          return;
-        }
-      }
-
-      setQuizStatus('open');
-    };
-
-    if (quizInfo) {
-      checkQuizStatus();
-      const interval = setInterval(checkQuizStatus, 30000); // Recheck every 30 seconds
-      return () => clearInterval(interval);
-    }
-  }, [quizInfo]);
-
   // Review pagination (5 questions per page)
   const [reviewPage, setReviewPage] = useState(1);
   const REVIEW_PAGE_SIZE = 5;
@@ -192,7 +156,7 @@ export default function QuizSessionPage({
   const reloadQuizInfo = useCallback(async () => {
     try {
       const list = await getAssignedQuizzes();
-      const found = list.items.find((q) => q.quizId === quizId);
+      const found = list.find((q) => q.quizId === quizId);
       setQuizInfo(found ?? null);
     } catch {
       setQuizInfo(null);
@@ -204,7 +168,7 @@ export default function QuizSessionPage({
       setLoadingInfo(true);
       try {
         const list = await getAssignedQuizzes();
-        const found = list.items.find((q) => q.quizId === quizId);
+        const found = list.find((q) => q.quizId === quizId);
         setQuizInfo(found ?? null);
       } catch {
         setQuizInfo(null);
@@ -249,7 +213,7 @@ export default function QuizSessionPage({
     const pollInterval = setInterval(async () => {
       try {
         const list = await getAssignedQuizzes();
-        const quiz = list.items.find((q) => q.quizId === quizId);
+        const quiz = list.find((q) => q.quizId === quizId);
         
         if (quiz && quiz.score !== lastScoreRef.current) {
           // Score has been updated! Refresh the quiz info
@@ -334,12 +298,8 @@ export default function QuizSessionPage({
         // Multi-select: count question as answered if at least 1 option selected
         const selected = multiSelectAnswers[q.questionId];
         if (selected && selected.length > 0) count++;
-      } else if (qType === 'fillinblank' || qType === 'fill-in-blank') {
-        // Fill-in-Blank: count if text answer exists
-        const textAnswer = textAnswers[q.questionId];
-        if (textAnswer && textAnswer.trim().length > 0) count++;
       } else if (qType !== 'essay') {
-        // MC, True/False: count if answer exists
+        // Other types: count if answer exists
         if (answers[q.questionId]) count++;
       }
     }
@@ -437,18 +397,16 @@ export default function QuizSessionPage({
     
     setSubmitting(true);
     try {
-      // Build payload with proper fields for all question types
+      // Build payload with proper essayAnswer field for Essay-type questions
       const payload: StudentSubmitQuestionDto[] = session.questions.map((q) => {
         const answer = answers[q.questionId] || '';
         const isEssay = q.type?.toLowerCase() === 'essay';
         const isMultiSelect = q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select';
-        const isFillInBlank = q.type?.toLowerCase() === 'fillinblank' || q.type?.toLowerCase() === 'fill-in-blank';
         return {
           questionId: q.questionId,
           studentAnswer: isEssay ? '' : answer,
-          essayAnswer: isEssay ? answer : '',
-          selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : '',
-          textAnswer: isFillInBlank ? (textAnswers[q.questionId] || answer) : '',
+          essayAnswer: isEssay ? answer : undefined,
+          selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : undefined,
         };
       });
       const result = await submitQuizSession(attemptId, payload);
@@ -468,7 +426,7 @@ export default function QuizSessionPage({
     } finally {
       setSubmitting(false);
     }
-  }, [session, answers, multiSelectAnswers, textAnswers, toast]);
+  }, [session, answers, multiSelectAnswers, toast]);
 
   const handleStart = async () => {
     setLoadingSession(true);
@@ -709,7 +667,7 @@ export default function QuizSessionPage({
                     toFixed(1): làm tròn 1 chữ số thập phân
                   */}
                   <p className="text-4xl font-black text-primary">
-                    {quizInfo.score != null && typeof quizInfo.score === 'number' ? Number(quizInfo.score).toFixed(1) : '—'}%
+                    {quizInfo.score != null ? quizInfo.score.toFixed(1) : '—'}%
                   </p>
                   <p className="text-xs font-semibold text-muted-foreground">Your Score</p>
                 </div>
@@ -718,6 +676,14 @@ export default function QuizSessionPage({
               {/* Action Buttons Row - Chỉ hiện khi lecturer đã release đáp án */}
               {quizInfo?.answersReleased && (
                 <div className="space-y-2">
+                  {/* Link đến trang review chi tiết */}
+                  <Link
+                    href={`/student/quiz/${quizId}/review`}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-[#007BFF] hover:opacity-95 text-white px-4 py-3 text-sm font-bold transition-colors shadow-lg shadow-primary/20"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    View Detailed Review
+                  </Link>
                   {/* Nút Reveal Answers - Chuyển đến trang review */}
                   <Link
                     href={`/student/quiz/${quizId}/review`}
@@ -766,58 +732,6 @@ export default function QuizSessionPage({
 
               <Link href="/student/quizzes">
                 <Button variant="outline" className="h-10 w-full rounded-xl font-medium">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Quizzes
-                </Button>
-              </Link>
-            </div>
-          ) : quizStatus === 'checking' ? (
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-on-surface-variant">Checking quiz availability…</p>
-            </div>
-          ) : quizStatus === 'notOpened' ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-6 py-5 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
-                <Timer className="h-6 w-6 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-amber-800">Quiz is not yet open</p>
-                <p className="mt-1 text-xs text-amber-700">This assessment will be available on:</p>
-                <p className="mt-1 text-sm font-bold text-amber-900">
-                  {quizInfo?.openTime ? new Date(quizInfo.openTime).toLocaleString('vi-VN', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  }) : '—'}
-                </p>
-              </div>
-              <Link href="/student/quizzes" className="w-full">
-                <Button variant="outline" className="h-10 w-full rounded-xl font-medium border-amber-200 text-amber-800 hover:bg-amber-100">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Quizzes
-                </Button>
-              </Link>
-            </div>
-          ) : quizStatus === 'closed' ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-6 py-5 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-                <AlertCircle className="h-6 w-6 text-red-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-red-800">Quiz has been closed</p>
-                <p className="mt-1 text-xs text-red-700">This assessment is no longer available.</p>
-                {quizInfo?.closeTime && (
-                  <p className="mt-1 text-xs text-red-600">
-                    Closed on: {new Date(quizInfo.closeTime).toLocaleString('vi-VN')}
-                  </p>
-                )}
-              </div>
-              <Link href="/student/quizzes" className="w-full">
-                <Button variant="outline" className="h-10 w-full rounded-xl font-medium border-red-200 text-red-800 hover:bg-red-100">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Quizzes
                 </Button>
@@ -1539,7 +1453,7 @@ export default function QuizSessionPage({
                   <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Your Score</p>
                   <div className="mt-2 flex items-baseline gap-1">
                     <span className={`text-5xl font-black ${quizResult.passed ? 'text-success' : 'text-destructive'}`}>
-                      {quizResult.score != null && typeof quizResult.score === 'number' ? Number(quizResult.score).toFixed(1) : '—'}
+                      {quizResult.score != null ? quizResult.score.toFixed(1) : '—'}
                     </span>
                     <span className="text-2xl font-bold text-on-surface-variant">/100</span>
                   </div>

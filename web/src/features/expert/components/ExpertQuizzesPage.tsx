@@ -50,6 +50,7 @@ export function ExpertQuizzesPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editQuiz, setEditQuiz] = useState<ExpertQuiz | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [assignmentStatus, setAssignmentStatus] = useState<{ isAssigned: boolean; assignedClassCount: number } | null>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
@@ -120,7 +121,33 @@ export function ExpertQuizzesPage() {
     >
       <div className="space-y-6">
 
-        {/* My Quizzes Section */}
+        {/* Tab Navigation */}
+        <div className="flex gap-4 border-b border-border">
+          <button
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+              !showLibrary
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-card-foreground'
+            }`}
+            onClick={() => setShowLibrary(false)}
+          >
+            My Quizzes
+          </button>
+          <button
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+              showLibrary
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-card-foreground'
+            }`}
+            onClick={() => setShowLibrary(true)}
+          >
+            Quiz Library
+          </button>
+        </div>
+
+        {!showLibrary ? (
+          <>
+            {/* My Quizzes Section */}
             <section className="rounded-xl border border-border bg-card p-6 text-card-foreground shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -211,6 +238,13 @@ export function ExpertQuizzesPage() {
             <QuizAssignScorePanel />
           </section>
         </div>
+          </>
+        ) : (
+          <>
+            {/* Quiz Library Section - Xem quiz tu Expert khac */}
+            <LibrarySection />
+          </>
+        )}
       </div>
 
       {isCreateModalOpen && (
@@ -558,5 +592,13 @@ function CreateQuizModal({ onClose, onCreated, editQuiz, assignmentStatus }: Cre
         </div>
       </div>
     </div>
+  );
+}
+
+function LibrarySection() {
+  return (
+    <section className="rounded-xl border border-border bg-card p-6 text-card-foreground">
+      <p className="text-sm text-muted-foreground">Quiz Library feature coming soon...</p>
+    </section>
   );
 }

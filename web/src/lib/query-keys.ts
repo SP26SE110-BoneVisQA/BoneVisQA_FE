@@ -21,8 +21,7 @@ export const queryKeys = {
     caseDetail: (caseId: string) => [...queryKeys.student.all, 'case', caseId] as const,
     history: () => [...queryKeys.student.all, 'history'] as const,
     profile: () => [...queryKeys.student.all, 'profile'] as const,
-    assignedQuizzes: (params?: { pageIndex?: number; pageSize?: number }) =>
-      [...queryKeys.student.all, 'assigned-quizzes', params ?? {}] as const,
+    assignedQuizzes: () => [...queryKeys.student.all, 'assigned-quizzes'] as const,
   },
   admin: {
     all: ['admin'] as const,
@@ -55,7 +54,6 @@ export const queryKeys = {
   lecturer: {
     all: ['lecturer'] as const,
     dashboard: () => [...queryKeys.lecturer.all, 'dashboard'] as const,
-    dashboardStats: () => [...queryKeys.lecturer.all, 'dashboard-stats'] as const,
     triage: (params?: Record<string, unknown>) =>
       [...queryKeys.lecturer.all, 'triage', params ?? {}] as const,
     triageQueue: (classId: string, status?: string) =>

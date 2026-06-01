@@ -19,8 +19,6 @@ import {
   RotateCcw,
   AlertTriangle,
   Download,
-  Unlock,
-  Lock,
 } from 'lucide-react';
 import { useLecturerQuizDetail } from '@/features/lecturer/queries/use-lecturer-quizzes';
 import {
@@ -28,9 +26,6 @@ import {
   useAllowQuizRetakeAll,
   useClassQuizAttempts,
   useExportQuizResults,
-  useHideQuizAnswers,
-  useQuizReleaseStatus,
-  useReleaseQuizAnswers,
   useUpdateQuizAttempt,
 } from '@/features/lecturer/queries/use-lecturer-quiz-results';
 import { getQuizAttemptDetail } from '@/lib/api/lecturer';
@@ -55,13 +50,13 @@ function formatDate(dateStr: string | null): string {
 }
 
 function ScoreBadge({ score, maxScore }: { score: number | null; maxScore: number }) {
-  if (score === null || score === undefined) return <span className="text-muted-foreground">Ungraded</span>;
+  if (score === null) return <span className="text-muted-foreground">Ungraded</span>;
   const pct = maxScore > 0 ? (score / maxScore) * 100 : 0;
   const color = pct >= 80 ? 'text-success bg-success/10' : pct >= 60 ? 'text-warning bg-warning/10' : 'text-destructive bg-destructive/10';
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}>
       <Award className="h-3 w-3" />
-      {Number(score).toFixed(1)}/{maxScore}
+      {score.toFixed(1)}/{maxScore}
     </span>
   );
 }
@@ -679,9 +674,6 @@ export function LecturerQuizResultsPage({
   const retakeAllMutation = useAllowQuizRetakeAll(classId, quizId);
   const updateAttemptMutation = useUpdateQuizAttempt(classId, quizId);
   const exportMutation = useExportQuizResults(classId, quizId);
-  const releaseStatusQuery = useQuizReleaseStatus(classId, quizId);
-  const releaseMutation = useReleaseQuizAnswers(classId, quizId);
-  const hideMutation = useHideQuizAnswers(classId, quizId);
 
   const [error, setError] = useState('');
 
@@ -705,8 +697,6 @@ export function LecturerQuizResultsPage({
   const [retakeDialog, setRetakeDialog] = useState<
     null | { kind: 'single'; attempt: StudentQuizAttemptDto } | { kind: 'all'; count: number }
   >(null);
-  const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
-  const [releasing, setReleasing] = useState(false);
 
   const handleExportExcel = async () => {
     if (!classId || !quizId) return;
@@ -718,33 +708,6 @@ export function LecturerQuizResultsPage({
       appToast.error(getApiErrorMessage(e));
     } finally {
       setExporting(false);
-    }
-  };
-
-  const handleReleaseAnswers = async () => {
-    if (!classId || !quizId) return;
-    setReleasing(true);
-    try {
-      await releaseMutation.mutateAsync();
-      appToast.success('Answers released to students successfully.');
-      setReleaseDialogOpen(false);
-    } catch (e) {
-      appToast.error(getApiErrorMessage(e));
-    } finally {
-      setReleasing(false);
-    }
-  };
-
-  const handleHideAnswers = async () => {
-    if (!classId || !quizId) return;
-    setReleasing(true);
-    try {
-      await hideMutation.mutateAsync();
-      appToast.success('Answers hidden from students successfully.');
-    } catch (e) {
-      appToast.error(getApiErrorMessage(e));
-    } finally {
-      setReleasing(false);
     }
   };
 
@@ -928,42 +891,20 @@ export function LecturerQuizResultsPage({
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            {!releaseStatusQuery.isLoading && releaseStatusQuery.data && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setReleaseDialogOpen(true)}
-                className="shrink-0 border-primary/30 bg-primary/5 font-semibold text-primary hover:bg-primary/10"
-              >
-                {releaseStatusQuery.data.isReleased ? (
-                  <>
-                    <Unlock className="mr-2 h-4 w-4" />
-                    Released
-                  </>
-                ) : (
-                  <>
-                    <Lock className="mr-2 h-4 w-4" />
-                    Release Answers
-                  </>
-                )}
-              </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleExportExcel}
+            disabled={exporting || attempts.length === 0}
+            className="shrink-0 border-success/30 bg-success/5 font-semibold text-success hover:bg-success/10"
+          >
+            {exporting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
             )}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleExportExcel}
-              disabled={exporting || attempts.length === 0}
-              className="shrink-0 border-success/30 bg-success/5 font-semibold text-success hover:bg-success/10"
-            >
-              {exporting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="mr-2 h-4 w-4" />
-              )}
-              Export Excel
-            </Button>
-          </div>
+            Export Excel
+          </Button>
         </div>
       </div>
 
@@ -982,7 +923,7 @@ export function LecturerQuizResultsPage({
             Average Score
           </div>
           <p className="text-2xl font-bold">
-            {(avgScore === null || avgScore === undefined || isNaN(avgScore)) ? '—' : Number(avgScore).toFixed(1)}
+            {isNaN(avgScore) ? '—' : avgScore.toFixed(1)}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
@@ -1004,7 +945,7 @@ export function LecturerQuizResultsPage({
       </div>
 
       {/* Retake management */}
-      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <RotateCcw className="h-5 w-5" />
@@ -1012,7 +953,7 @@ export function LecturerQuizResultsPage({
           <div>
             <h3 className="font-semibold text-sm text-card-foreground">Retake management</h3>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {attempts.filter((a) => a.completedAt).length} student(s) submitted. You can reset attempts so they can take the quiz again.
+              {attempts.filter((a) => a.completedAt).length} student(s) have submitted. You can reset attempts so they can take the quiz again.
             </p>
           </div>
         </div>
@@ -1021,7 +962,6 @@ export function LecturerQuizResultsPage({
           variant="outline"
           onClick={openRetakeAllDialog}
           disabled={retakingAll || attempts.filter((a) => a.completedAt).length === 0}
-          size="sm"
           className="shrink-0 border-primary/30 bg-primary/5 font-semibold text-primary hover:bg-primary/10"
         >
           {retakingAll ? (
@@ -1123,41 +1063,39 @@ export function LecturerQuizResultsPage({
                       {formatDate(a.completedAt ?? a.startedAt)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {a.completedAt && (
-                          <button
-                            type="button"
-                            onClick={() => openRetakeSingleDialog(a)}
-                            disabled={retakingId === a.attemptId}
-                            title="Allow retake"
-                            className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-600 hover:bg-amber-500/20 transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            {retakingId === a.attemptId ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <RotateCcw className="h-3 w-3" />
-                            )}
-                            Retake
-                          </button>
-                        )}
-                        <Link
-                          href={`/lecturer/quizzes/${quizId}/results/${a.attemptId}?classId=${encodeURIComponent(classId)}`}
-                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted transition-colors"
-                        >
-                          <Eye className="h-3 w-3" />
-                          View
-                        </Link>
+                      {a.completedAt && (
                         <button
                           type="button"
-                          onClick={() => openEditScore(a)}
+                          onClick={() => openRetakeSingleDialog(a)}
                           disabled={retakingId === a.attemptId}
-                          title="Edit score"
-                          className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
+                          title="Allow this student to retake the quiz"
+                          className="mr-2 inline-flex items-center gap-1 rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 transition-colors cursor-pointer disabled:opacity-50"
                         >
-                          <Edit className="h-3 w-3" />
-                          Edit
+                          {retakingId === a.attemptId ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          )}
+                          Retake
                         </button>
-                      </div>
+                      )}
+                      <Link
+                        href={`/lecturer/quizzes/${quizId}/results/${a.attemptId}`}
+                        className="mr-2 inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        View
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => openEditScore(a)}
+                        disabled={retakingId === a.attemptId}
+                        title="Edit this student's score"
+                        className="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                        Edit Score
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -1192,72 +1130,6 @@ export function LecturerQuizResultsPage({
           saving={savingId === editingAttempt?.attemptId}
         />
       )}
-
-      {/* Release Answers Dialog */}
-      <Modal
-        open={releaseDialogOpen}
-        onClose={() => setReleaseDialogOpen(false)}
-        title={releaseStatusQuery.data?.isReleased ? 'Hide Answers?' : 'Release Answers?'}
-        footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={releasing}
-              onClick={() => setReleaseDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={releasing}
-              onClick={() => void (releaseStatusQuery.data?.isReleased ? handleHideAnswers() : handleReleaseAnswers())}
-              className={releaseStatusQuery.data?.isReleased ? 'bg-destructive font-semibold' : 'bg-primary font-semibold'}
-            >
-              {releasing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing…
-                </>
-              ) : releaseStatusQuery.data?.isReleased ? (
-                <>
-                  <Lock className="mr-2 h-4 w-4" />
-                  Hide Answers
-                </>
-              ) : (
-                <>
-                  <Unlock className="mr-2 h-4 w-4" />
-                  Release Answers
-                </>
-              )}
-            </Button>
-          </div>
-        }
-      >
-        {releaseStatusQuery.data?.isReleased ? (
-          <div className="flex gap-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600">
-              <Lock className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 space-y-2 text-sm text-muted-foreground">
-              <p>
-                This will hide the correct answers from all students. Students will no longer be able to see the correct answers for this quiz.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex gap-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
-              <Unlock className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 space-y-2 text-sm text-muted-foreground">
-              <p>
-                This will release the correct answers to all students. Students will be able to see which answers were correct and compare with their own answers.
-              </p>
-            </div>
-          </div>
-        )}
-      </Modal>
 
       <Modal
         open={retakeDialog !== null}

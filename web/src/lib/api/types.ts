@@ -267,7 +267,6 @@ export interface CaseDto {
   isApproved: boolean;
   isActive: boolean;
   createdAt: string | null;
-  imageUrl: string | null;
 }
 
 /** GET /api/lecturer/classes/{classId}/questions */

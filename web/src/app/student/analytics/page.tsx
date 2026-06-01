@@ -105,7 +105,7 @@ export default function StudentAnalyticsPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Average Score</p>
                   <p className="text-2xl font-bold">
-                    {typeof dashboardData?.summary?.averageScore === 'number' ? `${Number(dashboardData.summary.averageScore).toFixed(1)}%` : '—'}
+                    {dashboardData?.summary.averageScore.toFixed(1) ?? '0'}%
                   </p>
                 </div>
               </div>
@@ -182,7 +182,7 @@ export default function StudentAnalyticsPage() {
                             {comp.masteryLevel}
                           </Badge>
                           <span className="text-sm text-muted-foreground">
-                            {typeof comp.score === 'number' ? `${Number(comp.score).toFixed(0)}%` : '—'}
+                            {comp.score.toFixed(0)}%
                           </span>
                         </div>
                       </div>
