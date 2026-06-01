@@ -13,6 +13,7 @@ import QuickActionCard from '@/components/student/QuickActionCard';
 import { StudentDashboardFab } from '@/components/student/StudentAppChrome';
 import { resolveStudentRecentActivityHref } from '@/lib/student/recent-activity-href';
 import { useAuth } from '@/lib/useAuth';
+import type { StudentTopicStat } from '@/lib/api/types';
 
 function clampPercent(value: number | null | undefined): number {
   if (value == null || Number.isNaN(value)) return 0;
@@ -47,7 +48,7 @@ export default function StudentDashboard() {
   const casesViewedPct = Math.min(100, (progress?.totalCasesViewed ?? 0) * 5);
 
   const displayTopics = topicStats.slice(0, 3);
-  const paddedTopics = [...displayTopics];
+  const paddedTopics: (StudentTopicStat | null)[] = [...displayTopics];
   while (paddedTopics.length < 3) paddedTopics.push(null);
 
   return (
