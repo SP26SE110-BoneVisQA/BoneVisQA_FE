@@ -143,7 +143,9 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
       }
 
       const primaryRole = Array.isArray(data.roles)
-        ? data.roles.find((role: string) => getRouteForRole(role).activeRole)
+        ? data.roles
+            .map((r) => r.trim().toLowerCase())
+            .find((role) => getRouteForRole(role).activeRole)
         : null;
       const { activeRole, route } = getRouteForRole(primaryRole);
 
