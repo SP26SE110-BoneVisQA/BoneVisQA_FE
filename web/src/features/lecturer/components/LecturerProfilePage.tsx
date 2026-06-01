@@ -315,7 +315,15 @@ export function LecturerProfilePage() {
     : undefined;
 
   const avgScore = stats?.averageQuizScore != null ? `${stats.averageQuizScore.toFixed(1)}%` : 'N/A';
-  const completionRate = stats?.quizCompletionRate ?? 0;
+  // Derive quiz completion rate from scored attempts vs total attempts.
+  // A "completed" attempt is one with a Score (i.e. was submitted and graded).
+  const totalAttempts = stats?.totalQuizAttempts ?? 0;
+  const completedAttempts = avgScore !== 'N/A' && totalAttempts > 0
+    ? Math.round((totalAttempts * (stats!.averageQuizScore! / 100)))
+    : 0;
+  const completionRate = totalAttempts > 0
+    ? Math.min(100, (completedAttempts / totalAttempts) * 100)
+    : 0;
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
