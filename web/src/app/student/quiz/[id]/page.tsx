@@ -477,14 +477,14 @@ export default function QuizSessionPage({
         const isFillInBlank = q.type?.toLowerCase() === 'fillinblank' || q.type?.toLowerCase() === 'fill-in-blank';
         
         // For FillInBlank, use textAnswers if available, otherwise fall back to answers
-        const fillInBlankAnswer = isFillInBlank ? (textAnswers[q.questionId] || answer) : undefined;
+        const fillInBlankAnswer = isFillInBlank ? (textAnswers[q.questionId] || answer || '') : '';
         
         return {
           questionId: q.questionId,
           studentAnswer: isEssay ? '' : (isFillInBlank ? fillInBlankAnswer : answer),
           essayAnswer: isEssay ? answer : undefined,
-          selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : undefined,
-          textAnswer: isFillInBlank ? fillInBlankAnswer : undefined,
+          selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] ?? []) : undefined,
+          textAnswer: isFillInBlank ? (fillInBlankAnswer || '') : undefined,
         };
       });
       

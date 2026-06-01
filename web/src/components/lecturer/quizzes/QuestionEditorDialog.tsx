@@ -538,44 +538,46 @@ export default function QuestionEditorDialog({
                     </label>
                     <div className="flex gap-4">
                       <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
-                        formData.correctAnswer === 'A'
-                          ? 'border-green-500 bg-green-50 text-green-800'
-                          : 'border-[#eceef0] bg-[#eceef0] text-[#424752] hover:border-green-300'
+                        formData.correctAnswer === 'True'
+                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
+                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
                       }`}>
                         <input
                           type="radio"
-                          name="correctTrueFalse"
-                          checked={formData.correctAnswer === 'A'}
-                          onChange={() => setFormData({ ...formData, correctAnswer: 'A' })}
-                          className="hidden"
+                          name="trueFalse"
+                          value="True"
+                          checked={formData.correctAnswer === 'True'}
+                          onChange={() => setFormData({ ...formData, correctAnswer: 'True' })}
+                          className="sr-only"
                         />
-                        <span className="text-lg font-bold">True</span>
-                        {formData.correctAnswer === 'A' && (
-                          <span className="ml-auto rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">Correct</span>
+                        <span className="text-2xl font-bold">T</span>
+                        <span className="font-semibold">True</span>
+                        {formData.correctAnswer === 'True' && (
+                          <span className="ml-auto rounded-full bg-[#00478d] px-2 py-0.5 text-xs font-bold text-white">Correct</span>
                         )}
                       </label>
                       <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
-                        formData.correctAnswer === 'B'
-                          ? 'border-red-500 bg-red-50 text-red-800'
-                          : 'border-[#eceef0] bg-[#eceef0] text-[#424752] hover:border-red-300'
+                        formData.correctAnswer === 'False'
+                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
+                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
                       }`}>
                         <input
                           type="radio"
-                          name="correctTrueFalse"
-                          checked={formData.correctAnswer === 'B'}
-                          onChange={() => setFormData({ ...formData, correctAnswer: 'B' })}
-                          className="hidden"
+                          name="trueFalse"
+                          value="False"
+                          checked={formData.correctAnswer === 'False'}
+                          onChange={() => setFormData({ ...formData, correctAnswer: 'False' })}
+                          className="sr-only"
                         />
-                        <span className="text-lg font-bold">False</span>
-                        {formData.correctAnswer === 'B' && (
-                          <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">Correct</span>
+                        <span className="text-2xl font-bold">F</span>
+                        <span className="font-semibold">False</span>
+                        {formData.correctAnswer === 'False' && (
+                          <span className="ml-auto rounded-full bg-[#00478d] px-2 py-0.5 text-xs font-bold text-white">Correct</span>
                         )}
                       </label>
                     </div>
                   </div>
                 )}
-
-                {/* MULTI-SELECT Options */}
                 {isMultiSelect && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-2">
@@ -705,49 +707,6 @@ export default function QuestionEditorDialog({
                   </div>
                 )}
 
-                {/* TrueFalse Question Type */}
-                {isTrueFalse && (
-                  <div className="space-y-4">
-                    <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      Correct Answer
-                    </label>
-                    <div className="flex gap-4">
-                      <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
-                        formData.correctAnswer === 'True'
-                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
-                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
-                      }`}>
-                        <input
-                          type="radio"
-                          name="trueFalse"
-                          value="True"
-                          checked={formData.correctAnswer === 'True'}
-                          onChange={() => setFormData({ ...formData, correctAnswer: 'True' })}
-                          className="sr-only"
-                        />
-                        <span className="text-2xl font-bold">T</span>
-                        <span className="font-semibold">True</span>
-                      </label>
-                      <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
-                        formData.correctAnswer === 'False'
-                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
-                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
-                      }`}>
-                        <input
-                          type="radio"
-                          name="trueFalse"
-                          value="False"
-                          checked={formData.correctAnswer === 'False'}
-                          onChange={() => setFormData({ ...formData, correctAnswer: 'False' })}
-                          className="sr-only"
-                        />
-                        <span className="text-2xl font-bold">F</span>
-                        <span className="font-semibold">False</span>
-                      </label>
-                    </div>
-                  </div>
-                )}
-
                 {/* FillInBlank Question Type */}
                 {isFillInBlank && (
                   <div className="space-y-3">
@@ -833,26 +792,6 @@ export default function QuestionEditorDialog({
                     </div>
                     <p className="text-xs text-[#727783]">
                       Select one or more correct answers. All selected options will be marked as correct.
-                    </p>
-                  </div>
-                )}
-
-                {isEssay && (
-                  <div className="space-y-3">
-                    <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      Model Answer / Guidelines
-                    </label>
-                    <textarea
-                      value={formData.essayAnswer || ''}
-                      onChange={(e) =>
-                        setFormData({ ...formData, essayAnswer: e.target.value })
-                      }
-                      className="w-full resize-none rounded-xl border-0 bg-[#eceef0] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#00478d]/20"
-                      rows={5}
-                      placeholder="Enter a model answer or grading guidelines for the essay question..."
-                    />
-                    <p className="text-xs text-[#727783]">
-                      This will be used as a reference for grading the essay response.
                     </p>
                   </div>
                 )}
