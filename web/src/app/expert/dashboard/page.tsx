@@ -76,7 +76,7 @@ export default function ExpertDashboardPage() {
     ];
   }, [stats]);
 
-  const avgDailyReviews = activity?.avgDailyReviews.toFixed(1) ?? '0';
+  const avgDailyReviews = (activity?.avgDailyReviews != null && !isNaN(activity.avgDailyReviews)) ? Number(activity.avgDailyReviews).toFixed(1) : '0';
   const [caseTab, setCaseTab] = useState<'all' | 'pending' | 'approved' | 'draft'>('all');
   const filteredRecentCases = useMemo(() => {
     if (caseTab === 'all') return recentCases;

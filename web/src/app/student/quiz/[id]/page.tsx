@@ -709,7 +709,7 @@ export default function QuizSessionPage({
                     toFixed(1): làm tròn 1 chữ số thập phân
                   */}
                   <p className="text-4xl font-black text-primary">
-                    {quizInfo.score != null ? quizInfo.score.toFixed(1) : '—'}%
+                    {quizInfo.score != null && typeof quizInfo.score === 'number' ? Number(quizInfo.score).toFixed(1) : '—'}%
                   </p>
                   <p className="text-xs font-semibold text-muted-foreground">Your Score</p>
                 </div>
@@ -1539,7 +1539,7 @@ export default function QuizSessionPage({
                   <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Your Score</p>
                   <div className="mt-2 flex items-baseline gap-1">
                     <span className={`text-5xl font-black ${quizResult.passed ? 'text-success' : 'text-destructive'}`}>
-                      {quizResult.score != null ? quizResult.score.toFixed(1) : '—'}
+                      {quizResult.score != null && typeof quizResult.score === 'number' ? Number(quizResult.score).toFixed(1) : '—'}
                     </span>
                     <span className="text-2xl font-bold text-on-surface-variant">/100</span>
                   </div>

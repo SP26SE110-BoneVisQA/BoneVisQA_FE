@@ -93,25 +93,25 @@ export default function StudentProgress({ classId, onSelectStudent, onError }: S
   const stats = [
     {
       label: 'Avg Score',
-      value: progress?.overview.classAverageScore.toFixed(1) ?? '0',
+      value: progress?.overview?.classAverageScore != null && !isNaN(progress.overview.classAverageScore) ? Number(progress.overview.classAverageScore).toFixed(1) : '0',
       icon: Award,
       color: 'text-primary',
     },
     {
       label: 'Avg Progress',
-      value: `${progress?.overview.classAverageProgress.toFixed(0) ?? '0'}%`,
+      value: progress?.overview?.classAverageProgress != null && !isNaN(progress.overview.classAverageProgress) ? `${Number(progress.overview.classAverageProgress).toFixed(0)}%` : '0%',
       icon: TrendingUp,
       color: 'text-success',
     },
     {
       label: 'Quiz Complete',
-      value: `${progress?.overview.quizCompletionRate.toFixed(0) ?? '0'}%`,
+      value: progress?.overview?.quizCompletionRate != null && !isNaN(progress.overview.quizCompletionRate) ? `${Number(progress.overview.quizCompletionRate).toFixed(0)}%` : '0%',
       icon: BookOpen,
       color: 'text-warning',
     },
     {
       label: 'Case Complete',
-      value: `${progress?.overview.caseCompletionRate.toFixed(0) ?? '0'}%`,
+      value: progress?.overview?.caseCompletionRate != null && !isNaN(progress.overview.caseCompletionRate) ? `${Number(progress.overview.caseCompletionRate).toFixed(0)}%` : '0%',
       icon: Target,
       color: 'text-blue-500',
     },
@@ -263,18 +263,18 @@ export default function StudentProgress({ classId, onSelectStudent, onError }: S
                         <div className="flex items-center gap-3">
                           <div className="text-right">
                             <div className="text-lg font-bold text-card-foreground">
-                              {student.averageScore.toFixed(1)}%
+                              {typeof student.averageScore === 'number' ? `${Number(student.averageScore).toFixed(1)}%` : '—'}
                             </div>
                             <div className="w-24 h-2 bg-muted rounded-full overflow-hidden mt-1">
                               <div
                                 className={`h-full transition-all duration-300 ${
-                                  student.overallProgress >= 70
+                                  (student.overallProgress ?? 0) >= 70
                                     ? 'bg-success'
-                                    : student.overallProgress >= 30
+                                    : (student.overallProgress ?? 0) >= 30
                                     ? 'bg-warning'
                                     : 'bg-destructive'
                                 }`}
-                                style={{ width: `${Math.min(100, student.overallProgress)}%` }}
+                                style={{ width: `${Math.min(100, Math.max(0, student.overallProgress ?? 0))}%` }}
                               />
                             </div>
                           </div>
@@ -330,19 +330,19 @@ export default function StudentProgress({ classId, onSelectStudent, onError }: S
                             {comp.competencyName || 'Unknown'}
                           </span>
                           <span className={`text-sm font-bold ${
-                            comp.percentage >= 70 ? 'text-success' :
-                            comp.percentage >= 40 ? 'text-warning' : 'text-destructive'
+                            (comp.percentage ?? 0) >= 70 ? 'text-success' :
+                            (comp.percentage ?? 0) >= 40 ? 'text-warning' : 'text-destructive'
                           }`}>
-                            {comp.percentage.toFixed(0)}%
+                            {typeof comp.percentage === 'number' ? `${Number(comp.percentage).toFixed(0)}%` : '—'}
                           </span>
                         </div>
                         <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                           <div
                             className={`h-full ${
-                              comp.percentage >= 70 ? 'bg-success' :
-                              comp.percentage >= 40 ? 'bg-warning' : 'bg-destructive'
+                              (comp.percentage ?? 0) >= 70 ? 'bg-success' :
+                              (comp.percentage ?? 0) >= 40 ? 'bg-warning' : 'bg-destructive'
                             }`}
-                            style={{ width: `${comp.percentage}%` }}
+                            style={{ width: `${Math.min(100, Math.max(0, comp.percentage ?? 0))}%` }}
                           />
                         </div>
                       </div>

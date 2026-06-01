@@ -56,12 +56,31 @@ function normalizeExpertSpecialtyOption(raw: unknown): ExpertSpecialtyOption | n
 
 export const WORKFLOW_CONFLICT = 'WORKFLOW_CONFLICT';
 
+/** Normalize ClassDto (PascalCase from BE) to ClassItem (camelCase for FE). */
+function normalizeClassItem(raw: unknown): ClassItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+
+  const id = String(r.id ?? r.Id ?? '').trim();
+  if (!id) return null;
+
+  return {
+    id,
+    className: String(r.className ?? r.ClassName ?? '').trim(),
+    semester: String(r.semester ?? r.Semester ?? '').trim(),
+    lecturerId: String(r.lecturerId ?? r.LecturerId ?? '').trim(),
+    createdAt: String(r.createdAt ?? r.CreatedAt ?? '').trim(),
+    expertId: r.expertId ?? r.ExpertId ?? null,
+    expertName: r.expertName ?? r.ExpertName ?? null,
+  };
+}
+
 export async function fetchLecturerClasses(lecturerId: string): Promise<ClassItem[]> {
   try {
-    const { data } = await http.get<ClassItem[]>('/api/lecturer/classes', {
+    const { data } = await http.get<unknown>('/api/lecturer/classes', {
       params: { lecturerId },
     });
-    return Array.isArray(data) ? data : [];
+    return (Array.isArray(data) ? data : []).map(normalizeClassItem).filter((x): x is ClassItem => x !== null);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }

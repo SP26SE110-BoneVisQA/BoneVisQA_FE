@@ -55,13 +55,13 @@ function formatDate(dateStr: string | null): string {
 }
 
 function ScoreBadge({ score, maxScore }: { score: number | null; maxScore: number }) {
-  if (score === null) return <span className="text-muted-foreground">Ungraded</span>;
+  if (score === null || score === undefined) return <span className="text-muted-foreground">Ungraded</span>;
   const pct = maxScore > 0 ? (score / maxScore) * 100 : 0;
   const color = pct >= 80 ? 'text-success bg-success/10' : pct >= 60 ? 'text-warning bg-warning/10' : 'text-destructive bg-destructive/10';
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}>
       <Award className="h-3 w-3" />
-      {score.toFixed(1)}/{maxScore}
+      {Number(score).toFixed(1)}/{maxScore}
     </span>
   );
 }
@@ -982,7 +982,7 @@ export function LecturerQuizResultsPage({
             Average Score
           </div>
           <p className="text-2xl font-bold">
-            {isNaN(avgScore) ? '—' : avgScore.toFixed(1)}
+            {(avgScore === null || avgScore === undefined || isNaN(avgScore)) ? '—' : Number(avgScore).toFixed(1)}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">

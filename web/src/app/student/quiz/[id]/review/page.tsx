@@ -206,7 +206,7 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
           <div className="flex items-center gap-4">
             {quizInfo?.score != null && (
               <div className="text-right">
-                <p className="text-2xl font-black text-primary">{quizInfo.score.toFixed(1)}%</p>
+                <p className="text-2xl font-black text-primary">{Number(quizInfo.score).toFixed(1)}%</p>
                 <p className="text-xs text-muted-foreground">Your Score</p>
               </div>
             )}

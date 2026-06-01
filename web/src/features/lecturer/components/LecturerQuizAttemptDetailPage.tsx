@@ -43,12 +43,12 @@ function formatDate(dateStr: string | null): string {
 }
 
 function ScoreBadge({ score }: { score: number | null }) {
-  if (score === null) return <span className="text-muted-foreground">Ungraded</span>;
+  if (score === null || score === undefined) return <span className="text-muted-foreground">Ungraded</span>;
   const pct = score;
   const color = pct >= 80 ? 'text-success' : pct >= 60 ? 'text-warning' : 'text-destructive';
   return (
     <span className={`text-2xl font-black ${color}`}>
-      {score.toFixed(1)}%
+      {Number(score).toFixed(1)}%
     </span>
   );
 }

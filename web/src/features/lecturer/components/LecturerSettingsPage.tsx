@@ -261,7 +261,7 @@ export function LecturerSettingsPage() {
               <StatCard
                 icon={GraduationCap}
                 label="Avg. Score"
-                value={stats?.averageQuizScore != null ? `${stats.averageQuizScore.toFixed(1)}%` : 'N/A'}
+                value={stats?.averageQuizScore != null && !isNaN(stats.averageQuizScore) ? `${Number(stats.averageQuizScore).toFixed(1)}%` : 'N/A'}
                 color="bg-amber-500"
               />
               <StatCard

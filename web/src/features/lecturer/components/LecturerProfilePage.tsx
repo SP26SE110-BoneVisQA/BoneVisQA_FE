@@ -314,7 +314,7 @@ export function LecturerProfilePage() {
     ? getQueryErrorMessage(profileQuery.error, 'Failed to load profile.')
     : undefined;
 
-  const avgScore = stats?.averageQuizScore != null ? `${stats.averageQuizScore.toFixed(1)}%` : 'N/A';
+  const avgScore = stats?.averageQuizScore != null && !isNaN(stats.averageQuizScore) ? `${Number(stats.averageQuizScore).toFixed(1)}%` : 'N/A';
   // Derive quiz completion rate from scored attempts vs total attempts.
   // A "completed" attempt is one with a Score (i.e. was submitted and graded).
   const totalAttempts = stats?.totalQuizAttempts ?? 0;
@@ -500,20 +500,20 @@ export function LecturerProfilePage() {
                         <p className="mt-1 text-xs font-medium text-muted-foreground">Avg. Quiz Score</p>
                       </div>
                       <div className="rounded-xl border border-border/50 bg-muted/30 p-4 text-center transition-colors hover:bg-muted/50">
-                        <p className="text-2xl font-bold text-emerald-600">{completionRate.toFixed(0)}%</p>
+                        <p className="text-2xl font-bold text-emerald-600">{typeof completionRate === 'number' && !isNaN(completionRate) ? `${Number(completionRate).toFixed(0)}%` : '—'}</p>
                         <p className="mt-1 text-xs font-medium text-muted-foreground">Quiz Completion</p>
                       </div>
                     </div>
-                    {completionRate > 0 && (
+                    {typeof completionRate === 'number' && !isNaN(completionRate) && completionRate > 0 && (
                       <div className="border-t border-border/50 px-6 pb-6">
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span>Quiz completion rate</span>
-                          <span className="font-semibold text-foreground">{completionRate.toFixed(1)}%</span>
+                          <span className="font-semibold text-foreground">{Number(completionRate).toFixed(1)}%</span>
                         </div>
                         <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
                           <div
                             className="h-full rounded-full bg-gradient-to-r from-primary to-sky-400 transition-all duration-1000"
-                            style={{ width: `${completionRate}%` }}
+                            style={{ width: `${Math.min(100, Math.max(0, completionRate))}%` }}
                           />
                         </div>
                       </div>

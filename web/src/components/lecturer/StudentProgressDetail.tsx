@@ -57,7 +57,7 @@ export default function StudentProgressDetail({ student, isOpen, onClose }: Stud
               <p className="text-sm text-muted-foreground">Student ID: {student.studentId}</p>
               <div className="flex items-center gap-2 mt-1">
                 <span className={`px-2 py-0.5 text-xs rounded-full ${overallGrade.bg} ${overallGrade.text}`}>
-                  Overall: {student.quizProgress.averageScore.toFixed(1)}%
+                  Overall: {typeof student.quizProgress?.averageScore === 'number' ? `${Number(student.quizProgress.averageScore).toFixed(1)}%` : '—'}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   Enrolled: {new Date(student.enrolledAt).toLocaleDateString()}
@@ -79,7 +79,7 @@ export default function StudentProgressDetail({ student, isOpen, onClose }: Stud
           <div className="grid grid-cols-4 gap-4 mb-6">
             <div className="p-4 rounded-lg border border-border bg-muted/30 text-center">
               <Award className="w-6 h-6 mx-auto mb-2 text-primary" />
-              <p className="text-2xl font-bold text-card-foreground">{student.quizProgress.averageScore.toFixed(1)}%</p>
+              <p className="text-2xl font-bold text-card-foreground">{typeof student.quizProgress?.averageScore === 'number' ? `${Number(student.quizProgress.averageScore).toFixed(1)}%` : '—'}</p>
               <p className="text-xs text-muted-foreground">Overall Score</p>
             </div>
             <div className="p-4 rounded-lg border border-border bg-muted/30 text-center">
@@ -94,7 +94,7 @@ export default function StudentProgressDetail({ student, isOpen, onClose }: Stud
             </div>
             <div className="p-4 rounded-lg border border-border bg-muted/30 text-center">
               <Clock className="w-6 h-6 mx-auto mb-2 text-success" />
-              <p className="text-2xl font-bold text-card-foreground">{student.caseProgress.completionRate.toFixed(0)}%</p>
+              <p className="text-2xl font-bold text-card-foreground">{typeof student.caseProgress?.completionRate === 'number' ? `${Number(student.caseProgress.completionRate).toFixed(0)}%` : '—'}</p>
               <p className="text-xs text-muted-foreground">Progress</p>
             </div>
           </div>
@@ -103,15 +103,15 @@ export default function StudentProgressDetail({ student, isOpen, onClose }: Stud
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-card-foreground">Overall Progress</span>
-              <span className="text-sm font-bold text-card-foreground">{student.caseProgress.completionRate.toFixed(0)}%</span>
+              <span className="text-sm font-bold text-card-foreground">{typeof student.caseProgress?.completionRate === 'number' ? `${Number(student.caseProgress.completionRate).toFixed(0)}%` : '—'}</span>
             </div>
             <div className="h-3 bg-muted rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all duration-500 ${
-                  student.caseProgress.completionRate >= 70 ? 'bg-success' :
-                  student.caseProgress.completionRate >= 40 ? 'bg-warning' : 'bg-destructive'
+                  (student.caseProgress?.completionRate ?? 0) >= 70 ? 'bg-success' :
+                  (student.caseProgress?.completionRate ?? 0) >= 40 ? 'bg-warning' : 'bg-destructive'
                 }`}
-                style={{ width: `${student.caseProgress.completionRate}%` }}
+                style={{ width: `${Math.min(100, Math.max(0, student.caseProgress?.completionRate ?? 0))}%` }}
               />
             </div>
           </div>
@@ -147,7 +147,7 @@ export default function StudentProgressDetail({ student, isOpen, onClose }: Stud
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className={`text-2xl font-bold ${gradeConfig.text}`}>{quiz.percentage.toFixed(0)}%</p>
+                          <p className={`text-2xl font-bold ${gradeConfig.text}`}>{typeof quiz.percentage === 'number' ? `${Number(quiz.percentage).toFixed(0)}%` : '—'}</p>
                         </div>
                       </div>
                     </div>
@@ -208,10 +208,10 @@ export default function StudentProgressDetail({ student, isOpen, onClose }: Stud
                       </span>
                     </div>
                     <span className={`text-lg font-bold ${
-                      comp.percentage >= 70 ? 'text-success' :
-                      comp.percentage >= 40 ? 'text-warning' : 'text-destructive'
+                      (comp.percentage ?? 0) >= 70 ? 'text-success' :
+                      (comp.percentage ?? 0) >= 40 ? 'text-warning' : 'text-destructive'
                     }`}>
-                      {comp.percentage.toFixed(0)}%
+                      {typeof comp.percentage === 'number' ? `${Number(comp.percentage).toFixed(0)}%` : '—'}
                     </span>
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
