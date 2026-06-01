@@ -502,15 +502,12 @@ export async function fetchStudentProgress(): Promise<StudentProgress> {
     return {
       totalCasesViewed: Number(item.totalCasesViewed ?? item.TotalCasesViewed ?? 0),
       totalQuestionsAsked: Number(item.totalQuestionsAsked ?? item.TotalQuestionsAsked ?? 0),
-      avgQuizScore: item.avgQuizScore != null ? Number(item.avgQuizScore) : 
-                    item.AvgQuizScore != null ? Number(item.AvgQuizScore) : null,
+      avgQuizScore: item.AvgQuizScore == null ? null : Number(item.AvgQuizScore),
       totalQuizAttempts: Number(item.totalQuizAttempts ?? item.TotalQuizAttempts ?? 0),
       completedQuizzes: Number(item.completedQuizzes ?? item.CompletedQuizzes ?? item.quizzesCompleted ?? item.QuizzesCompleted ?? 0),
       escalatedAnswers: Number(item.escalatedAnswers ?? item.EscalatedAnswers ?? 0),
-      latestQuizScore: item.latestQuizScore != null ? Number(item.latestQuizScore) : 
-                       item.LatestQuizScore != null ? Number(item.LatestQuizScore) : null,
-      quizAccuracyRate: item.quizAccuracyRate != null ? Number(item.quizAccuracyRate) : 
-                        item.QuizAccuracyRate != null ? Number(item.QuizAccuracyRate) : null,
+      latestQuizScore: item.LatestQuizScore == null ? null : Number(item.LatestQuizScore),
+      quizAccuracyRate: item.QuizAccuracyRate == null ? null : Number(item.QuizAccuracyRate),
     };
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
@@ -1127,9 +1124,10 @@ function mapStudentTopicStat(row: unknown): StudentTopicStat | null {
   // Handle both backend naming conventions: Topic (PascalCase) vs topicName (camelCase)
   const topicName = String(item.topicName ?? item.topic ?? item.Topic ?? item.name ?? '');
   if (!topicName) return null;
+  const accRaw = item.accuracyRate ?? item.AccuracyRate;
   return {
     topicName,
-    accuracyRate: Number(item.accuracyRate ?? item.AccuracyRate ?? item.accuracyRate ?? 0),
+    accuracyRate: accRaw == null ? null : Math.min(100, Math.max(0, Number(accRaw))),
     quizAttempts: Number(item.quizAttempts ?? item.QuizAttempts ?? 0),
   };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ListPageLayout } from '@/components/layouts';
 import AssignCasesDialog from '@/components/lecturer/cases/AssignCasesDialog';
@@ -12,6 +12,8 @@ import {
   XCircle,
   Eye,
   Plus,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useLecturerClasses } from '@/features/lecturer/queries/use-lecturer-classes';
 import { useLecturerCasesList } from '@/features/lecturer/queries/use-lecturer-cases';
@@ -31,6 +33,8 @@ export function LecturerCasesPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [showAssign, setShowAssign] = useState(false);
   const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(0);
+  const pageSize = 8;
 
   const cases = casesQuery.data ?? [];
   const classes = classesQuery.data ?? [];
@@ -68,6 +72,28 @@ export function LecturerCasesPage() {
       return matchSearch && matchStatus;
     });
   }, [cases, search, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedCases = useMemo(() => {
+    const start = page * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
+
+  const handleStatusChange = (value: StatusFilter) => {
+    setStatusFilter(value);
+    setPage(0);
+  };
+
+  useEffect(() => {
+    if (page >= totalPages && totalPages > 0) {
+      setPage(totalPages - 1);
+    }
+  }, [page, totalPages]);
 
   const approvedCount = cases.filter((c) => c.isApproved).length;
   const activeCount = cases.filter((c) => c.isActive).length;
@@ -107,14 +133,14 @@ export function LecturerCasesPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Search by title, category, difficulty…"
             className="pl-9"
           />
         </div>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          onChange={(e) => handleStatusChange(e.target.value as StatusFilter)}
           className="h-10 rounded-lg border border-border bg-card px-3 text-sm"
         >
           <option value="all">All statuses</option>
@@ -134,12 +160,47 @@ export function LecturerCasesPage() {
           </p>
         </div>
       ) : (
-        <CasesTable
-          cases={filtered as CaseDto[]}
-          selectedCases={selectedCases}
-          onSelectAll={setSelectedCases}
-          onSelect={toggleCaseSelection}
-        />
+        <>
+          <CasesTable
+            cases={paginatedCases as CaseDto[]}
+            selectedCases={selectedCases}
+            onSelectAll={setSelectedCases}
+            onSelect={toggleCaseSelection}
+          />
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length} cases
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {page + 1} of {totalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages - 1}
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {showAssign ? (

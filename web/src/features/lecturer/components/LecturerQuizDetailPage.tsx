@@ -18,6 +18,10 @@ import {
   Timer,
   PlusCircle,
   UploadCloud,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { appToast } from '@/lib/api/errors/app-toast';
@@ -36,6 +40,7 @@ import QuestionImportDialog from '@/components/lecturer/quizzes/QuestionImportDi
 import type { ParsedQuestion } from '@/components/lecturer/quizzes/QuestionImportDialog';
 import QuestionCard from '@/components/lecturer/quizzes/QuestionCard';
 import { addQuizQuestion } from '@/lib/api/lecturer-quiz';
+import { releaseQuizAnswers, hideQuizAnswers, getQuizReleaseStatus } from '@/lib/api/lecturer-quiz';
 import { getClassStats } from '@/lib/api/lecturer';
 import type { QuizDto, QuizQuestionDto, ClassItem, ClassStats } from '@/lib/api/types';
 
@@ -121,6 +126,7 @@ export function LecturerQuizDetailPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [savedDialogOpen, setSavedDialogOpen] = useState(false);
+  const [showTitleWarning, setShowTitleWarning] = useState(false);
 
   const classStatsQuery = useQuery({
     queryKey: [...queryKeys.lecturer.classDetail(selectedClassId), 'stats'] as const,
@@ -136,6 +142,20 @@ export function LecturerQuizDetailPage() {
     questionText: string;
   } | null>(null);
   const [deletingQuestion, setDeletingQuestion] = useState(false);
+
+  // Multi-select state for bulk delete
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Release answers state
+  const [releaseStatus, setReleaseStatus] = useState<{
+    isReleased: boolean;
+    releasedAt: string | null;
+    isQuizClosed: boolean;
+  } | null>(null);
+  const [releaseLoading, setReleaseLoading] = useState(false);
 
   useEffect(() => {
     if (!quizId) {
@@ -171,6 +191,27 @@ export function LecturerQuizDetailPage() {
     }
   }, [quizQuery.error]);
 
+  // Fetch release status when quiz and classId are available
+  useEffect(() => {
+    if (!quiz || !selectedClassId || selectedClassId === '00000000-0000-0000-0000-000000000000') {
+      setReleaseStatus(null);
+      return;
+    }
+    const fetchReleaseStatus = async () => {
+      try {
+        const status = await getQuizReleaseStatus(selectedClassId, quizId);
+        setReleaseStatus({
+          isReleased: status.isReleased,
+          releasedAt: status.releasedAt,
+          isQuizClosed: status.isQuizClosed,
+        });
+      } catch {
+        setReleaseStatus(null);
+      }
+    };
+    void fetchReleaseStatus();
+  }, [quiz, selectedClassId, quizId]);
+
   const refreshQuiz = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.lecturer.quizDetail(quizId) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.lecturer.quizQuestions(quizId) });
@@ -181,6 +222,13 @@ export function LecturerQuizDetailPage() {
   }, [quizId]);
 
   const handleSave = async () => {
+    // Check if title is empty
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setShowTitleWarning(true);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -248,6 +296,54 @@ export function LecturerQuizDetailPage() {
     setDeleteDialog({ questionId, questionText });
   };
 
+  // Toggle select mode
+  const toggleSelectMode = () => {
+    if (isSelectMode) {
+      setSelectedQuestionIds(new Set());
+    }
+    setIsSelectMode(!isSelectMode);
+  };
+
+  // Handle individual question selection
+  const handleSelectQuestion = (questionId: string, selected: boolean) => {
+    const newSet = new Set(selectedQuestionIds);
+    if (selected) {
+      newSet.add(questionId);
+    } else {
+      newSet.delete(questionId);
+    }
+    setSelectedQuestionIds(newSet);
+  };
+
+  // Select all questions on current page
+  const handleSelectAll = () => {
+    if (selectedQuestionIds.size === displayedQuestions.length) {
+      setSelectedQuestionIds(new Set());
+    } else {
+      setSelectedQuestionIds(new Set(displayedQuestions.map((q) => q.id)));
+    }
+  };
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    if (selectedQuestionIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      const deletePromises = Array.from(selectedQuestionIds).map((questionId) =>
+        deleteQuestionMutation.mutateAsync({ questionId, quizId })
+      );
+      await Promise.all(deletePromises);
+      setSelectedQuestionIds(new Set());
+      setBulkDeleteDialog(false);
+      setIsSelectMode(false);
+      appToast.success(`${selectedQuestionIds.size} question(s) deleted successfully.`);
+    } catch (err) {
+      appToast.error(err instanceof Error ? err.message : 'Failed to delete questions');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const handleAddQuestion = () => {
     setEditingQuestion(null);
     setEditorOpen(true);
@@ -255,6 +351,34 @@ export function LecturerQuizDetailPage() {
 
   const handleQuestionSuccess = () => {
     refreshQuiz();
+  };
+
+  // Release answers handler
+  const handleToggleReleaseAnswers = async () => {
+    if (!selectedClassId || selectedClassId === '00000000-0000-0000-0000-000000000000') {
+      appToast.error('Please assign the quiz to a class first.');
+      return;
+    }
+    setReleaseLoading(true);
+    try {
+      if (releaseStatus?.isReleased) {
+        await hideQuizAnswers(selectedClassId, quizId);
+        appToast.success('Answers hidden from students.');
+      } else {
+        await releaseQuizAnswers(selectedClassId, quizId);
+        appToast.success('Answers released to students.');
+      }
+      const status = await getQuizReleaseStatus(selectedClassId, quizId);
+      setReleaseStatus({
+        isReleased: status.isReleased,
+        releasedAt: status.releasedAt,
+        isQuizClosed: status.isQuizClosed,
+      });
+    } catch (err) {
+      appToast.error(err instanceof Error ? err.message : 'Failed to update release status');
+    } finally {
+      setReleaseLoading(false);
+    }
   };
 
   const handleImportQuestions = async (parsed: ParsedQuestion[]) => {
@@ -343,6 +467,28 @@ export function LecturerQuizDetailPage() {
           >
             Preview
           </button>
+          {/* Release Answers Button */}
+          {quiz && selectedClassId && selectedClassId !== '00000000-0000-0000-0000-000000000000' && (
+            <button
+              type="button"
+              onClick={handleToggleReleaseAnswers}
+              disabled={releaseLoading}
+              className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 ${
+                releaseStatus?.isReleased
+                  ? 'bg-warning hover:bg-warning/90'
+                  : 'bg-secondary hover:bg-secondary/90'
+              }`}
+            >
+              {releaseLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : releaseStatus?.isReleased ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+              {releaseStatus?.isReleased ? 'Hide Answers' : 'Release Answers'}
+            </button>
+          )}
           {quiz && (
             <button
               type="button"
@@ -356,6 +502,30 @@ export function LecturerQuizDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Warning Banner: Title is empty */}
+      {showTitleWarning && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm dark:border-amber-800 dark:bg-amber-950/30">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800 dark:text-amber-200">Quiz title is empty</p>
+            <p className="mt-0.5 text-sm text-amber-700 dark:text-amber-300">
+              Please enter a title before saving. Students will not see this quiz without a title.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowTitleWarning(false)}
+            className="shrink-0 rounded-lg p-1 text-amber-600 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/30 transition-colors"
+            aria-label="Dismiss warning"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -394,6 +564,21 @@ export function LecturerQuizDetailPage() {
           </div>
           <p className="text-xs font-medium text-muted-foreground">Time Limit</p>
           <p className="text-xl font-bold text-card-foreground">{timeLimit || '—'} min</p>
+        </div>
+        <div className="rounded-2xl border border-border/10 bg-card p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${releaseStatus?.isReleased ? 'bg-green-100' : 'bg-muted'}`}>
+              {releaseStatus?.isReleased ? (
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+              ) : (
+                <Eye className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">Answers</p>
+          <p className={`text-xl font-bold ${releaseStatus?.isReleased ? 'text-green-600' : 'text-card-foreground'}`}>
+            {releaseStatus?.isReleased ? 'Released' : 'Hidden'}
+          </p>
         </div>
       </div>
 
@@ -568,11 +753,36 @@ export function LecturerQuizDetailPage() {
         <div className="order-1 col-span-12 lg:order-1 lg:col-span-8">
           <div className="rounded-2xl border border-border/40 bg-card shadow-sm">
             <div className="flex flex-col gap-3 border-b border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="flex items-center gap-2 font-semibold text-sm text-card-foreground">
-                <Settings2 className="h-4 w-4 text-primary" />
-                Questions <span className="text-muted-foreground">({filtered.length})</span>
-              </h3>
+              <div className="flex items-center gap-3">
+                <h3 className="flex items-center gap-2 font-semibold text-sm text-card-foreground">
+                  <Settings2 className="h-4 w-4 text-primary" />
+                  Questions <span className="text-muted-foreground">({filtered.length})</span>
+                </h3>
+                {isSelectMode && selectedQuestionIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setBulkDeleteDialog(true)}
+                    className="flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-destructive/90"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete Selected ({selectedQuestionIds.size})
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2">
+                {questions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={toggleSelectMode}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${
+                      isSelectMode
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-muted text-muted-foreground border-border hover:bg-muted/80 hover:text-card-foreground'
+                    }`}
+                  >
+                    {isSelectMode ? 'Cancel' : 'Select'}
+                  </button>
+                )}
                 <div className="relative">
                   <input
                     type="text"
@@ -583,7 +793,7 @@ export function LecturerQuizDetailPage() {
                   />
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 </div>
-                {quiz && (
+                {quiz && !isSelectMode && (
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -632,6 +842,19 @@ export function LecturerQuizDetailPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {isSelectMode && displayedQuestions.length > 0 && (
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedQuestionIds.size === displayedQuestions.length && displayedQuestions.length > 0}
+                        onChange={handleSelectAll}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                      />
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Select all on this page
+                      </span>
+                    </div>
+                  )}
                   {displayedQuestions.map((q) => {
                     const i = questions.findIndex((x) => x.id === q.id);
                     const idx = i >= 0 ? i : 0;
@@ -642,8 +865,11 @@ export function LecturerQuizDetailPage() {
                         variant="curated"
                         topicCategory={TOPIC_ROTATION[idx % TOPIC_ROTATION.length]}
                         points={POINTS_ROTATION[idx % POINTS_ROTATION.length]}
-                        onEdit={handleEditQuestion}
-                        onDelete={openDeleteQuestionDialog}
+                        onEdit={isSelectMode ? undefined : handleEditQuestion}
+                        onDelete={isSelectMode ? undefined : openDeleteQuestionDialog}
+                        selectable={isSelectMode}
+                        isSelected={selectedQuestionIds.has(q.id)}
+                        onSelect={handleSelectQuestion}
                       />
                     );
                   })}
@@ -733,6 +959,20 @@ export function LecturerQuizDetailPage() {
         onCancel={() => setDeleteDialog(null)}
         deleting={deletingQuestion}
         confirmText="Delete question"
+        cancelText="Cancel"
+        dangerLevel="high"
+      />
+
+      {/* Bulk delete confirmation dialog */}
+      <DeleteConfirmDialog
+        open={bulkDeleteDialog}
+        title="Delete selected questions?"
+        itemName={`${selectedQuestionIds.size} question(s)`}
+        itemType="Questions"
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkDeleteDialog(false)}
+        deleting={bulkDeleting}
+        confirmText="Delete all"
         cancelText="Cancel"
         dangerLevel="high"
       />

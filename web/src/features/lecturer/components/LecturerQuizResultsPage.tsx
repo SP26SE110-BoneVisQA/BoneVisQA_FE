@@ -19,6 +19,8 @@ import {
   RotateCcw,
   AlertTriangle,
   Download,
+  EyeOff,
+  Eye as EyeIcon,
 } from 'lucide-react';
 import { useLecturerQuizDetail } from '@/features/lecturer/queries/use-lecturer-quizzes';
 import {
@@ -29,6 +31,7 @@ import {
   useUpdateQuizAttempt,
 } from '@/features/lecturer/queries/use-lecturer-quiz-results';
 import { getQuizAttemptDetail } from '@/lib/api/lecturer';
+import { releaseQuizAnswers, hideQuizAnswers, getQuizReleaseStatus } from '@/lib/api/lecturer-quiz';
 import { getApiErrorMessage, resolveApiAssetUrl } from '@/lib/api/client';
 import type { QuizDto, StudentQuizAttemptDto, QuizAttemptDetailDto, QuestionWithAnswerDto, UpdateAnswerDto } from '@/lib/api/types';
 import { Modal } from '@/components/ui/modal';
@@ -698,6 +701,44 @@ export function LecturerQuizResultsPage({
     null | { kind: 'single'; attempt: StudentQuizAttemptDto } | { kind: 'all'; count: number }
   >(null);
 
+  // Release answers state
+  const [releaseStatus, setReleaseStatus] = useState<{ isReleased: boolean; releasedAt: string | null } | null>(null);
+  const [releaseLoading, setReleaseLoading] = useState(false);
+
+  // Fetch release status when classId is available
+  useEffect(() => {
+    if (!classId || !quizId) return;
+    const fetchStatus = async () => {
+      try {
+        const status = await getQuizReleaseStatus(classId, quizId);
+        setReleaseStatus({ isReleased: status.isReleased, releasedAt: status.releasedAt });
+      } catch {
+        setReleaseStatus(null);
+      }
+    };
+    void fetchStatus();
+  }, [classId, quizId]);
+
+  const handleToggleReleaseAnswers = async () => {
+    if (!classId || !quizId) return;
+    setReleaseLoading(true);
+    try {
+      if (releaseStatus?.isReleased) {
+        await hideQuizAnswers(classId, quizId);
+        appToast.success('Answers hidden from students.');
+      } else {
+        await releaseQuizAnswers(classId, quizId);
+        appToast.success('Answers released to students.');
+      }
+      const status = await getQuizReleaseStatus(classId, quizId);
+      setReleaseStatus({ isReleased: status.isReleased, releasedAt: status.releasedAt });
+    } catch (e) {
+      appToast.error(getApiErrorMessage(e));
+    } finally {
+      setReleaseLoading(false);
+    }
+  };
+
   const handleExportExcel = async () => {
     if (!classId || !quizId) return;
     setExporting(true);
@@ -944,33 +985,58 @@ export function LecturerQuizResultsPage({
         </div>
       </div>
 
-      {/* Retake management */}
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <RotateCcw className="h-5 w-5" />
+      {/* Quiz controls: Release answers + Retake */}
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Release Answers */}
+        <div className="flex items-center gap-3">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${releaseStatus?.isReleased ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+            {releaseStatus?.isReleased ? <EyeIcon className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
           </div>
-          <div>
-            <h3 className="font-semibold text-sm text-card-foreground">Retake management</h3>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-sm text-card-foreground">
+              {releaseStatus?.isReleased ? 'Answers released' : 'Answers hidden'}
+            </h3>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {attempts.filter((a) => a.completedAt).length} student(s) have submitted. You can reset attempts so they can take the quiz again.
+              {releaseStatus?.isReleased
+                ? releaseStatus.releasedAt
+                  ? `Released ${new Date(releaseStatus.releasedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                  : 'Students can see correct answers'
+                : 'Students cannot see correct answers yet'}
             </p>
           </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={openRetakeAllDialog}
-          disabled={retakingAll || attempts.filter((a) => a.completedAt).length === 0}
-          className="shrink-0 border-primary/30 bg-primary/5 font-semibold text-primary hover:bg-primary/10"
-        >
-          {retakingAll ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <RotateCcw className="mr-2 h-4 w-4" />
-          )}
-          Allow all to retake
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant={releaseStatus?.isReleased ? 'outline' : 'default'}
+            onClick={handleToggleReleaseAnswers}
+            disabled={releaseLoading}
+            className={`shrink-0 font-semibold ${releaseStatus?.isReleased ? 'border-primary/30 text-primary hover:bg-primary/5' : 'bg-primary text-white hover:bg-primary/90'}`}
+          >
+            {releaseLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : releaseStatus?.isReleased ? (
+              <EyeOff className="mr-2 h-4 w-4" />
+            ) : (
+              <EyeIcon className="mr-2 h-4 w-4" />
+            )}
+            {releaseStatus?.isReleased ? 'Hide answers' : 'Release answers'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={openRetakeAllDialog}
+            disabled={retakingAll || attempts.filter((a) => a.completedAt).length === 0}
+            className="shrink-0 border-primary/30 bg-primary/5 font-semibold text-primary hover:bg-primary/10"
+          >
+            {retakingAll ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCcw className="mr-2 h-4 w-4" />
+            )}
+            Allow retake
+          </Button>
+        </div>
       </div>
 
       {/* Search */}

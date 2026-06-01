@@ -128,6 +128,45 @@ export default function QuizSessionPage({
   const [savedFlashcardInfo, setSavedFlashcardInfo] = useState<{ deckId: string; deckName: string; cardCount: number } | null>(null);
   const [customDeckName, setCustomDeckName] = useState('');
 
+  // Track if quiz is accessible (between openTime and closeTime)
+  const [isQuizAccessible, setIsQuizAccessible] = useState(false);
+  const [quizStatusMessage, setQuizStatusMessage] = useState<string>('');
+
+  // Check if quiz is accessible (between openTime and before closeTime)
+  useEffect(() => {
+    const checkQuizAccess = () => {
+      const now = new Date();
+      
+      // Check openTime
+      if (quizInfo?.openTime) {
+        const openTimeDate = new Date(quizInfo.openTime);
+        if (now < openTimeDate) {
+          setIsQuizAccessible(false);
+          setQuizStatusMessage(`Quiz will open on: ${quizInfo.openTime}`);
+          return;
+        }
+      }
+      
+      // Check closeTime
+      if (quizInfo?.closeTime) {
+        const closeTimeDate = new Date(quizInfo.closeTime);
+        if (now > closeTimeDate) {
+          setIsQuizAccessible(false);
+          setQuizStatusMessage('Quiz has been closed');
+          return;
+        }
+      }
+      
+      // Quiz is accessible
+      setIsQuizAccessible(true);
+      setQuizStatusMessage('');
+    };
+
+    checkQuizAccess();
+    const interval = setInterval(checkQuizAccess, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [quizInfo?.openTime, quizInfo?.closeTime]);
+
   // Review pagination (5 questions per page)
   const [reviewPage, setReviewPage] = useState(1);
   const REVIEW_PAGE_SIZE = 5;
@@ -151,16 +190,27 @@ export default function QuizSessionPage({
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
   const timeUpAutoSubmitTriggered = useRef(false);
   const retakeRequestedRef = useRef(false);
+  const scoreUpdateNotifiedRef = useRef(false);
+  const submitInProgressRef = useRef(false); // Prevent multiple simultaneous submissions
 
   // Tải lại thông tin quiz từ server để lấy trạng thái cập nhật (isCompleted, score)
   const reloadQuizInfo = useCallback(async () => {
     try {
       const list = await getAssignedQuizzes();
       const found = list.find((q) => q.quizId === quizId);
-      setQuizInfo(found ?? null);
+      // Only update if the data actually changed to prevent unnecessary re-renders
+      if (found) {
+        setQuizInfo(prev => {
+          if (prev?.score === found.score && prev?.isCompleted === found.isCompleted) {
+            return prev; // No change, don't trigger re-render
+          }
+          return found;
+        });
+      }
     } catch {
-      setQuizInfo(null);
+      // Silently fail for background reloads
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quizId]);
 
   useEffect(() => {
@@ -183,6 +233,7 @@ export default function QuizSessionPage({
     if (submitted) {
       void reloadQuizInfo();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submitted, reloadQuizInfo]);
 
   // Auto-reveal feedback after submit: populate answerStates and show feedback
@@ -201,27 +252,40 @@ export default function QuizSessionPage({
     setShowFeedback(true);
     setReviewPage(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted]);
+  }, [submitted, session?.attemptId]);
 
   // Auto-refresh mechanism: detect when score changes (e.g., after lecturer edits)
   const lastScoreRef = useRef<number | null>(null);
+  const lastIsCompletedRef = useRef<boolean | null>(null);
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
   // Poll for score updates every 5 seconds when quiz is completed
   useEffect(() => {
-    if (!quizInfo?.isCompleted || loadingInfo) return;
+    if (!quizInfo?.isCompleted) return;
 
     const pollInterval = setInterval(async () => {
       try {
         const list = await getAssignedQuizzes();
         const quiz = list.find((q) => q.quizId === quizId);
-        
-        if (quiz && quiz.score !== lastScoreRef.current) {
-          // Score has been updated! Refresh the quiz info
-          lastScoreRef.current = quiz.score ?? null;
-          setQuizInfo(quiz);
-          
-          // Show notification about the score change
-          toast.success('Score has been updated by your lecturer!');
+
+        if (quiz) {
+          const scoreChanged = quiz.score !== lastScoreRef.current;
+          const isCompletedChanged = quiz.isCompleted !== lastIsCompletedRef.current;
+
+          // Only update state if something actually changed
+          if (scoreChanged || isCompletedChanged) {
+            // Score or completion status has been updated! Refresh the quiz info
+            lastScoreRef.current = quiz.score ?? null;
+            lastIsCompletedRef.current = quiz.isCompleted ?? null;
+            setQuizInfo(quiz);
+
+            // Show notification about the score change only once
+            if (scoreChanged && lastScoreRef.current !== null && !scoreUpdateNotifiedRef.current) {
+              scoreUpdateNotifiedRef.current = true;
+              toastRef.current.success('Score has been updated by your lecturer!');
+            }
+          }
         }
       } catch (error) {
         console.error('Auto-refresh error:', error);
@@ -229,7 +293,7 @@ export default function QuizSessionPage({
     }, 5000); // Poll every 5 seconds
 
     return () => clearInterval(pollInterval);
-  }, [quizId, quizInfo?.isCompleted, loadingInfo]);
+  }, [quizId, quizInfo?.isCompleted]);
 
   // Xử lý yêu cầu làm lại quiz từ tham số URL
   useEffect(() => {
@@ -238,7 +302,7 @@ export default function QuizSessionPage({
       void handleRetakeAndStart();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRetakeRequested, quizInfo]);
+  }, [isRetakeRequested, quizInfo?.isCompleted]);
 
   const questions: QuizModeQuestion[] = (session?.questions ?? []).map(q => {
     const typeLower = (q.type ?? '').toLowerCase();
@@ -387,10 +451,18 @@ export default function QuizSessionPage({
   const handleSubmit = useCallback(async () => {
     if (!session) return;
     
+    // Prevent multiple simultaneous submissions
+    if (submitInProgressRef.current) {
+      console.log('[Quiz] Submit already in progress, ignoring duplicate call');
+      return;
+    }
+    submitInProgressRef.current = true;
+    
     // Validate attemptId
     const attemptId = session.attemptId;
     if (!attemptId || attemptId === '00000000-0000-0000-0000-000000000000' || attemptId.length < 10) {
       toast.error('Invalid quiz session. Please restart the quiz.');
+      submitInProgressRef.current = false;
       setSubmitting(false);
       return;
     }
@@ -402,17 +474,33 @@ export default function QuizSessionPage({
         const answer = answers[q.questionId] || '';
         const isEssay = q.type?.toLowerCase() === 'essay';
         const isMultiSelect = q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select';
+        const isFillInBlank = q.type?.toLowerCase() === 'fillinblank' || q.type?.toLowerCase() === 'fill-in-blank';
+        
+        // For FillInBlank, use textAnswers if available, otherwise fall back to answers
+        const fillInBlankAnswer = isFillInBlank ? (textAnswers[q.questionId] || answer) : undefined;
+        
         return {
           questionId: q.questionId,
-          studentAnswer: isEssay ? '' : answer,
+          studentAnswer: isEssay ? '' : (isFillInBlank ? fillInBlankAnswer : answer),
           essayAnswer: isEssay ? answer : undefined,
           selectedAnswers: isMultiSelect ? JSON.stringify(multiSelectAnswers[q.questionId] || []) : undefined,
+          textAnswer: isFillInBlank ? fillInBlankAnswer : undefined,
         };
       });
+      
+      console.log('[Quiz] Submitting quiz with payload:', {
+        attemptId,
+        questionCount: payload.length,
+        questionTypes: session.questions.map(q => q.type),
+        samplePayload: payload.slice(0, 2)
+      });
+      
       const result = await submitQuizSession(attemptId, payload);
+      console.log('[Quiz] Submit successful, result:', result);
       setQuizResult(result);
       setSubmitted(true);
     } catch (e) {
+      console.error('[Quiz] Submit failed:', e);
       const msg = e instanceof Error ? e.message : String(e);
       // Show specific error from backend if available
       if (msg.includes('already been submitted') || msg.includes('already submitted')) {
@@ -424,9 +512,10 @@ export default function QuizSessionPage({
         toast.error(`Failed to submit: ${msg}`);
       }
     } finally {
+      submitInProgressRef.current = false;
       setSubmitting(false);
     }
-  }, [session, answers, multiSelectAnswers, toast]);
+  }, [session, answers, multiSelectAnswers, textAnswers, toast]);
 
   const handleStart = async () => {
     setLoadingSession(true);
@@ -676,14 +765,6 @@ export default function QuizSessionPage({
               {/* Action Buttons Row - Chỉ hiện khi lecturer đã release đáp án */}
               {quizInfo?.answersReleased && (
                 <div className="space-y-2">
-                  {/* Link đến trang review chi tiết */}
-                  <Link
-                    href={`/student/quiz/${quizId}/review`}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-[#007BFF] hover:opacity-95 text-white px-4 py-3 text-sm font-bold transition-colors shadow-lg shadow-primary/20"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    View Detailed Review
-                  </Link>
                   {/* Nút Reveal Answers - Chuyển đến trang review */}
                   <Link
                     href={`/student/quiz/${quizId}/review`}
@@ -743,23 +824,34 @@ export default function QuizSessionPage({
                 The live session timer starts when you begin. Use a stable connection and a quiet space.
               </p>
               <div className="flex flex-col gap-3">
-                <Button
-                  onClick={() => void handleStart()}
-                  disabled={loadingSession}
-                  className="h-12 rounded-xl bg-gradient-to-br from-primary to-primary-container text-base font-bold text-white shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  {loadingSession ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      Preparing…
-                    </>
-                  ) : (
-                    <>
-                      <PlayCircle className="h-5 w-5" />
-                      Begin assessment
-                    </>
-                  )}
-                </Button>
+                {isQuizAccessible ? (
+                  <Button
+                    onClick={() => void handleStart()}
+                    disabled={loadingSession}
+                    className="h-12 rounded-xl bg-gradient-to-br from-primary to-primary-container text-base font-bold text-white shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    {loadingSession ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        Preparing…
+                      </>
+                    ) : (
+                      <>
+                        <PlayCircle className="h-5 w-5" />
+                        Begin assessment
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <div className="flex flex-col items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-6 py-5 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+                      <Timer className="h-6 w-6 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-amber-800">{quizStatusMessage}</p>
+                    </div>
+                  </div>
+                )}
                 <Link href="/student/quizzes">
                   <Button variant="outline" className="h-12 w-full rounded-xl border-outline-variant/30 font-bold">
                     <ArrowLeft className="h-4 w-4" />
@@ -1355,6 +1447,84 @@ export default function QuizSessionPage({
                 <p className="text-xs text-on-surface-variant">
                   Your response will be submitted for evaluation.
                 </p>
+              </div>
+            )}
+
+            {/* ================================================================
+                ANSWER & EXPLANATION - Hiển thị khi đã Reveal Answers
+                ================================================================ */}
+            {submitted && showFeedback && currentQ && (currentQ.explanation || currentQ.correctAnswer) && (
+              <div className="mt-6 space-y-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Lightbulb className="h-5 w-5 text-primary" />
+                  <h4 className="font-headline text-base font-bold text-on-surface">Answer & Explanation</h4>
+                </div>
+
+                {/* Correct Answer & Your Answer */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-success/30 bg-success/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-success mb-1">Correct Answer</p>
+                    <p className="text-lg font-bold text-success">
+                      {currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select'
+                        ? (currentQ.correctAnswers ? JSON.parse(currentQ.correctAnswers).join(', ') : 'N/A')
+                        : currentQ.correctAnswer || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`rounded-xl border p-4 ${
+                    currentState === 'correct'
+                      ? 'border-success/30 bg-success/10'
+                      : currentState === 'incorrect'
+                        ? 'border-destructive/30 bg-destructive/10'
+                        : 'border-outline-variant/30 bg-surface-container-low'
+                  }`}>
+                    <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                      currentState === 'correct'
+                        ? 'text-success'
+                        : currentState === 'incorrect'
+                          ? 'text-destructive'
+                          : 'text-on-surface-variant'
+                    }`}>Your Answer</p>
+                    <p className={`text-lg font-bold ${
+                      currentState === 'correct'
+                        ? 'text-success'
+                        : currentState === 'incorrect'
+                          ? 'text-destructive'
+                          : 'text-on-surface-variant'
+                    }`}>
+                      {currentAnswer || 'Not answered'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Explanation */}
+                {currentQ.explanation && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/50 dark:border-amber-800/30 dark:bg-amber-950/20 p-4">
+                    <div className="flex items-start gap-3">
+                      <BookOpen className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-bold text-amber-800 dark:text-amber-200 mb-2">Explanation</p>
+                        <p className="text-sm text-amber-900/80 dark:text-amber-100/80 leading-relaxed">
+                          {currentQ.explanation}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Essay Model Answer (nếu có từ reviewData) */}
+                {currentQ.type?.toLowerCase() === 'essay' && getEssayModelAnswer(currentQ.questionId) && (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50/50 dark:border-violet-800/30 dark:bg-violet-950/20 p-4">
+                    <div className="flex items-start gap-3">
+                      <Sparkles className="h-5 w-5 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-violet-800 dark:text-violet-200 mb-2">Model Answer</p>
+                        <p className="text-sm text-violet-900/80 dark:text-violet-100/80 leading-relaxed whitespace-pre-wrap">
+                          {getEssayModelAnswer(currentQ.questionId)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -1148,10 +1148,12 @@ export async function getQuizAttemptDetail(
   classId: string,
   quizId: string,
   attemptId: string,
+  signal?: AbortSignal,
 ): Promise<QuizAttemptDetailDto> {
   try {
     const { data } = await http.get<QuizAttemptDetailDto>(
       `/api/lecturer/classes/${classId}/assignments/quizzes/${quizId}/attempts/${attemptId}`,
+      { signal },
     );
     return data;
   } catch (e) {

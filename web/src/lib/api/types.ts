@@ -267,6 +267,7 @@ export interface CaseDto {
   isApproved: boolean;
   isActive: boolean;
   createdAt: string | null;
+  imageUrl: string | null;
 }
 
 /** GET /api/lecturer/classes/{classId}/questions */
@@ -538,7 +539,8 @@ export interface StudentProgress {
 
 export interface StudentTopicStat {
   topicName: string;
-  accuracyRate: number;
+  /** Null when there are no quiz attempts for this topic yet. */
+  accuracyRate: number | null;
   quizAttempts: number;
 }
 

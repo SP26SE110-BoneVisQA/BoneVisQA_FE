@@ -16,7 +16,7 @@ export function useClassQuizAttempts(classId: string, quizId: string) {
     queryKey: queryKeys.lecturer.quizResults(quizId),
     queryFn: () => getClassQuizAttempts(classId, quizId),
     enabled: Boolean(classId && quizId),
-    staleTime: 15_000,
+    staleTime: 60_000, // 60 seconds - reduce unnecessary refetches
   });
 }
 

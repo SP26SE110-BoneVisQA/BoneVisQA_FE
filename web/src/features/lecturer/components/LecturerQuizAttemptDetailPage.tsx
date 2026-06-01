@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -60,7 +60,41 @@ export function LecturerQuizAttemptDetailPage({
 }) {
   const { id: quizId, attemptId } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
+
+  // Read classId from URL search params directly - much more reliable
+  const classIdFromUrl = searchParams.get('classId') ?? '';
+  const [classId, setClassId] = useState<string>(classIdFromUrl);
+
+  // Load quiz to get classId only as fallback if not in URL
+  useEffect(() => {
+    if (classIdFromUrl) {
+      // classId is in URL, no need to load quiz
+      setClassId(classIdFromUrl);
+      return;
+    }
+
+    // Fallback: load quiz to get classId
+    const abortCtrl = new AbortController();
+    async function loadQuiz() {
+      try {
+        const quiz = await getQuiz(quizId, abortCtrl.signal);
+        if (!abortCtrl.signal.aborted) {
+          setClassId(quiz.classId);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name !== 'AbortError') {
+          toast.error(e instanceof Error ? e.message : 'Failed to load quiz metadata.');
+        }
+      }
+    }
+    void loadQuiz();
+    return () => {
+      abortCtrl.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizId]);
 
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<QuizAttemptDetailDto | null>(null);
@@ -78,50 +112,49 @@ export function LecturerQuizAttemptDetailPage({
   const [editAnswers, setEditAnswers] = useState<UpdateAnswerDto[]>([]);
   const [editScore, setEditScore] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const [classId, setClassId] = useState<string>('');
-
-  // Load quiz to get classId first
-  useEffect(() => {
-    async function loadQuiz() {
-      try {
-        const quiz = await getQuiz(quizId);
-        setClassId(quiz.classId);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to load quiz metadata.');
-      }
-    }
-    void loadQuiz();
-  }, [quizId]);
 
   // Load attempt detail
   useEffect(() => {
     if (!classId) return;
+    const abortCtrl = new AbortController();
     async function loadDetail() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getQuizAttemptDetail(classId, quizId, attemptId);
-        setDetail(data);
-        setEditScore(data.score);
-        setEditAnswers(data.questions.map(q => ({
-          answerId: q.answerId,
-          studentAnswer: q.type?.toLowerCase() === 'essay' ? null : q.studentAnswer,
-          essayAnswer: q.type?.toLowerCase() === 'essay' ? q.essayAnswer : null,
-          isCorrect: q.isCorrect,
-          scoreAwarded: q.scoreAwarded ?? null,
-          lecturerFeedback: q.lecturerFeedback ?? null,
-          isGraded: q.isGraded,
-        })));
+        const data = await getQuizAttemptDetail(classId, quizId, attemptId, abortCtrl.signal);
+        if (!abortCtrl.signal.aborted) {
+          setDetail(data);
+          setEditScore(data.score);
+          setEditAnswers(data.questions.map(q => ({
+            answerId: q.answerId,
+            studentAnswer: q.type?.toLowerCase() === 'essay' ? null : q.studentAnswer,
+            essayAnswer: q.type?.toLowerCase() === 'essay' ? q.essayAnswer : null,
+            isCorrect: q.isCorrect,
+            scoreAwarded: q.scoreAwarded ?? null,
+            lecturerFeedback: q.lecturerFeedback ?? null,
+            isGraded: q.isGraded,
+          })));
+        }
       } catch (e) {
-        const msg = getApiErrorMessage(e);
-        setError(msg);
-        toast.error(msg);
+        if (e instanceof Error && e.name !== 'AbortError') {
+          const msg = getApiErrorMessage(e);
+          if (!abortCtrl.signal.aborted) {
+            setError(msg);
+            toast.error(msg);
+          }
+        }
       } finally {
-        setLoading(false);
+        if (!abortCtrl.signal.aborted) {
+          setLoading(false);
+        }
       }
     }
     void loadDetail();
-  }, [classId, quizId, attemptId, toast]);
+    return () => {
+      abortCtrl.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classId, quizId, attemptId]);
 
   const currentQ = detail?.questions[currentIndex];
   const totalQ = detail?.questions.length ?? 0;
