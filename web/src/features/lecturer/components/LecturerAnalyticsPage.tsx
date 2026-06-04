@@ -33,7 +33,7 @@ export function LecturerAnalyticsPage() {
   const classOptions = useMemo(
     () =>
       classPerformance.map((cls) => ({
-        id: cls.classId,
+        classId: cls.classId,
         label: cls.className,
         students: cls.studentCount,
         avgScore: cls.avgQuizScore,
@@ -41,7 +41,7 @@ export function LecturerAnalyticsPage() {
     [classPerformance],
   );
 
-  const [selectedClassId, setSelectedClassId] = useState(() => classOptions[0]?.id ?? '');
+  const [selectedClassId, setSelectedClassId] = useState(() => classOptions[0]?.classId ?? '');
   const activeClass = classPerformance.find((cls) => cls.classId === selectedClassId) ?? classPerformance[0];
 
   const selectedIndex = classPerformance.findIndex((cls) => cls.classId === selectedClassId);
@@ -92,11 +92,9 @@ export function LecturerAnalyticsPage() {
           <ul className="space-y-2">
             {items.map((student, idx) => {
               const displayScore =
-                typeof student.avgScore === 'number'
-                  ? Math.round(student.avgScore)
-                  : typeof student.score === 'number'
-                    ? Math.round(student.score)
-                    : null;
+                typeof student.averageQuizScore === 'number'
+                  ? Math.round(student.averageQuizScore)
+                  : null;
               return (
                 <li
                   key={`${student.studentName}-${idx}`}
@@ -142,16 +140,16 @@ export function LecturerAnalyticsPage() {
                 className="h-10 rounded-lg border border-border bg-card px-3 text-sm"
               >
                 {classOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
+                  <option key={option.classId} value={option.classId}>
                     {option.label}
                     {typeof option.avgScore === 'number' ? ` · ${Math.round(option.avgScore)}%` : ''}
                   </option>
                 ))}
               </select>
-              <Button type="button" variant="outline" onClick={() => setSelectedClassId(nextClass?.id ?? selectedClassId)} disabled={!nextClass}>
+              <Button type="button" variant="outline" onClick={() => setSelectedClassId(nextClass?.classId ?? selectedClassId)} disabled={!nextClass}>
                 Previous class
               </Button>
-              <Button type="button" variant="outline" onClick={() => setSelectedClassId(prevClass?.id ?? selectedClassId)} disabled={!prevClass}>
+              <Button type="button" variant="outline" onClick={() => setSelectedClassId(prevClass?.classId ?? selectedClassId)} disabled={!prevClass}>
                 Next class
               </Button>
             </div>
