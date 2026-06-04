@@ -4,6 +4,7 @@ import { AnnotationOverlay } from '@/components/shared/AnnotationOverlay';
 import { markdownExternalLinkComponents } from '@/components/shared/markdownExternalLinks';
 import { PolygonAnnotationOverlay } from '@/components/shared/PolygonAnnotationOverlay';
 import { RectangleAnnotationOverlay } from '@/components/shared/RectangleAnnotationOverlay';
+import { DicomMetadataSummary } from '@/components/shared/DicomMetadataSummary';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +21,7 @@ import { putExpertReviewDraft } from '@/lib/api/expert-reviews';
 import { isValidNormalizedBoundingBox } from '@/lib/utils/annotations';
 import { withPageAnchor } from '@/components/student/VisualQaRichAnswer';
 import { splitLearningBullets } from '@/lib/utils/learning-text';
-import { getWorkflowStatusMeta, type WorkflowStatusTone } from '@/lib/visual-qa-workflow';
+import { getWorkflowStatusMeta, normalizeWorkflowStatus, type WorkflowStatusTone } from '@/lib/visual-qa-workflow';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useEffect, useState } from 'react';
@@ -56,37 +57,33 @@ function workflowToneBadgeClass(tone: WorkflowStatusTone): string {
 }
 
 function ExpertImagingOverlays({ item }: { item: ExpertReviewItem }) {
-  try {
-    if (item.customBoundingBox && isValidNormalizedBoundingBox(item.customBoundingBox)) {
-      return (
-        <RectangleAnnotationOverlay
-          closed={item.customBoundingBox}
-          draft={null}
-          label="STUDENT ROI"
-          className="drop-shadow-[0_0_12px_rgba(239,68,68,0.35)]"
-        />
-      );
-    }
-    if (item.customPolygon && item.customPolygon.length >= 3) {
-      return (
-        <PolygonAnnotationOverlay
-          closed={item.customPolygon}
-          draft={[]}
-          label="STUDENT ROI"
-          className="drop-shadow-[0_0_12px_rgba(239,68,68,0.35)]"
-        />
-      );
-    }
+  if (item.customBoundingBox && isValidNormalizedBoundingBox(item.customBoundingBox)) {
     return (
-      <AnnotationOverlay
-        box={item.customCoordinates}
+      <RectangleAnnotationOverlay
+        closed={item.customBoundingBox}
+        draft={null}
         label="STUDENT ROI"
-        className="border-dashed border-cyan-accent text-cyan-accent shadow-[0_0_28px_rgba(0,229,255,0.3)]"
+        className="drop-shadow-[0_0_12px_rgba(239,68,68,0.35)]"
       />
     );
-  } catch {
-    return null;
   }
+  if (item.customPolygon && item.customPolygon.length >= 3) {
+    return (
+      <PolygonAnnotationOverlay
+        closed={item.customPolygon}
+        draft={[]}
+        label="STUDENT ROI"
+        className="drop-shadow-[0_0_12px_rgba(239,68,68,0.35)]"
+      />
+    );
+  }
+  return (
+    <AnnotationOverlay
+      box={item.customCoordinates}
+      label="STUDENT ROI"
+      className="border-dashed border-cyan-accent text-cyan-accent shadow-[0_0_28px_rgba(0,229,255,0.3)]"
+    />
+  );
 }
 
 export function reflectiveQuestionsToEditText(
@@ -412,6 +409,8 @@ export type ExpertReviewWorkspaceProps = {
   libraryCategoryId: string;
   libraryDifficulty: string;
   libraryTagsCsv: string;
+  libraryAnatomySite?: string;
+  libraryModality?: string;
   categories: ExpertCategory[];
   onLibraryTitleChange: (v: string) => void;
   onLibraryCategoryIdChange: (v: string) => void;
@@ -448,6 +447,8 @@ export function ExpertReviewWorkspace({
   libraryCategoryId,
   libraryDifficulty,
   libraryTagsCsv,
+  libraryAnatomySite,
+  libraryModality,
   categories,
   onLibraryTitleChange,
   onLibraryCategoryIdChange,
@@ -455,9 +456,6 @@ export function ExpertReviewWorkspace({
   onLibraryTagsCsvChange,
 }: ExpertReviewWorkspaceProps) {
   const [correctedRoi, setCorrectedRoi] = useState<NormalizedImageBoundingBox | null>(null);
-  useEffect(() => {
-    setCorrectedRoi(null);
-  }, [item.sessionId, roiClearEpoch]);
 
   useEffect(() => {
     if (pairMismatch) return;
@@ -528,9 +526,11 @@ export function ExpertReviewWorkspace({
             >
               {formatExpertAskedAt(item.askedAt)}
             </Badge>
-            <Badge variant="outline" className={workflowToneBadgeClass(statusMeta.tone)}>
-              {statusMeta.label}
-            </Badge>
+            {normalizeWorkflowStatus(item.status) !== 'EscalatedToExpert' ? (
+              <Badge variant="outline" className={workflowToneBadgeClass(statusMeta.tone)}>
+                {statusMeta.label}
+              </Badge>
+            ) : null}
             {item.queueSource === 'dashboard-summary' ? (
               <Badge
                 variant="outline"
@@ -541,9 +541,11 @@ export function ExpertReviewWorkspace({
               </Badge>
             ) : null}
             {catalogCase ? (
-              <Badge variant="secondary">Case chat</Badge>
+              <Badge variant="outline" className="border-sky-200 bg-sky-50 font-medium text-sky-950">
+                Case chat
+              </Badge>
             ) : (
-              <Badge variant="accent" className="border-0 bg-indigo-600 font-medium text-white">
+              <Badge variant="outline" className="border-amber-200 bg-amber-50 font-medium text-amber-950">
                 Personal Upload
               </Badge>
             )}
@@ -558,9 +560,10 @@ export function ExpertReviewWorkspace({
               <CardTitle className="text-sm font-semibold text-muted-foreground">Medical imaging</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-            <div className="overflow-hidden rounded-xl border border-border/50 bg-slate-50 shadow-sm">
+            <div className="max-h-[500px] overflow-hidden rounded-xl border border-border/50 bg-slate-50 shadow-sm">
               {resolvedImageSrc ? (
                 <MedicalImageViewer
+                  key={`${item.sessionId}:${roiClearEpoch ?? 0}`}
                   src={resolvedImageSrc}
                   alt="Study radiograph"
                   readOnly={pairMismatch}
@@ -579,64 +582,12 @@ export function ExpertReviewWorkspace({
             </div>
             </CardContent>
           </Card>
-          {catalogCase &&
-          (Boolean(item.caseId?.trim()) ||
-            item.caseTitle?.trim() ||
-            item.caseDescription?.trim() ||
-            item.caseSuggestedDiagnosis?.trim() ||
-            item.caseKeyFindings?.trim()) ? (
-            <Card className="border-border/50 bg-muted/25 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Case snapshot (catalog)</CardTitle>
-                <CardDescription className="text-xs">Library metadata linked to this session</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-              {item.caseTitle?.trim() ? (
-                <p className="font-semibold leading-snug text-foreground">{item.caseTitle.trim()}</p>
-              ) : null}
-              {item.caseDescription?.trim() ? (
-                <p className="leading-relaxed text-foreground">{item.caseDescription.trim()}</p>
-              ) : null}
-              {item.caseSuggestedDiagnosis?.trim() ? (
-                <div className="mt-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Suggested diagnosis</p>
-                  <p className="mt-1 text-foreground">{item.caseSuggestedDiagnosis.trim()}</p>
-                </div>
-              ) : null}
-              {item.caseKeyFindings?.trim() ? (
-                <div className="mt-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Key findings</p>
-                  <p className="mt-1 text-foreground">{item.caseKeyFindings.trim()}</p>
-                </div>
-              ) : null}
-              </CardContent>
-            </Card>
-          ) : null}
-          {!catalogCase ? (
-            <Card className="border-dashed border-amber-500/35 bg-amber-500/[0.06] shadow-sm">
-              <CardContent className="flex flex-wrap items-center gap-3 py-5">
-                <Badge variant="accent" className="border-0 bg-indigo-600 font-medium text-white">
-                  Personal Upload
-                </Badge>
-                <p className="text-sm text-muted-foreground">
-                  Catalog case metadata is hidden for student-uploaded studies.
-                </p>
-              </CardContent>
-            </Card>
-          ) : null}
-        </section>
-
-        <section className="flex min-h-0 flex-col gap-4">
-          <Card className="border-border/50 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Session</CardTitle>
-              <CardDescription className="text-xs">
-                {item.turns?.length
-                  ? `${item.turns.length} turn(s) in this escalation. Details below: clinical question, AI report, and evidence.`
-                  : 'Turn metadata was not loaded for this row.'}
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <DicomMetadataSummary
+            metadata={item.dicomMetadata}
+            title="DICOM metadata"
+            description="Use modality, anatomy, and acquisition context before approving or publishing."
+            emptyLabel="No DICOM metadata was returned for this escalated review."
+          />
         </section>
       </div>
 
@@ -650,14 +601,40 @@ export function ExpertReviewWorkspace({
           />
         </div>
         <div className="space-y-4">
-          <Card className="border-slate-300 shadow-sm">
+          <Card className="border-primary/20 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-slate-900">Clinical question</CardTitle>
+              <CardTitle className="text-sm font-semibold text-foreground">Student question</CardTitle>
+              <CardDescription className="text-xs">Original escalation from the learner</CardDescription>
             </CardHeader>
-            <CardContent className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium leading-relaxed text-slate-900 shadow-inner">
+            <CardContent className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm font-medium leading-relaxed text-foreground">
               {item.question}
             </CardContent>
           </Card>
+
+          <Card className="border-border shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold text-foreground">AI generated answer</CardTitle>
+              <CardDescription className="text-xs">Review before editing or approving for students</CardDescription>
+            </CardHeader>
+            <CardContent className="rounded-xl border border-border bg-card px-4 py-3 text-sm leading-relaxed text-foreground">
+              {item.report.answerText?.trim() ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ ...markdownExternalLinkComponents }}>
+                  {item.report.answerText.trim()}
+                </ReactMarkdown>
+              ) : (
+                <p className="text-muted-foreground">No AI answer text was returned for this session.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-amber-200/60 bg-amber-50/30 shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold text-foreground">Expert clinical override</CardTitle>
+              <CardDescription className="text-xs">
+                Refine structured diagnosis, imaging findings, and reflective prompts
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
           <ReportWorkbench
             report={item.report}
             isEditing={isEditing}
@@ -672,6 +649,8 @@ export function ExpertReviewWorkspace({
             onReflectiveChange={onReflectiveChange}
             onBeginEdit={onOpenEdit}
           />
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -680,10 +659,30 @@ export function ExpertReviewWorkspace({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-emerald-950">Publish to student library</CardTitle>
             <CardDescription className="text-xs text-emerald-900/90">
-              Bắt buộc: tiêu đề, category, độ khó, tags. Mô tả case và findings lấy từ báo cáo AI (chỉnh ở khối phía trên).
+              Required: title, category, difficulty, and tags. Descriptions use your clinical override above.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-800">Anatomy site</span>
+              <input
+                type="text"
+                value={libraryAnatomySite ?? ''}
+                disabled
+                placeholder="Auto-filled from DICOM metadata"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm opacity-80"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-800">Modality</span>
+              <input
+                type="text"
+                value={libraryModality ?? ''}
+                disabled
+                placeholder="Auto-filled from DICOM metadata"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm opacity-80"
+              />
+            </label>
             <label className="space-y-1 sm:col-span-2">
               <span className="text-xs font-semibold text-slate-800">Title</span>
               <input
@@ -702,7 +701,7 @@ export function ExpertReviewWorkspace({
                 disabled={pairMismatch}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60"
               >
-                <option value="">— Chọn category —</option>
+                <option value="">— Select category —</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -739,7 +738,7 @@ export function ExpertReviewWorkspace({
       ) : null}
 
       {!isTerminal(item.status) && (
-        <div className="sticky bottom-0 z-10 mt-8 space-y-3 border-t border-slate-200 bg-white p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="sticky bottom-0 z-10 mt-8 space-y-3 border-t border-border bg-card p-4 shadow-lg">
           <textarea
             value={replyDraft}
             onChange={(e) => onReplyDraftChange(e.target.value)}

@@ -6,6 +6,7 @@ import type {
   VisualQaTurn,
 } from './types';
 import { parseNormalizedBoundingBox } from '@/lib/utils/annotations';
+import { normalizeDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 
 function pick<T extends object>(o: T, keys: string[]): unknown {
   for (const k of keys) {
@@ -45,8 +46,9 @@ function normalizeRootPayload(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== 'object') return {};
 
   const base = raw as Record<string, unknown>;
-  const nestedCandidate = pick(base, ['data']);
-  if (nestedCandidate && nestedCandidate !== raw) {
+  for (const key of ['data', 'result', 'item', 'payload']) {
+    const nestedCandidate = pick(base, [key]);
+    if (!nestedCandidate || nestedCandidate === raw) continue;
     if (nestedCandidate && typeof nestedCandidate === 'object' && !Array.isArray(nestedCandidate)) {
       const normalizedNested = normalizeRootPayload(nestedCandidate);
       if (Object.keys(normalizedNested).length > 0) return normalizedNested;
@@ -78,6 +80,190 @@ function normalizeVisualQaMessage(raw: unknown): VisualQaMessage | null {
   };
 }
 
+function parseCitationLikeEntry(raw: unknown): VisualQaCitation | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const cc = raw as Record<string, unknown>;
+  const snippetFromApi =
+    asNullableString(cc.snippet) ??
+    asNullableString(
+      cc.sourceText ??
+        cc.source_text ??
+        cc.preview ??
+        cc.text ??
+        cc.chunkText ??
+        cc.chunk_text ??
+        cc.excerpt,
+    );
+  const titleFromApi =
+    asNullableString(cc.title) ??
+    asNullableString(cc.documentTitle ?? cc.document_title ?? cc.documentName ?? cc.document_name);
+  const documentUrl =
+    asNullableString(
+      cc.documentUrl ??
+        cc.document_url ??
+        cc.url ??
+        cc.fileUrl ??
+        cc.file_url ??
+        cc.referenceUrl ??
+        cc.reference_url,
+    ) ?? undefined;
+  const caseId = asNullableString(cc.caseId ?? cc.case_id ?? cc.medicalCaseId ?? cc.medical_case_id);
+  const documentId = asNullableString(cc.documentId ?? cc.document_id);
+  const chunkId = asNullableString(cc.chunkId ?? cc.chunk_id ?? cc.id ?? cc.ChunkId);
+  const displayLabel =
+    asNullableString(cc.displayLabel ?? cc.display_label ?? cc.sourceLabel ?? cc.source_label) ?? undefined;
+  const label = asNullableString(cc.label ?? cc.referenceLabel ?? cc.reference_label) ?? undefined;
+  const href = asNullableString(cc.href ?? cc.referenceHref ?? cc.reference_href) ?? undefined;
+  const version = asNullableString(cc.version ?? cc.documentVersion ?? cc.document_version) ?? undefined;
+  const pageNumber = asNullableNumber(cc.pageNumber ?? cc.page_number);
+  const startPage = asNullableNumber(cc.startPage ?? cc.start_page);
+  const endPage = asNullableNumber(cc.endPage ?? cc.end_page);
+  const chunkOrder = asNullableNumber(cc.chunkOrder ?? cc.chunk_order);
+  const pageLabel =
+    asNullableString(cc.pageLabel ?? cc.page_label) ??
+    (pageNumber != null ? `Page ${pageNumber}` : undefined);
+  const rawKind = asNullableString(cc.kind ?? cc.type)?.toLowerCase();
+  const kind =
+    rawKind === 'document'
+      ? 'doc'
+      : rawKind === 'case'
+        ? 'case'
+        : caseId
+          ? 'case'
+          : documentUrl || documentId || chunkId
+            ? 'doc'
+            : undefined;
+
+  if (
+    !snippetFromApi &&
+    !titleFromApi &&
+    !documentUrl &&
+    !caseId &&
+    !documentId &&
+    !chunkId &&
+    !displayLabel &&
+    !label &&
+    !href
+  ) {
+    return null;
+  }
+
+  return {
+    kind,
+    documentUrl,
+    chunkOrder,
+    pageNumber,
+    startPage,
+    endPage,
+    title: titleFromApi ?? undefined,
+    label,
+    displayLabel,
+    snippet: snippetFromApi ?? undefined,
+    pageLabel,
+    href,
+    documentId: documentId ?? undefined,
+    caseId: caseId ?? undefined,
+    chunkId: chunkId ?? undefined,
+    version,
+  };
+}
+
+function citationListFromUnknown(raw: unknown): VisualQaCitation[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .map(parseCitationLikeEntry)
+      .filter((citation): citation is VisualQaCitation => citation !== null);
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      return citationListFromUnknown(JSON.parse(raw) as unknown);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function dedupeCitations(citations: VisualQaCitation[]): VisualQaCitation[] {
+  const seen = new Set<string>();
+  const out: VisualQaCitation[] = [];
+  for (const citation of citations) {
+    const key = [
+      citation.kind ?? '',
+      citation.chunkId ?? '',
+      citation.documentId ?? '',
+      citation.caseId ?? '',
+      citation.documentUrl ?? '',
+      citation.href ?? '',
+      citation.title ?? '',
+      citation.pageLabel ?? '',
+      citation.snippet ?? '',
+    ]
+      .join('::')
+      .toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(citation);
+  }
+  return out;
+}
+
+function mergeTurnWithReport(turn: VisualQaTurn, report: VisualQaReport): VisualQaTurn {
+  const mergedReflective = reflectiveQuestionsReportToTurnArray(report.reflectiveQuestions);
+  return {
+    ...turn,
+    answerText: turn.answerText?.trim() || report.answerText?.trim() || turn.answerText,
+    diagnosis: turn.diagnosis?.trim() || report.diagnosis?.trim() || turn.diagnosis,
+    findings: turn.findings?.length ? turn.findings : report.findings ?? turn.findings,
+    differentialDiagnoses:
+      turn.differentialDiagnoses?.length ? turn.differentialDiagnoses : report.differentialDiagnoses,
+    reflectiveQuestions:
+      turn.reflectiveQuestions?.length ? turn.reflectiveQuestions : mergedReflective ?? turn.reflectiveQuestions,
+    citations: turn.citations?.length ? turn.citations : report.citations,
+    aiConfidenceScore: turn.aiConfidenceScore ?? report.aiConfidenceScore,
+    responseKind: turn.responseKind ?? report.responseKind,
+    clientRequestId: turn.clientRequestId ?? report.clientRequestId,
+    policyReason: turn.policyReason ?? report.policyReason,
+    systemNoticeCode: turn.systemNoticeCode ?? report.systemNoticeCode,
+  };
+}
+
+function upsertLatestTurn(turns: VisualQaTurn[], latest: VisualQaTurn | null): VisualQaTurn[] {
+  if (!latest) return turns;
+  const matchIndex = turns.findIndex((turn) => {
+    if (latest.turnId?.trim() && turn.turnId?.trim()) {
+      return latest.turnId.trim() === turn.turnId.trim();
+    }
+    if (latest.clientRequestId?.trim() && turn.clientRequestId?.trim()) {
+      return latest.clientRequestId.trim() === turn.clientRequestId.trim();
+    }
+    return latest.turnIndex === turn.turnIndex;
+  });
+  if (matchIndex >= 0) {
+    const next = [...turns];
+    const existing = next[matchIndex];
+    next[matchIndex] = {
+      ...existing,
+      ...latest,
+      messages: latest.messages?.length ? latest.messages : existing.messages,
+      questionCoordinates: latest.questionCoordinates ?? existing.questionCoordinates,
+      roiBoundingBox: latest.roiBoundingBox ?? existing.roiBoundingBox,
+      expertCorrectedRoiBoundingBox:
+        latest.expertCorrectedRoiBoundingBox ?? existing.expertCorrectedRoiBoundingBox,
+      findings: latest.findings?.length ? latest.findings : existing.findings,
+      reflectiveQuestions: latest.reflectiveQuestions?.length
+        ? latest.reflectiveQuestions
+        : existing.reflectiveQuestions,
+      differentialDiagnoses: latest.differentialDiagnoses?.length
+        ? latest.differentialDiagnoses
+        : existing.differentialDiagnoses,
+      citations: latest.citations?.length ? latest.citations : existing.citations,
+    };
+    return next;
+  }
+  return [...turns, latest].sort((a, b) => a.turnIndex - b.turnIndex);
+}
+
 export function normalizeVisualQaReport(raw: unknown): VisualQaReport {
   const o = normalizeRootPayload(raw);
   const questionText = asString(pick(o, ['questionText', 'QuestionText'])).trim();
@@ -100,47 +286,40 @@ export function normalizeVisualQaReport(raw: unknown): VisualQaReport {
   const keyFindings = asStringArray(pick(o, ['keyFindings', 'key_findings']));
   const keyImagingFindings = asString(pick(o, ['keyImagingFindings', 'key_imaging_findings'])).trim();
   const findings = asStringArray(pick(o, ['findings', 'Findings']));
-  const differentialDiagnoses = asStringArray(pick(o, ['differentialDiagnoses']));
-  const reflectiveQuestions = asStringArray(pick(o, ['reflectiveQuestions']));
+  const differentialDiagnoses = asStringArray(
+    pick(o, ['differentialDiagnoses', 'DifferentialDiagnoses', 'differential_diagnoses']),
+  );
+  const reflectiveQuestions = asStringArray(
+    pick(o, ['reflectiveQuestions', 'ReflectiveQuestions', 'reflective_questions']),
+  );
 
-  let citations: VisualQaCitation[] = [];
-  const cit = pick(o, ['citations']);
-  if (Array.isArray(cit)) {
-    citations = cit.map((c) => {
-      if (!c || typeof c !== 'object') return {};
-      const cc = c as Record<string, unknown>;
-      const snippetFromApi =
-        asNullableString(cc.snippet) ??
-        asNullableString(cc.sourceText ?? cc.source_text ?? cc.preview ?? cc.text ?? cc.chunkText ?? cc.chunk_text);
-      const titleFromApi =
-        asNullableString(cc.title) ?? asNullableString(cc.documentTitle ?? cc.document_title);
-      return {
-        kind:
-          (() => {
-            const rawKind = asNullableString(cc.kind)?.toLowerCase();
-            if (!rawKind) return undefined;
-            if (rawKind === 'document') return 'doc';
-            return rawKind;
-          })(),
-        documentUrl:
-          asNullableString(cc.documentUrl ?? cc.document_url ?? cc.url ?? cc.fileUrl ?? cc.file_url) ?? undefined,
-        chunkOrder: asNullableNumber(cc.chunkOrder ?? cc.chunk_order),
-        pageNumber: asNullableNumber(cc.pageNumber ?? cc.page_number),
-        startPage: asNullableNumber(cc.startPage ?? cc.start_page),
-        endPage: asNullableNumber(cc.endPage ?? cc.end_page),
-        title: titleFromApi ?? undefined,
-        label: asNullableString(cc.label) ?? undefined,
-        displayLabel: asNullableString(cc.displayLabel ?? cc.display_label) ?? undefined,
-        snippet: snippetFromApi ?? undefined,
-        pageLabel: asNullableString(cc.pageLabel ?? cc.page_label) ?? undefined,
-        href: asNullableString(cc.href) ?? undefined,
-        documentId: asNullableString(cc.documentId ?? cc.document_id) ?? undefined,
-        caseId: asNullableString(cc.caseId ?? cc.case_id) ?? undefined,
-        chunkId: asNullableString(cc.chunkId ?? cc.chunk_id) ?? undefined,
-        version: asNullableString(cc.version) ?? undefined,
-      };
-    });
-  }
+  const citations = dedupeCitations(
+    [
+      'citations',
+      'Citations',
+      'references',
+      'References',
+      'sourceChunks',
+      'source_chunks',
+      'SourceChunks',
+      'sourceDocuments',
+      'source_documents',
+      'ragCitations',
+      'rag_citations',
+      'ragChunks',
+      'rag_chunks',
+      'retrievedChunks',
+      'retrieved_chunks',
+      'source_chunks',
+      'citations_json',
+      'citationsJson',
+      'CitationsJson',
+      'references_json',
+      'referencesJson',
+    ]
+      .flatMap((key) => citationListFromUnknown(pick(o, [key])))
+      .filter((citation) => citation !== null),
+  );
 
   const confRaw = pick(o, ['aiConfidenceScore']);
   let aiConfidenceScore: number | undefined;
@@ -242,6 +421,7 @@ function normalizeVisualQaTurn(raw: unknown, fallbackIndex: number): VisualQaTur
       pick(o, ['assistantMessageId', 'assistant_message_id', 'messageId', 'message_id']),
     ),
     reviewState: asNullableString(pick(o, ['reviewState', 'review_state'])),
+    answerStatus: asNullableString(pick(o, ['answerStatus', 'AnswerStatus', 'answer_status'])),
     lastResponderRole: asNullableString(pick(o, ['lastResponderRole', 'last_responder_role'])),
     actorRole: asNullableString(pick(o, ['actorRole', 'actor_role'])),
     isReviewTarget:
@@ -280,6 +460,11 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
   const caseId = asString(pick(o, ['caseId'])).trim() || null;
   const imageId = asString(pick(o, ['imageId'])).trim() || null;
   const status = asString(pick(o, ['status'])).trim() || null;
+  const sessionStatus =
+    asNullableString(pick(o, ['sessionStatus', 'session_status', 'SessionStatus'])) ?? status;
+  const reviewFeedback = asNullableString(
+    pick(o, ['reviewFeedback', 'review_feedback', 'ReviewFeedback']),
+  );
   const updatedAtRaw = pick(o, ['updatedAt']);
   const updatedAt = typeof updatedAtRaw === 'string' ? updatedAtRaw : null;
   const sessionMessagesRaw = pick(o, ['messages']);
@@ -288,8 +473,8 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
         .map((row): VisualQaMessage | null => normalizeVisualQaMessage(row))
         .filter((message): message is VisualQaMessage => message !== null)
     : [];
-  const turnsRaw = pick(o, ['turns']);
-  const turns = Array.isArray(turnsRaw)
+  const turnsRaw = pick(o, ['turns', 'Turns']);
+  let turns = Array.isArray(turnsRaw)
     ? turnsRaw.map((row, idx) => normalizeVisualQaTurn(row, idx + 1))
     : [];
   const latestTurnRaw = pick(o, ['latestTurn', 'latest_turn', 'latest']);
@@ -324,7 +509,6 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
           reason: asString((capabilitiesRaw as { reason?: unknown }).reason).trim() || null,
         }
       : undefined;
-  const latest = latestFromPayload ?? (turns.length > 0 ? turns[turns.length - 1] : null);
   const systemNoticeRaw = pick(o, ['systemNotice', 'system_notice']);
   const systemNotice =
     typeof systemNoticeRaw === 'string'
@@ -344,6 +528,9 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
       : null;
   const topLevelReport = normalizeVisualQaReport(o);
   const sessionReflective = reflectiveQuestionsReportToTurnArray(topLevelReport.reflectiveQuestions);
+  const dicomMetadata = normalizeDicomMetadata(
+    pick(o, ['dicomMetadata', 'dicom_metadata', 'DicomMetadata', 'metadata', 'Metadata']),
+  );
   const sessionImageUrl = asNullableString(
     pick(o, [
       'sessionImageUrl',
@@ -361,6 +548,14 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
   const threadRoiBoundingBox = parseNormalizedBoundingBox(
     pick(o, ['roiBoundingBox', 'roi_bounding_box', 'RoiBoundingBox']),
   );
+
+  const latestEnriched = latestFromPayload
+    ? mergeTurnWithReport(latestFromPayload, topLevelReport)
+    : turns.length > 0
+      ? mergeTurnWithReport(turns[turns.length - 1], topLevelReport)
+      : null;
+
+  turns = upsertLatestTurn(turns, latestEnriched);
 
   return {
     sessionId: sessionId || 'session-local',
@@ -380,7 +575,10 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
     ...(topLevelReport.citations.length > 0 ? { citations: topLevelReport.citations } : {}),
     caseId,
     imageId,
+    ...(dicomMetadata ? { dicomMetadata } : {}),
     status,
+    sessionStatus,
+    reviewFeedback,
     updatedAt,
     reviewState: asNullableString(pick(o, ['reviewState', 'review_state'])),
     lastResponderRole: asNullableString(pick(o, ['lastResponderRole', 'last_responder_role'])),
@@ -393,6 +591,6 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
     ...(capabilities ? { capabilities } : {}),
     ...(messages.length > 0 ? { messages } : {}),
     turns,
-    latest,
+    latest: latestEnriched,
   };
 }

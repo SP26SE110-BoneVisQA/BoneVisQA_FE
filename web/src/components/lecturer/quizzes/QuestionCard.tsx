@@ -6,11 +6,11 @@ import {
   Pencil,
   Trash2,
   CheckCircle2,
+  CheckSquare,
   ZoomIn,
-  ImageOff,
-  Lightbulb,
-  MessageSquare,
   CircleDot,
+  Award,
+  ImageOff,
 } from 'lucide-react';
 import type { QuizQuestionDto } from '@/lib/api/types';
 import {
@@ -23,10 +23,15 @@ interface QuestionCardProps {
   caseThumbnail?: string;
   onEdit?: (question: QuizQuestionDto) => void;
   onDelete?: (questionId: string, questionText: string) => void;
+  points?: number;
   /** Rich layout for quiz detail / Question Manager */
   variant?: 'default' | 'manager' | 'curated';
   /** Topic pill for curated variant (e.g. Trauma, Imaging) */
   topicCategory?: string;
+  /** Selection mode for bulk operations */
+  selectable?: boolean;
+  isSelected?: boolean;
+  onSelect?: (questionId: string, selected: boolean) => void;
 }
 
 function formatDisplayId(id: string): string {
@@ -42,26 +47,14 @@ function getQuestionTypeStyle(type: string | null): {
   if (t === 'truefalse' || t === 'true/false') {
     return {
       label: 'True / False',
-      badgeClass: 'bg-orange-100 text-orange-900',
+      badgeClass: 'bg-[#ffdcc3] text-[#6e3900]',
     };
   }
-  if (t === 'multiselect' || t === 'multi-select') {
+  if (t === 'annotation' || t === 'draw') {
     return {
-      label: 'Multi-Select',
-      badgeClass: 'bg-blue-100 text-blue-900',
+      label: 'Annotation',
+      badgeClass: 'bg-violet-100 text-violet-900',
     };
-  }
-  if (t === 'fillinblank' || t === 'fill-in-blank') {
-    return {
-      label: 'Fill in Blank',
-      badgeClass: 'bg-green-100 text-green-900',
-    };
-  }
-  if (t === 'essay') {
-  return {
-    label: 'Essay',
-    badgeClass: 'bg-purple-100 text-purple-900',
-  };
   }
   return {
     label: 'Multiple Choice',
@@ -107,8 +100,12 @@ export default function QuestionCard({
   caseThumbnail,
   onEdit,
   onDelete,
+  points = 10,
   variant = 'default',
   topicCategory = 'Trauma',
+  selectable = false,
+  isSelected = false,
+  onSelect,
 }: QuestionCardProps) {
   const typeStyle = getQuestionTypeStyle(question.type);
   const isTrueFalse =
@@ -131,7 +128,17 @@ export default function QuestionCard({
     const hasRealImage = hasQuizQuestionCustomImage(question, caseThumbnail);
 
     return (
-      <div className="group flex gap-8 rounded-3xl bg-card p-8 shadow-lg shadow-black/5 transition-all hover:bg-muted/20 hover:shadow-xl hover:shadow-black/10 border border-border/30">
+      <div className={`group flex gap-8 rounded-3xl bg-card p-8 shadow-lg shadow-black/5 transition-all hover:bg-muted/20 hover:shadow-xl hover:shadow-black/10 border border-border/30 ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
+        {selectable && (
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={(e) => onSelect?.(question.id, e.target.checked)}
+              className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+            />
+          </div>
+        )}
         <div className="relative h-44 w-72 flex-shrink-0 overflow-hidden rounded-2xl bg-slate-900 shadow-xl">
           <ImageWithFallback
             src={thumbSrc}
@@ -187,6 +194,10 @@ export default function QuestionCard({
               <CircleDot className="h-4 w-4" />
               {typeStyle.label}
             </span>
+            <span className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+              <Award className="h-4 w-4" />
+              {points} Points
+            </span>
           </div>
         </div>
       </div>
@@ -195,7 +206,17 @@ export default function QuestionCard({
 
   if (variant === 'manager') {
     return (
-      <div className="group rounded-[1.75rem] border border-transparent bg-card p-8 shadow-sm transition-all hover:border-[#00478d]/15 hover:shadow-xl hover:shadow-[#00478d]/5">
+      <div className={`group rounded-[1.75rem] border border-transparent bg-card p-8 shadow-sm transition-all hover:border-[#00478d]/15 hover:shadow-xl hover:shadow-[#00478d]/5 ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
+        {selectable && (
+          <div className="absolute top-4 right-4">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={(e) => onSelect?.(question.id, e.target.checked)}
+              className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+            />
+          </div>
+        )}
         <div className="mb-6 flex items-start justify-between">
           <div className="flex flex-wrap items-center gap-3">
             <span
@@ -336,32 +357,9 @@ export default function QuestionCard({
         )}
 
         <div className="mt-4 flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          {question.caseTitle && <span>{question.caseTitle}</span>}
+          <span>{points} pts</span>
+          {question.caseTitle && <span>· {question.caseTitle}</span>}
         </div>
-
-        {/* Hint & Explanation Display */}
-        {(question.hint || question.explanation) && (
-          <div className="mt-4 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-            {question.hint && (
-              <div className="flex items-start gap-2">
-                <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                <div>
-                  <span className="block text-xs font-bold text-amber-800">Hint</span>
-                  <span className="text-sm text-amber-700">{question.hint}</span>
-                </div>
-              </div>
-            )}
-            {question.explanation && (
-              <div className="flex items-start gap-2">
-                <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-                <div>
-                  <span className="block text-xs font-bold text-blue-800">Explanation</span>
-                  <span className="text-sm text-blue-700">{question.explanation}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     );
   }
@@ -371,7 +369,17 @@ export default function QuestionCard({
   const defaultHasCustom = hasQuizQuestionCustomImage(question, caseThumbnail);
 
   return (
-    <div className="bg-card rounded-2xl border-2 border-border p-5 transition-colors hover:bg-accent/5 group">
+    <div className={`bg-card rounded-2xl border-2 border-border p-5 transition-colors hover:bg-accent/5 group ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
+      {selectable && (
+        <div className="flex items-start pt-1">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => onSelect?.(question.id, e.target.checked)}
+            className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+          />
+        </div>
+      )}
       <div className="flex gap-5">
         <div className="relative h-32 w-44 flex-shrink-0 overflow-hidden rounded-xl bg-muted">
           <ImageWithFallback
@@ -424,6 +432,9 @@ export default function QuestionCard({
           </div>
 
           <div className="mt-3 flex items-center gap-4">
+            <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+              {points} Points
+            </span>
             {question.correctAnswer && (
               <span className="rounded bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
                 Answer: {question.correctAnswer}

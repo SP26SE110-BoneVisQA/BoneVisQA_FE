@@ -5,9 +5,11 @@ import type { Config } from "tailwindcss";
  * Scrollbar utilities: `@plugin "tailwind-scrollbar"` in globals.css (not this file).
  */
 const config: Config = {
+  darkMode: false,
   content: [
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/features/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {

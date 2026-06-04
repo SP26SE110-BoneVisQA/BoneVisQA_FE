@@ -1,23 +1,13 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import Header from '@/components/Header';
+import { DashboardOverviewLayout } from '@/components/layouts';
 import { SectionCard } from '@/components/shared/SectionCard';
-import { SkeletonBlock, StudentDashboardSkeleton } from '@/components/shared/DashboardSkeletons';
-import ProgressRing from '@/components/student/ProgressRing';
+import { useStudentDashboardQueries } from '@/features/student/hooks/useStudentDashboardQueries';
 import QuickActionCard from '@/components/student/QuickActionCard';
 import { StudentDashboardFab } from '@/components/student/StudentAppChrome';
-import {
-  fetchStudentProgress,
-  fetchStudentRecentActivity,
-  fetchStudentTopicStats,
-} from '@/lib/api/student';
 import { resolveStudentRecentActivityHref } from '@/lib/student/recent-activity-href';
-import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/lib/useAuth';
-import type { LucideIcon } from 'lucide-react';
 import {
   BookOpen,
   CheckCircle2,
@@ -28,66 +18,13 @@ import {
   MessageSquare,
   PlayCircle,
   ShieldAlert,
-  Target,
   Trophy,
   User,
+  ArrowRight,
+  Brain,
+  Target,
 } from 'lucide-react';
-
-type StatCardModel = {
-  title: string;
-  value: string | number;
-  change?: string;
-  changeType?: 'positive' | 'negative' | 'neutral';
-  icon: LucideIcon;
-  iconColor?: string;
-};
-
-/** API-backed destinations only — no legacy topic chat routes. */
-const quickActions = [
-  {
-    title: 'New visual QA',
-    description: 'Upload an imaging study and ask one focused clinical question.',
-    icon: ImageUp,
-    href: '/student/qa/image',
-    iconColor: 'bg-primary/15 text-primary',
-  },
-  // TODO: Uncomment when AI Image Practice is ready for production
-  // {
-  //   title: 'AI Image Practice',
-  //   description: 'Upload an X-ray and get AI-generated practice questions instantly.',
-  //   icon: ImageIcon,
-  //   href: '/student/ai-quiz/image-based',
-  //   iconColor: 'bg-purple-500/15 text-purple-700',
-  // },
-  {
-    title: 'View history',
-    description: 'Review your past visual QA requests and expert review status.',
-    icon: History,
-    href: '/student/history',
-    iconColor: 'bg-slate-500/15 text-slate-700',
-  },
-  {
-    title: 'Case catalog',
-    description: 'Browse curated teaching cases by location, lesion type, and difficulty.',
-    icon: Library,
-    href: '/student/catalog',
-    iconColor: 'bg-sky-500/15 text-sky-800',
-  },
-  {
-    title: 'Practice quiz',
-    description: 'Load a live quiz attempt from the backend by topic.',
-    icon: Trophy,
-    href: '/student/quiz',
-    iconColor: 'bg-cyan-accent/15 text-primary',
-  },
-  {
-    title: 'My profile',
-    description: 'Update your cohort and profile fields visible to instructors.',
-    icon: User,
-    href: '/student/profile',
-    iconColor: 'bg-emerald-500/15 text-emerald-800',
-  },
-];
+import MiniProgressRing from '@/components/student/MiniProgressRing';
 
 function formatQuizPercent(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '—';
@@ -99,452 +36,356 @@ function clampPercent(value: number | null | undefined): number {
   return Math.min(100, Math.max(0, value));
 }
 
+const quickActions = [
+  {
+    title: 'New visual QA',
+    icon: ImageUp,
+    href: '/student/visual-qa/workspace',
+    iconColor: 'bg-primary/15 text-primary',
+  },
+  {
+    title: 'View history',
+    icon: History,
+    href: '/student/history',
+    iconColor: 'bg-slate-500/15 text-slate-700',
+  },
+  {
+    title: 'Case catalog',
+    icon: Library,
+    href: '/student/catalog',
+    iconColor: 'bg-sky-500/15 text-sky-800',
+  },
+  {
+    title: 'Practice quiz',
+    icon: Trophy,
+    href: '/student/quiz',
+    iconColor: 'bg-cyan-accent/15 text-primary',
+  },
+  {
+    title: 'My profile',
+    icon: User,
+    href: '/student/profile',
+    iconColor: 'bg-emerald-500/15 text-emerald-800',
+  },
+];
+
 export default function StudentDashboard() {
   const { user } = useAuth();
-  const toast = useToast();
-  const progressQuery = useQuery({
-    queryKey: ['student', 'dashboard', 'progress'],
-    queryFn: fetchStudentProgress,
-  });
-  const topicQuery = useQuery({
-    queryKey: ['student', 'dashboard', 'topic-stats'],
-    queryFn: fetchStudentTopicStats,
-  });
-  const activityQuery = useQuery({
-    queryKey: ['student', 'dashboard', 'recent-activity'],
-    queryFn: fetchStudentRecentActivity,
-  });
-  const progress = progressQuery.data ?? null;
-  const topicStats = topicQuery.data ?? [];
-  const recentActivity = activityQuery.data ?? [];
-  const progressError = progressQuery.error;
-  const topicError = topicQuery.error;
-  const activityError = activityQuery.error;
-  const progressPending = progressQuery.isPending;
-  const topicPending = topicQuery.isPending;
-  const activityPending = activityQuery.isPending;
-
-  useEffect(() => {
-    if (progressError) {
-      toast.error(progressError instanceof Error ? progressError.message : 'Failed to load student progress.');
-    }
-  }, [progressError, toast]);
-  useEffect(() => {
-    if (topicError) {
-      toast.error(topicError instanceof Error ? topicError.message : 'Failed to load topic analytics.');
-    }
-  }, [topicError, toast]);
-  useEffect(() => {
-    if (activityError) {
-      toast.error(activityError instanceof Error ? activityError.message : 'Failed to load recent activity.');
-    }
-  }, [activityError, toast]);
-
-  const statCards = useMemo<StatCardModel[]>(
-    () =>
-      progress
-        ? [
-            {
-              title: 'Cases viewed',
-              value: progress.totalCasesViewed,
-              change: 'From live progress analytics',
-              changeType: 'neutral' as const,
-              icon: BookOpen,
-              iconColor: 'bg-primary/10 text-primary',
-            },
-            {
-              title: 'Questions asked',
-              value: progress.totalQuestionsAsked,
-              change: `${progress.escalatedAnswers} escalated to experts`,
-              changeType: 'neutral' as const,
-              icon: MessageSquare,
-              iconColor: 'bg-cyan-accent/10 text-primary',
-            },
-            {
-              title: 'Average quiz score',
-              value: formatQuizPercent(progress.avgQuizScore),
-              change: `${progress.completedQuizzes} completed quizzes`,
-              changeType:
-                progress.avgQuizScore != null && !Number.isNaN(progress.avgQuizScore) && progress.avgQuizScore >= 70
-                  ? 'positive'
-                  : 'neutral',
-              icon: Trophy,
-              iconColor: 'bg-amber-500/10 text-amber-700',
-            },
-            {
-              title: 'Quiz accuracy',
-              value: formatQuizPercent(progress.quizAccuracyRate),
-              change: `${progress.totalQuizAttempts} total attempts`,
-              changeType:
-                progress.quizAccuracyRate != null &&
-                !Number.isNaN(progress.quizAccuracyRate) &&
-                progress.quizAccuracyRate >= 70
-                  ? 'positive'
-                  : 'neutral',
-              icon: Target,
-              iconColor: 'bg-emerald-500/10 text-emerald-700',
-            },
-          ]
-        : [],
-    [progress],
-  );
+  const {
+    progress,
+    topicStats,
+    recentActivity,
+    isLoading,
+    activityPending,
+    activityError,
+  } = useStudentDashboardQueries();
 
   const firstName = user?.fullName?.trim().split(/\s+/)[0] || 'there';
-  const goalTopic = topicStats[0]?.topicName ?? 'Musculoskeletal focus';
-  const showInitialSkeleton =
-    progressPending &&
-    topicPending &&
-    activityPending &&
-    !progress &&
-    topicStats.length === 0 &&
-    recentActivity.length === 0;
+  const mastery = clampPercent(progress?.quizAccuracyRate ?? progress?.avgQuizScore ?? null);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Header
-        title="Student dashboard"
-        subtitle="Track progress, browse cases, and continue your radiology learning path."
-      />
+    <DashboardOverviewLayout title="Student dashboard" isLoading={isLoading}>
+      <>
+        {/* Header */}
+        <section className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+          <div>
+            <p className="mb-1 text-xs font-bold uppercase tracking-[0.2em] text-primary">
+              Welcome back
+            </p>
+            <h2 className="font-headline text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+              {firstName}
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/student/visual-qa/workspace"
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <PlayCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
+              New visual QA
+            </Link>
+            <Link
+              href="/student/quiz"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+            >
+              Practice quiz
+            </Link>
+          </div>
+        </section>
 
-      <div className="mx-auto max-w-[1600px] space-y-8 px-6 py-6">
-        {showInitialSkeleton ? (
-          <StudentDashboardSkeleton />
-        ) : (
-          <>
-            <section className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
-              <div>
-                <h2 className="font-headline text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-                  Welcome back, {firstName}
-                </h2>
-                <p className="mt-2 max-w-xl text-base text-muted-foreground">
-                  {progress?.quizAccuracyRate != null && !Number.isNaN(progress.quizAccuracyRate) ? (
-                    <>
-                      You&apos;ve completed {Math.min(100, Math.round(progress.quizAccuracyRate))}% of your weekly
-                      radiology goals.{' '}
-                    </>
-                  ) : (
-                    <>No quiz accuracy recorded yet. Complete a quiz to see goal progress. </>
-                  )}
-                  Continue with case reviews or a practice quiz.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  href="/student/qa/image"
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  <PlayCircle className="h-5 w-5 shrink-0" aria-hidden />
-                  New visual QA
-                </Link>
-                <Link
-                  href="/student/quiz"
-                  className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
-                >
-                  Practice quiz
-                </Link>
-              </div>
-            </section>
+        {/* Bento Grid */}
+        <div className="grid grid-cols-12 gap-6">
 
-            {!progress && !progressPending ? (
-              <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-8 text-center shadow-sm">
-                <BookOpen className="mx-auto h-8 w-8 text-muted-foreground" />
-                <h3 className="mt-3 text-base font-semibold text-foreground">Progress widget unavailable</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {(progressError instanceof Error ? progressError.message : progressError) ??
-                    'Progress analytics are temporarily unavailable, but other widgets still load.'}
-                </p>
-              </div>
-            ) : null}
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="group flex flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-                  <BookOpen className="h-6 w-6" />
-                </div>
+          {/* Hero: Mastery ring + 3 stat chips */}
+          <div className="col-span-12 rounded-2xl border border-border bg-card p-8 shadow-sm lg:col-span-5">
+            <div className="flex flex-col items-center gap-8 sm:flex-row sm:items-start">
+              <MiniProgressRing
+                progress={mastery}
+                size={160}
+                strokeWidth={12}
+                label="Mastery"
+              />
+              <div className="flex flex-col gap-4">
                 <div>
-                  <span className="font-headline text-3xl font-bold tracking-tight text-foreground">
-                    {progress?.totalCasesViewed ?? 0}
-                  </span>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cases viewed</p>
+                  <p className="text-sm font-semibold text-foreground">Cases viewed</p>
+                  <div className="mt-1 flex items-baseline gap-1">
+                    <span className="font-headline text-3xl font-bold text-foreground">
+                      {progress?.totalCasesViewed ?? 0}
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${Math.min(100, (progress?.totalCasesViewed ?? 0) * 5)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="group flex flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/15 text-amber-700 transition-colors group-hover:bg-amber-600 group-hover:text-white">
-                  <Trophy className="h-6 w-6" />
-                </div>
+                <div className="h-px w-full bg-border" />
                 <div>
-                  <span className="font-headline text-3xl font-bold tracking-tight text-foreground">
-                    {formatQuizPercent(progress?.avgQuizScore)}
-                  </span>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Avg. quiz score</p>
+                  <p className="text-sm font-semibold text-foreground">Avg. quiz score</p>
+                  <div className="mt-1 flex items-baseline gap-1">
+                    <span className="font-headline text-3xl font-bold text-foreground">
+                      {formatQuizPercent(progress?.avgQuizScore)}
+                    </span>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {progress?.completedQuizzes ?? 0} completed · {progress?.totalQuizAttempts ?? 0} attempts
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-500/15 text-sky-800">
-                  <Target className="h-6 w-6" />
-                </div>
+                <div className="h-px w-full bg-border" />
                 <div>
-                  <span className="font-headline text-lg font-bold text-foreground">Study focus</span>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current goal</p>
+                  <p className="text-sm font-semibold text-foreground">Quiz accuracy</p>
+                  <div className="mt-1 flex items-baseline gap-1">
+                    <span className="font-headline text-3xl font-bold text-foreground">
+                      {formatQuizPercent(progress?.quizAccuracyRate)}
+                    </span>
+                  </div>
                 </div>
-                <p className="text-sm text-muted-foreground">Topic spotlight: {goalTopic}</p>
               </div>
             </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {statCards.map((stat) => {
-                const Icon = stat.icon;
-                return (
-                  <div
-                    key={stat.title}
-                    className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm text-muted-foreground">{stat.title}</p>
-                        <p className="font-headline text-2xl font-bold text-foreground">{stat.value}</p>
-                        {stat.change ? <p className="mt-1 text-xs text-muted-foreground">{stat.change}</p> : null}
-                      </div>
-                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${stat.iconColor}`}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="mt-6 grid grid-cols-3 gap-4">
+              <div className="flex flex-col items-center rounded-xl bg-muted/60 p-3 text-center">
+                <MessageSquare className="mb-1.5 h-4 w-4 text-primary" />
+                <span className="font-headline text-xl font-bold text-foreground">
+                  {progress?.totalQuestionsAsked ?? 0}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Questions
+                </span>
+              </div>
+              <div className="flex flex-col items-center rounded-xl bg-muted/60 p-3 text-center">
+                <Trophy className="mb-1.5 h-4 w-4 text-amber-600" />
+                <span className="font-headline text-xl font-bold text-foreground">
+                  {progress?.completedQuizzes ?? 0}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Quizzes
+                </span>
+              </div>
+              <div className="flex flex-col items-center rounded-xl bg-muted/60 p-3 text-center">
+                <Clock className="mb-1.5 h-4 w-4 text-slate-600" />
+                <span className="font-headline text-xl font-bold text-foreground">
+                  {progress?.totalQuizAttempts ?? 0}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Attempts
+                </span>
+              </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-              <div className="space-y-6">
-                <SectionCard>
-                  <div className="mb-5">
-                    <h2 className="font-headline text-xl font-bold tracking-tight text-foreground">Quick actions</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Shortcuts to live workflows backed by the BoneVisQA API.
-                    </p>
-                  </div>
-                  <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,17.5rem),1fr))]">
-                    {quickActions.map((action) => (
-                      <QuickActionCard key={action.title} {...action} />
-                    ))}
-                  </div>
-                </SectionCard>
+          {/* AI Tutor card */}
+          <div className="col-span-12 flex flex-col justify-between overflow-hidden rounded-2xl bg-[#2d3133] p-8 text-white lg:col-span-4">
+            <div className="relative">
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 backdrop-blur-md">
+                <Brain className="h-5 w-5 text-[#97f2ef]" />
+              </div>
+              <h3 className="font-headline text-xl font-bold text-white">
+                AI Clinical Tutor
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-white/50">
+                Get instant differential diagnosis support and evidence-based clinical reasoning.
+              </p>
+            </div>
+            <Link
+              href="/student/visual-qa/workspace"
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#97f2ef] px-5 py-2.5 text-sm font-bold text-[#00201f] transition-all hover:scale-[1.02] active:scale-95"
+            >
+              Ask AI Tutor
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
 
-                <SectionCard
-                  title="Topic mastery"
-                  description="Quiz accuracy and attempts by topic from your progress analytics."
+          {/* Quiz CTA card */}
+          <div className="col-span-12 flex flex-col justify-between rounded-2xl border border-border bg-card p-8 shadow-sm lg:col-span-3">
+            <div>
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                <Target className="h-5 w-5 text-primary" />
+              </div>
+              <h3 className="font-headline text-xl font-bold text-foreground">
+                Daily Quiz Challenge
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Sharpen your diagnostic skills with a quick practice quiz.
+              </p>
+            </div>
+            <Link
+              href="/student/quiz"
+              className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white transition-all hover:bg-primary/90"
+            >
+              Start Quiz
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          {/* Quick actions */}
+          <div className="col-span-12">
+            <SectionCard title="Quick actions">
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                {quickActions.map((action) => (
+                  <QuickActionCard key={action.title} {...action} />
+                ))}
+              </div>
+            </SectionCard>
+          </div>
+
+          {/* Topic mastery */}
+          <div className="col-span-12 lg:col-span-7">
+            <SectionCard title="Topic mastery">
+              {topicStats.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border bg-muted/30 py-10 text-center text-sm text-muted-foreground">
+                  No topic analytics available yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {topicStats.map((topic, idx) => {
+                    const pct = Math.min(
+                      100,
+                      Math.max(
+                        0,
+                        topic.accuracyRate != null && Number.isFinite(topic.accuracyRate)
+                          ? Math.round(topic.accuracyRate)
+                          : 0,
+                      ),
+                    );
+                    const hasAccuracy = topic.accuracyRate != null && Number.isFinite(topic.accuracyRate);
+                    return (
+                      <div
+                        key={topic.topicName?.trim() || `topic-${idx}`}
+                        className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/25"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <BookOpen className="h-4 w-4 shrink-0 text-primary" />
+                          <span className="truncate text-sm font-semibold text-foreground">
+                            {topic.topicName?.trim() || 'Unnamed topic'}
+                          </span>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-800">
+                          {hasAccuracy ? `${pct}% accuracy` : '—'}
+                        </span>
+                        <span className="w-24 shrink-0 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-1.5 rounded-full bg-primary transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {typeof topic.quizAttempts === 'number' && Number.isFinite(topic.quizAttempts)
+                            ? topic.quizAttempts
+                            : 0}{' '}
+                          attempts
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </SectionCard>
+          </div>
+
+          {/* Recent activity */}
+          <div className="col-span-12 lg:col-span-5">
+            <SectionCard
+              title="Recent activity"
+              actions={
+                <Link
+                  href="/student/history"
+                  className="text-xs font-semibold text-primary hover:underline"
                 >
-                  {topicPending ? (
-                    <div className="space-y-3">
-                      <div className="h-20 animate-pulse rounded-xl bg-muted/60" />
-                      <div className="h-20 animate-pulse rounded-xl bg-muted/60" />
-                    </div>
-                  ) : topicError ? (
-                    <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
-                      {topicError instanceof Error ? topicError.message : topicError}
-                    </div>
-                  ) : topicStats.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
-                      No topic analytics available yet.
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {topicStats.map((topic, idx) => (
-                        <div
-                          key={topic.topicName?.trim() || `topic-${idx}`}
-                          className="rounded-xl border border-border bg-card p-4"
+                  View all
+                </Link>
+              }
+            >
+              {activityPending ? (
+                <div className="space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="h-16 animate-pulse rounded-xl bg-muted/60"
+                    />
+                  ))}
+                </div>
+              ) : activityError ? (
+                <div className="rounded-xl border border-dashed border-border bg-muted/30 py-8 text-center text-sm text-muted-foreground">
+                  {activityError instanceof Error ? activityError.message : activityError}
+                </div>
+              ) : recentActivity.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border bg-muted/30 py-8 text-center text-sm text-muted-foreground">
+                  No recent activity has been recorded yet.
+                </div>
+              ) : (
+                <ol className="space-y-2">
+                  {recentActivity.slice(0, 5).map((activity, actIdx) => {
+                    const normalizedStatus = activity.status?.toLowerCase();
+                    const activityHref = resolveStudentRecentActivityHref(activity);
+                    const statusBadge =
+                      normalizedStatus === 'approved' || normalizedStatus === 'revised'
+                        ? {
+                            label: 'Verified',
+                            className: 'bg-emerald-500/10 text-emerald-800',
+                            icon: CheckCircle2,
+                          }
+                        : normalizedStatus === 'pending' || normalizedStatus === 'pendingexpert'
+                          ? {
+                              label: 'Under Review',
+                              className: 'bg-amber-500/10 text-amber-800',
+                              icon: ShieldAlert,
+                            }
+                          : null;
+                    const StatusIcon = statusBadge?.icon;
+
+                    return (
+                      <li key={activity.id?.trim() || `activity-${actIdx}`}>
+                        <Link
+                          href={activityHref}
+                          className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 transition hover:border-primary/25 hover:bg-muted/30"
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-foreground">
-                                {topic.topicName?.trim() || 'Unnamed topic'}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-foreground">
+                              {activity.title?.trim() || 'Activity'}
+                            </p>
+                            {activity.description?.trim() ? (
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {activity.description}
                               </p>
-                              <p className="text-xs text-muted-foreground">
-                                {typeof topic.quizAttempts === 'number' && Number.isFinite(topic.quizAttempts)
-                                  ? topic.quizAttempts
-                                  : 0}{' '}
-                                quiz attempts
-                              </p>
-                            </div>
-                            <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-800">
-                              {typeof topic.accuracyRate === 'number' && Number.isFinite(topic.accuracyRate)
-                                ? `${topic.accuracyRate.toFixed(1)}% accuracy`
-                                : '—'}
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1.5">
+                            <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-900">
+                              {activity.type?.trim() || 'General'}
                             </span>
+                            {statusBadge && StatusIcon ? (
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge.className}`}
+                              >
+                                <StatusIcon className="h-3 w-3" />
+                                {statusBadge.label}
+                              </span>
+                            ) : null}
                           </div>
-                          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className="h-full rounded-full bg-primary transition-all"
-                              style={{
-                                width: `${Math.min(
-                                  100,
-                                  Math.max(
-                                    0,
-                                    typeof topic.accuracyRate === 'number' && Number.isFinite(topic.accuracyRate)
-                                      ? topic.accuracyRate
-                                      : 0,
-                                  ),
-                                )}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </SectionCard>
-              </div>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </SectionCard>
+          </div>
 
-              <div className="space-y-6">
-                <SectionCard>
-                  <h2 className="mb-4 text-lg font-semibold text-foreground">Overall progress</h2>
-                  <div className="flex flex-col items-center">
-                    <ProgressRing progress={clampPercent(progress?.quizAccuracyRate)} size={140} strokeWidth={10} />
-                    <div className="mt-4 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        Latest quiz score:{' '}
-                        <span className="font-medium text-foreground">{formatQuizPercent(progress?.latestQuizScore)}</span>
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {progress?.completedQuizzes ?? 0} completed quizzes across {progress?.totalQuizAttempts ?? 0} attempts
-                      </p>
-                    </div>
-                  </div>
-                </SectionCard>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-2xl border border-border bg-card p-4 text-center shadow-sm">
-                    <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                      <Clock className="h-6 w-6 text-primary" />
-                    </div>
-                    <p className="text-2xl font-bold text-foreground">{progress?.totalQuizAttempts ?? 0}</p>
-                    <p className="text-sm text-muted-foreground">Quiz attempts</p>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-card p-4 text-center shadow-sm">
-                    <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-cyan-accent/10">
-                      <MessageSquare className="h-6 w-6 text-primary" />
-                    </div>
-                    <p className="text-2xl font-bold text-foreground">{progress?.escalatedAnswers ?? 0}</p>
-                    <p className="text-sm text-muted-foreground">Escalated answers</p>
-                  </div>
-                </div>
-
-                <SectionCard
-                  title="Recent activity"
-                  description="Latest study, quiz, and expert-review events (chronological)."
-                >
-                  {activityPending ? (
-                    <div className="space-y-4" aria-busy="true" aria-label="Loading recent activity">
-                      {[0, 1, 2].map((i) => (
-                        <div
-                          key={i}
-                          className="rounded-xl border border-border bg-card p-4"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1 space-y-2">
-                              <SkeletonBlock className="h-4 w-48 max-w-full" />
-                              <SkeletonBlock className="h-3 w-full max-w-md" />
-                            </div>
-                            <SkeletonBlock className="h-3 w-16 shrink-0" />
-                          </div>
-                          <div className="mt-3 flex gap-2">
-                            <SkeletonBlock className="h-5 w-20 rounded-full" />
-                            <SkeletonBlock className="h-5 w-28 rounded-full" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : activityError ? (
-                    <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
-                      {activityError instanceof Error ? activityError.message : activityError}
-                    </div>
-                  ) : recentActivity.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
-                      No recent activity has been recorded yet.
-                    </div>
-                  ) : (
-                    <ol className="space-y-4">
-                      {recentActivity.map((activity, actIdx) => {
-                        const normalizedStatus = activity.status?.toLowerCase();
-                        const activityHref = resolveStudentRecentActivityHref(activity);
-                        const statusBadge =
-                          normalizedStatus === 'approved' || normalizedStatus === 'revised'
-                            ? {
-                                label: 'Verified by Expert',
-                                className: 'bg-emerald-500/10 text-emerald-800',
-                                icon: CheckCircle2,
-                              }
-                            : normalizedStatus === 'pending' || normalizedStatus === 'pendingexpert'
-                              ? {
-                                  label: 'Under Expert Review',
-                                  className: 'bg-amber-500/10 text-amber-800',
-                                  icon: ShieldAlert,
-                                }
-                              : null;
-                        const StatusIcon = statusBadge?.icon;
-
-                        return (
-                          <li
-                            key={activity.id?.trim() || `activity-${actIdx}`}
-                            className="rounded-xl border border-border bg-card p-4 transition hover:border-primary/30 hover:bg-primary/5"
-                          >
-                            <Link href={activityHref} className="block">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-semibold text-foreground">
-                                    {activity.title?.trim() || 'Activity'}
-                                  </p>
-                                  {activity.description?.trim() ? (
-                                    <p className="mt-1 text-sm text-muted-foreground">{activity.description}</p>
-                                  ) : null}
-                                </div>
-                                <span className="shrink-0 text-xs text-muted-foreground">
-                                  {activity.occurredAt?.trim() || '—'}
-                                </span>
-                              </div>
-                              <div className="mt-3 flex flex-wrap items-center gap-2">
-                                <span className="rounded-full bg-sky-500/10 px-2.5 py-1 text-[11px] font-semibold text-sky-900">
-                                  {activity.type?.trim() || 'General'}
-                                </span>
-                                {statusBadge && StatusIcon ? (
-                                  <span
-                                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusBadge.className}`}
-                                  >
-                                    <StatusIcon className="h-3.5 w-3.5" />
-                                    {statusBadge.label}
-                                  </span>
-                                ) : null}
-                              </div>
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  )}
-                </SectionCard>
-              </div>
-            </div>
-
-            <div className="flex justify-end border-t border-border pt-6">
-              <Link href="/student/quiz" className="text-sm font-medium text-primary hover:underline">
-                Open practice quizzes
-              </Link>
-            </div>
-          </>
-        )}
-      </div>
+        </div>
+      </>
       <StudentDashboardFab />
-    </div>
+    </DashboardOverviewLayout>
   );
 }

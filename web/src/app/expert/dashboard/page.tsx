@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import Header from '@/components/Header';
-import { PageLoadingSkeleton } from '@/components/shared/DashboardSkeletons';
+import { DashboardOverviewLayout } from '@/components/layouts';
 import QuickStatsCard from '@/components/expert/QuickStatsCard';
 import ReviewCard from '@/components/expert/ReviewCard';
 import CaseManagementCard from '@/components/expert/CaseManagementCard';
@@ -18,40 +17,21 @@ import {
   Plus,
   Filter,
 } from 'lucide-react';
-import {
-  EXPERT_DASHBOARD_QUERY_KEY,
-  fetchExpertDashboardBundle,
-} from '@/lib/api/expert-dashboard';
+import { fetchExpertDashboardBundle } from '@/lib/api/expert-dashboard';
+import { queryKeys } from '@/lib/query-keys';
+import { getQueryErrorMessage } from '@/lib/query-utils';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/components/ui/toast';
 import { EmptyState } from '@/components/shared/EmptyState';
 
 export default function ExpertDashboardPage() {
   const router = useRouter();
-  const toast = useToast();
-  const toastedErrorRef = useRef<string | null>(null);
 
   const { data: bundle, error, isPending } = useQuery({
-    queryKey: EXPERT_DASHBOARD_QUERY_KEY,
+    queryKey: queryKeys.expert.dashboard(),
     queryFn: fetchExpertDashboardBundle,
   });
 
-  const errorMessage = error
-    ? error instanceof Error
-      ? error.message
-      : 'Failed to load dashboard data.'
-    : null;
-
-  useEffect(() => {
-    if (!errorMessage) {
-      toastedErrorRef.current = null;
-      return;
-    }
-    if (toastedErrorRef.current === errorMessage) return;
-    toastedErrorRef.current = errorMessage;
-    toast.error(errorMessage);
-  }, [errorMessage, toast]);
+  const errorMessage = error ? getQueryErrorMessage(error, 'Failed to load dashboard data.') : null;
 
   const stats = bundle?.stats ?? null;
   const pendingReviews = bundle?.pendingReviews ?? [];
@@ -104,168 +84,13 @@ export default function ExpertDashboardPage() {
   }, [caseTab, recentCases]);
 
   return (
-    <div className="min-h-screen">
-      <Header title="Expert workbench" subtitle="Reviews, case library, and clinical quality" />
-
-      <div className="mx-auto max-w-[1200px] p-6">
-        {isPending && !bundle ? (
-          <PageLoadingSkeleton>
-            <div className="space-y-6" aria-hidden>
-              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {[0, 1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="min-h-[132px] rounded-2xl border border-border bg-card p-5 shadow-sm"
-                  >
-                    <div className="mb-3 flex items-start justify-between">
-                      <Skeleton className="h-12 w-12 shrink-0 rounded-lg" />
-                      <Skeleton className="h-4 w-14 shrink-0" />
-                    </div>
-                    <Skeleton className="mb-1 h-9 w-24 max-w-[55%]" />
-                    <Skeleton className="h-4 w-32 max-w-[70%]" />
-                  </div>
-                ))}
-              </div>
-
-              <div className="mb-6 flex flex-wrap gap-3">
-                <Skeleton className="h-10 w-[11.5rem] rounded-lg" />
-                <Skeleton className="h-10 w-36 rounded-lg" />
-              </div>
-
-              <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <div className="space-y-6 lg:col-span-2">
-                  <div>
-                    <div className="mb-4 flex items-center justify-between gap-4">
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <Skeleton className="h-7 w-56 max-w-full" />
-                        <Skeleton className="h-4 w-72 max-w-full" />
-                      </div>
-                      <Skeleton className="h-4 w-16 shrink-0" />
-                    </div>
-                    <div className="space-y-4">
-                      {[0, 1].map((i) => (
-                        <div
-                          key={i}
-                          className="min-h-[304px] overflow-hidden rounded-2xl border border-border bg-card shadow-md"
-                        >
-                          <div className="space-y-3 p-5 pb-3">
-                            <div className="flex flex-wrap gap-2">
-                              <Skeleton className="h-6 w-24 rounded-full" />
-                              <Skeleton className="h-6 w-20 rounded-full" />
-                              <Skeleton className="h-6 w-28 rounded-full" />
-                            </div>
-                            <Skeleton className="h-5 w-full max-w-lg" />
-                          </div>
-                          <div className="space-y-4 p-5 pb-4 pt-0">
-                            <div className="flex items-center gap-3">
-                              <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
-                              <div className="min-w-0 flex-1 space-y-2">
-                                <Skeleton className="h-4 w-48 max-w-full" />
-                                <Skeleton className="h-3 w-28" />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Skeleton className="h-4 w-40" />
-                              <Skeleton className="h-4 w-full" />
-                              <Skeleton className="h-4 w-[92%]" />
-                            </div>
-                            <div className="rounded-xl border border-border/60 bg-muted/35 p-3">
-                              <Skeleton className="h-3 w-36" />
-                              <Skeleton className="mt-2 h-4 w-full" />
-                              <Skeleton className="mt-1 h-4 w-[88%]" />
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2 border-t border-border/60 bg-muted/20 p-5 pt-4">
-                            <Skeleton className="h-10 min-w-[7rem] flex-1 rounded-md sm:flex-none sm:min-w-[8rem]" />
-                            <Skeleton className="h-10 w-10 rounded-md" />
-                            <Skeleton className="h-10 w-10 rounded-md" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-4 flex items-center justify-between gap-4">
-                      <Skeleton className="h-7 w-48 max-w-[70%]" />
-                      <Skeleton className="h-4 w-28 shrink-0" />
-                    </div>
-                    <Skeleton className="mb-4 flex min-h-[3.25rem] flex-wrap gap-2 rounded-xl border border-border bg-muted/40 p-1">
-                      {[0, 1, 2, 3].map((j) => (
-                        <Skeleton key={j} className="h-[2.625rem] min-w-[calc(50%-4px)] flex-1 rounded-lg sm:min-w-0" />
-                      ))}
-                    </Skeleton>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      {[0, 1].map((i) => (
-                        <div
-                          key={i}
-                          className="min-h-[340px] rounded-2xl border border-border bg-card p-5 shadow-sm"
-                        >
-                          <div className="mb-3 flex flex-wrap gap-2">
-                            <Skeleton className="h-7 w-24 rounded-full" />
-                            <Skeleton className="h-7 w-28 rounded-full" />
-                          </div>
-                          <Skeleton className="mb-3 h-12 w-full max-w-md" />
-                          <div className="mb-3 flex flex-wrap gap-2">
-                            <Skeleton className="h-7 w-24 rounded-full" />
-                            <Skeleton className="h-7 w-32 rounded-full" />
-                          </div>
-                          <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-border bg-muted/30 p-3">
-                            {[0, 1, 2, 3].map((k) => (
-                              <div key={k} className="space-y-1">
-                                <Skeleton className="h-3 w-14" />
-                                <Skeleton className="h-4 w-full" />
-                              </div>
-                            ))}
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Skeleton className="h-10 min-w-[6rem] flex-1 rounded-lg" />
-                            <Skeleton className="h-10 min-w-[6rem] rounded-lg" />
-                            <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="rounded-xl border border-border bg-card p-5">
-                    <Skeleton className="mb-4 h-7 w-44" />
-                    <div className="space-y-3">
-                      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                        <div key={i}>
-                          <div className="mb-1 flex items-center justify-between">
-                            <Skeleton className="h-4 w-8" />
-                            <Skeleton className="h-3 w-24" />
-                          </div>
-                          <Skeleton className="mb-1 h-2 w-full rounded-full" />
-                          <Skeleton className="h-1.5 w-full rounded-full" />
-                        </div>
-                      ))}
-                    </div>
-                    <Skeleton className="mt-3 h-12 w-full rounded-lg" />
-                  </div>
-                  <div className="rounded-xl border border-border bg-card p-5">
-                    <Skeleton className="mb-4 h-7 w-44" />
-                    <div className="space-y-3">
-                      {[0, 1, 2].map((i) => (
-                        <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </PageLoadingSkeleton>
-        ) : errorMessage && !bundle ? (
-          <div className="rounded-2xl border border-destructive bg-destructive/10 px-6 py-8 text-center">
-            <p className="font-medium text-destructive">{errorMessage}</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Check your connection and try refocusing the window to retry.
-            </p>
-          </div>
-        ) : (
+    <DashboardOverviewLayout
+      title="Expert workbench"
+      isLoading={isPending && !bundle}
+      error={errorMessage && !bundle ? errorMessage : null}
+      maxWidthClass="max-w-[1200px]"
+    >
+      {bundle ? (
           <>
             <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               {expertStats.map((stat) => (
@@ -291,12 +116,7 @@ export default function ExpertDashboardPage() {
               <div className="space-y-6 lg:col-span-2">
                 <div>
                   <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold text-card-foreground">Pending Q&A Reviews</h2>
-                      <p className="text-sm text-muted-foreground">
-                        {pendingReviews.length} questions awaiting your review
-                      </p>
-                    </div>
+                    <h2 className="text-lg font-semibold text-card-foreground">Pending Q&A Reviews</h2>
                     <Link href="/expert/reviews" className="text-sm font-medium text-primary hover:underline">
                       View all
                     </Link>
@@ -305,7 +125,6 @@ export default function ExpertDashboardPage() {
                     {pendingReviews.length === 0 ? (
                       <EmptyState
                         title="No pending reviews right now"
-                        description="All queued Q&A items are resolved. New questions will appear here automatically."
                         action={
                           <Button type="button" variant="outline" onClick={() => router.push('/expert/reviews')}>
                             Open review queue
@@ -369,7 +188,6 @@ export default function ExpertDashboardPage() {
                     {filteredRecentCases.length === 0 ? (
                       <EmptyState
                         title={`No ${caseTab === 'all' ? '' : caseTab + ' '}cases`}
-                        description="Try another status tab or add new teaching cases to your library."
                         action={
                           <button
                             type="button"
@@ -410,9 +228,8 @@ export default function ExpertDashboardPage() {
             </div>
 
           </>
-        )}
-      </div>
-    </div>
+      ) : null}
+    </DashboardOverviewLayout>
   );
 }
 

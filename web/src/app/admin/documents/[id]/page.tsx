@@ -1,18 +1,10 @@
-import Header from '@/components/Header';
-import DocumentDetail from '@/components/admin/documents/DocumentDetail';
+import { AdminDocumentDetailPage } from '@/features/admin/components/AdminDocumentDetailPage';
 
-export default async function AdminDocumentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminDocumentDetailRoute({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
-
-  return (
-    <div className="min-h-screen">
-      <Header
-        title="Document Details"
-        subtitle="View indexing records, metadata, and processing progress."
-      />
-      <div className="mx-auto max-w-7xl p-6">
-        <DocumentDetail id={id} />
-      </div>
-    </div>
-  );
+  return <AdminDocumentDetailPage documentId={id} />;
 }

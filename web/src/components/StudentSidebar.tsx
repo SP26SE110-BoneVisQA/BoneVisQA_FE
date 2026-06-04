@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLogout } from '@/lib/useLogout';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import {
   LayoutDashboard,
   BookOpen,
@@ -16,20 +15,20 @@ import {
   Stethoscope,
   Sparkles,
   Eye,
-  BrainCircuit,
   BarChart3,
+  Users,
 } from 'lucide-react';
 
 const studentMenuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/student/dashboard' },
   { icon: BookOpen, label: 'Case Catalog', href: '/student/catalog' },
   { icon: ClipboardList, label: 'History', href: '/student/history' },
-  { icon: BotMessageSquare, label: 'AI Q&A', href: '/student/qa' },
-  { icon: BrainCircuit, label: 'Spaced Review', href: '/student/review' },
+  { icon: BotMessageSquare, label: 'Visual QA', href: '/student/visual-qa/workspace' },
   { icon: Trophy, label: 'Quizzes', href: '/student/quizzes' },
-  { icon: Eye, label: 'My Flashcards', href: '/student/flashcards' },
+  { icon: Eye, label: 'Flashcards', href: '/student/review' },
   { icon: BarChart3, label: 'Analytics', href: '/student/analytics' },
-  { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
+  { icon: Users, label: 'Class', href: '/student/classes' },
+  // { icon: Sparkles, label: 'AI Assistant', href: '/student/ai-assistant' },
   { icon: UserCircle, label: 'Profile', href: '/student/profile' },
   { icon: Settings, label: 'Settings', href: '/student/settings' },
 ];
@@ -85,11 +84,6 @@ export default function StudentSidebar() {
 
       {/* User & Logout */}
       <div className="px-3 py-4 border-t border-white/10">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <div className="bg-white rounded-lg p-0.5 shadow-sm overflow-hidden">
-            <ThemeToggle />
-          </div>
-        </div>
         <Link
           href="/student/settings"
           className="flex items-center gap-3 px-4 py-3 mb-2 rounded-lg hover:bg-sidebar-hover transition-colors duration-150"

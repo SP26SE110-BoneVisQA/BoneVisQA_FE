@@ -12,9 +12,10 @@ import type {
 
 /** BE có thể trả camelCase hoặc PascalCase tùy cấu hình JSON. */
 function normalizeQuizQuestionDto(q: QuizQuestionDto): QuizQuestionDto {
-  const raw = q as QuizQuestionDto & { ImageUrl?: string | null };
+  const raw = q as QuizQuestionDto & { Id?: string | null; ImageUrl?: string | null };
+  const id = q.id ?? raw.Id ?? '';
   const imageUrl = q.imageUrl ?? raw.ImageUrl ?? null;
-  return { ...q, imageUrl };
+  return { ...q, id, imageUrl };
 }
 
 export interface UpdateQuizRequest {
@@ -199,9 +200,9 @@ export async function getClassQuizzes(classId: string): Promise<QuizDto[]> {
 /**
  * Get a single quiz by ID
  */
-export async function getQuiz(quizId: string): Promise<QuizDto> {
+export async function getQuiz(quizId: string, signal?: AbortSignal): Promise<QuizDto> {
   try {
-    const { data } = await http.get<QuizDto>(`/api/lecturer/quizzes/${quizId}`);
+    const { data } = await http.get<QuizDto>(`/api/lecturer/quizzes/${quizId}`, { signal });
     return normalizeQuizDto(data);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));

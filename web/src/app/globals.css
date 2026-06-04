@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap');
 @import "tailwindcss";
 @plugin "tailwind-scrollbar";
@@ -36,6 +36,7 @@
   --border: var(--border-color);
   --input: #f8fafc;
   --ring: var(--cyan-accent);
+  --radius: 0.5rem;
   --destructive: var(--danger);
   --accent: var(--cyan-accent);
   --secondary: #eaf2ff;
@@ -140,7 +141,29 @@ h1,
 h2,
 h3,
 .font-headline {
-  font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+.medical-glass-panel {
+  border: 1px solid rgb(226 232 240 / 0.65);
+  background: rgb(255 255 255 / 0.82);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 30px rgb(15 23 42 / 0.06);
+  border-radius: 1.5rem;
+}
+
+.medical-bento-card {
+  border: 1px solid rgb(226 232 240 / 0.72);
+  background: rgb(255 255 255 / 0.94);
+  box-shadow: 0 8px 30px rgb(15 23 42 / 0.04);
+  border-radius: 1.5rem;
+}
+
+.medical-dark-panel {
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(2 6 23 / 0.94);
+  box-shadow: 0 18px 50px rgb(2 6 23 / 0.28);
+  border-radius: 1.75rem;
 }
 
 button,
@@ -225,70 +248,7 @@ textarea::placeholder {
   }
 }
 
-/* ==================== DARK MODE ==================== */
-.dark {
-  color-scheme: dark;
-
-  /* App canvas + typography */
-  --background: #0f172a;
-  --surface: #1e293b;
-
-  /* Sidebar surface */
-  --sidebar: #1e293b;
-
-  /* Medical blue core */
-  --primary: #3b82f6;
-  --primary-hover: #60a5fa;
-  --cyan-accent: #22d3ee;
-  --text-main: #f1f5f9;
-  --text-muted: #94a3b8;
-  --border-color: #334155;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --success: #10b981;
-
-  /* Aliases for shadcn/ui components */
-  --foreground: var(--text-main);
-  --muted: #1e293b;
-  --muted-foreground: #7c8ca1;
-  --card: #1e293b;
-  --card-foreground: var(--text-main);
-  --border: var(--border-color);
-  --input: #1e293b;
-  --ring: var(--cyan-accent);
-  --destructive: var(--danger);
-  --accent: #1e3a5f;
-  --secondary: #1e3a5f;
-  --primary-light: var(--cyan-accent);
-  --sidebar-bg: var(--sidebar);
-  --sidebar-text: #f1f5f9;
-  --sidebar-text-muted: #94a3b8;
-  --sidebar-hover: #334155;
-  --sidebar-active: #3b82f6;
-
-  /* MD3 tokens for dark mode */
-  --color-on-surface: #e2e8f0;
-  --color-on-surface-variant: #94a3b8;
-  --color-on-background: #e2e8f0;
-  --color-on-primary: #ffffff;
-  --color-primary-container: #1e40af;
-  --color-on-primary-container: #dbeafe;
-  --color-on-primary-fixed-variant: #93c5fd;
-  --color-surface-container-lowest: #0f172a;
-  --color-surface-container-low: #1e293b;
-  --color-surface-container: #273549;
-  --color-surface-container-high: #334155;
-  --color-surface-container-highest: #3d4f66;
-  --color-inverse-surface: #e2e8f0;
-  --color-outline: #64748b;
-  --color-outline-variant: #475569;
-  --color-secondary-container: #006a68;
-  --color-on-secondary-container: #97f2ef;
-  --color-tertiary: #f59e0b;
-  --color-tertiary-fixed: #78350f;
-  --color-secondary: #22d3ee;
-  --color-secondary-fixed: #083344;
-}
+/* ==================== DARK MODE — disabled (light-only theme) ==================== */
 
 /* Fade-in animation for section transitions */
 @keyframes fadeIn {
@@ -433,20 +393,6 @@ textarea::placeholder {
   .app-scroll-y {
     @apply scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent;
   }
-}
-
-/* ==================== SIDEBAR DARK MODE FIXES ==================== */
-/* Fix text opacity for dark mode sidebars - override opacity utilities */
-.dark [class*="sidebar"] *,
-.dark aside [class*="text-"],
-.dark .sidebar-text {
-  opacity: 1 !important;
-}
-
-/* Ensure sidebar text remains visible in dark mode */
-.dark aside,
-.dark .bg-sidebar-bg {
-  color-scheme: dark;
 }
 
 /* ==================== FLIP CARD ANIMATION ==================== */

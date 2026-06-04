@@ -1,3 +1,5 @@
+import type { VisualQaDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
+
 /** Normalized Visual QA report (accepts camelCase or PascalCase from backend). */
 export interface VisualQaCitation {
   documentUrl?: string;
@@ -88,6 +90,8 @@ export interface VisualQaTurn {
   userMessageId?: string | null;
   assistantMessageId?: string | null;
   reviewState?: VisualQaReviewState | null;
+  /** BE answer row workflow (e.g. EscalatedToExpert) when `reviewState` is absent. */
+  answerStatus?: string | null;
   lastResponderRole?: string | null;
   actorRole?: string | null;
   isReviewTarget?: boolean;
@@ -129,7 +133,12 @@ export interface VisualQaSessionReport {
   citations?: VisualQaCitation[];
   caseId?: string | null;
   imageId?: string | null;
+  dicomMetadata?: VisualQaDicomMetadata | null;
   status?: string | null;
+  /** BE VisualQaSessionReportDto — canonical workflow status for banners. */
+  sessionStatus?: string | null;
+  /** Lecturer/expert decision text on the session (not embedded in AI turns). */
+  reviewFeedback?: string | null;
   updatedAt?: string | null;
   reviewState?: VisualQaReviewState | null;
   lastResponderRole?: string | null;
@@ -258,6 +267,7 @@ export interface CaseDto {
   isApproved: boolean;
   isActive: boolean;
   createdAt: string | null;
+  imageUrl: string | null;
 }
 
 /** GET /api/lecturer/classes/{classId}/questions */
@@ -269,6 +279,7 @@ export interface LectStudentQuestionDto {
   caseAnswerId?: string | null;
   /** Explicit study image URL when the API uses ImageUrl (see also customImageUrl). */
   imageUrl?: string | null;
+  dicomMetadata?: VisualQaDicomMetadata | null;
   studentId: string;
   studentName: string;
   studentEmail: string;
@@ -303,6 +314,8 @@ export interface LectStudentQuestionDto {
   isPersonalUpload?: boolean | null;
   /** Normalized tag labels from BE (`caseTags`, `tags`, or nested `case.tags`). */
   caseTags?: string[] | null;
+  /** Lecturer/expert decision note on history rows. */
+  reviewFeedback?: string | null;
 }
 
 export interface AnnouncementAssignmentInfo {
@@ -526,7 +539,8 @@ export interface StudentProgress {
 
 export interface StudentTopicStat {
   topicName: string;
-  accuracyRate: number;
+  /** Null when there are no quiz attempts for this topic yet. */
+  accuracyRate: number | null;
   quizAttempts: number;
 }
 
@@ -900,6 +914,7 @@ export interface ExpertReviewItem {
   caseTitle?: string | null;
   imageUrl?: string;
   imageId?: string | null;
+  dicomMetadata?: VisualQaDicomMetadata | null;
   customImageUrl?: string | null;
   promotedCaseId?: string | null;
   customCoordinates?: PercentageBoundingBox | null;

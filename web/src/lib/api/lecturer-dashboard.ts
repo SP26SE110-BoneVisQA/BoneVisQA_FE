@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { http, getApiErrorMessage } from './client';
 import type { LecturerDashboardStats, LecturerLeaderboardEntry } from './types';
 
@@ -459,6 +460,28 @@ export interface UpdateTeachingObjectivesRequestDto {
   replaceAll: boolean;
 }
 
+export interface TeachingObjectiveSuggestionDto {
+  id: string;
+  classId: string;
+  className?: string;
+  expertId: string;
+  expertName?: string;
+  topic: string;
+  objective: string;
+  level: string;
+  status: string;
+  rejectionReason?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export interface ConfirmSuggestionRequestDto {
+  suggestionId: string;
+  approve: boolean;
+  rejectionReason?: string;
+  order?: number;
+}
+
 export async function fetchTeachingObjectives(classId?: string): Promise<TeachingObjectivesDto> {
   try {
     const url = classId
@@ -478,6 +501,37 @@ export async function updateTeachingObjectives(
   try {
     const { data } = await http.put<unknown>(`/api/lecturer/classes/${classId}/objectives`, request);
     return mapTeachingObjectives(data as Record<string, unknown>);
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function fetchExpertSuggestions(classId: string): Promise<TeachingObjectiveSuggestionDto[]> {
+  try {
+    const { data } = await http.get<unknown[]>(
+      `/api/lecturer/classes/${classId}/objectives/suggestions`,
+      { skipApiToast: true },
+    );
+    return (data as unknown[]).map((item) => mapSuggestion(item as Record<string, unknown>));
+  } catch (e) {
+    if (axios.isAxiosError(e) && e.response?.status === 404) {
+      return [];
+    }
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export async function confirmSuggestion(
+  classId: string,
+  suggestionId: string,
+  request: ConfirmSuggestionRequestDto,
+): Promise<TeachingObjectiveSuggestionDto> {
+  try {
+    const { data } = await http.post<unknown>(
+      `/api/lecturer/classes/${classId}/objectives/suggestions/${suggestionId}/confirm`,
+      request,
+    );
+    return mapSuggestion(data as Record<string, unknown>);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }
@@ -512,6 +566,23 @@ function mapObjectiveItem(raw: unknown): TeachingObjectiveItem {
     isActive: Boolean(o.isActive ?? o.IsActive ?? true),
     createdAt: optStr(o.createdAt ?? o.CreatedAt),
     updatedAt: optStr(o.updatedAt ?? o.UpdatedAt),
+  };
+}
+
+function mapSuggestion(raw: Record<string, unknown>): TeachingObjectiveSuggestionDto {
+  return {
+    id: String(raw.id ?? ''),
+    classId: String(raw.classId ?? raw.ClassId ?? ''),
+    className: optStr(raw.className ?? raw.ClassName),
+    expertId: String(raw.expertId ?? raw.ExpertId ?? ''),
+    expertName: optStr(raw.expertName ?? raw.ExpertName),
+    topic: String(raw.topic ?? raw.Topic ?? ''),
+    objective: String(raw.objective ?? raw.Objective ?? ''),
+    level: String(raw.level ?? raw.Level ?? 'Basic'),
+    status: String(raw.status ?? raw.Status ?? 'Pending'),
+    rejectionReason: optStr(raw.rejectionReason ?? raw.RejectionReason),
+    createdAt: String(raw.createdAt ?? raw.CreatedAt ?? ''),
+    reviewedAt: optStr(raw.reviewedAt ?? raw.ReviewedAt),
   };
 }
 

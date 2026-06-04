@@ -204,9 +204,11 @@ export async function fetchExpertPendingReviews(): Promise<ExpertPendingReview[]
     throw new Error(getApiErrorMessage(e));
   }
 }
-export async function fetchExpertRecentCases(): Promise<ExpertRecentCase[]> {
+export async function fetchExpertRecentCases(params?: { pageIndex?: number; pageSize?: number }): Promise<ExpertRecentCase[]> {
+  const pageIndex = params?.pageIndex ?? 1;
+  const pageSize = params?.pageSize ?? 50; // Increased default page size to show more cases
   try {
-    const { data } = await http.get<unknown>('/api/expert/dashboard/recent-cases', {
+    const { data } = await http.get<unknown>(`/api/expert/dashboard/recent-cases?pageIndex=${pageIndex}&pageSize=${pageSize}`, {
       skipApiToast: true,
     });
     return unwrapList(data)

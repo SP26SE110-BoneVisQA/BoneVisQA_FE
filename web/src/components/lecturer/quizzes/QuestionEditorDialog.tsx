@@ -35,7 +35,6 @@ interface QuestionEditorDialogProps {
 const TYPE_OPTIONS: { value: string; label: string; description: string }[] = [
   { value: 'MultipleChoice', label: 'Multiple Choice', description: 'Chọn 1 đáp án đúng (A, B, C, D)' },
   { value: 'TrueFalse', label: 'True / False', description: 'Đúng hoặc Sai' },
-  { value: 'MultiSelect', label: 'Multi-Select', description: 'Chọn nhiều đáp án đúng' },
   { value: 'FillInBlank', label: 'Fill in Blank', description: 'Điền vào chỗ trống' },
   { value: 'Essay', label: 'Essay', description: 'Tự luận - Giảng viên chấm tay' },
 ];
@@ -538,44 +537,46 @@ export default function QuestionEditorDialog({
                     </label>
                     <div className="flex gap-4">
                       <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
-                        formData.correctAnswer === 'A'
-                          ? 'border-green-500 bg-green-50 text-green-800'
-                          : 'border-[#eceef0] bg-[#eceef0] text-[#424752] hover:border-green-300'
+                        formData.correctAnswer === 'True'
+                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
+                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
                       }`}>
                         <input
                           type="radio"
-                          name="correctTrueFalse"
-                          checked={formData.correctAnswer === 'A'}
-                          onChange={() => setFormData({ ...formData, correctAnswer: 'A' })}
-                          className="hidden"
+                          name="trueFalse"
+                          value="True"
+                          checked={formData.correctAnswer === 'True'}
+                          onChange={() => setFormData({ ...formData, correctAnswer: 'True' })}
+                          className="sr-only"
                         />
-                        <span className="text-lg font-bold">True</span>
-                        {formData.correctAnswer === 'A' && (
-                          <span className="ml-auto rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">Correct</span>
+                        <span className="text-2xl font-bold">T</span>
+                        <span className="font-semibold">True</span>
+                        {formData.correctAnswer === 'True' && (
+                          <span className="ml-auto rounded-full bg-[#00478d] px-2 py-0.5 text-xs font-bold text-white">Correct</span>
                         )}
                       </label>
                       <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
-                        formData.correctAnswer === 'B'
-                          ? 'border-red-500 bg-red-50 text-red-800'
-                          : 'border-[#eceef0] bg-[#eceef0] text-[#424752] hover:border-red-300'
+                        formData.correctAnswer === 'False'
+                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
+                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
                       }`}>
                         <input
                           type="radio"
-                          name="correctTrueFalse"
-                          checked={formData.correctAnswer === 'B'}
-                          onChange={() => setFormData({ ...formData, correctAnswer: 'B' })}
-                          className="hidden"
+                          name="trueFalse"
+                          value="False"
+                          checked={formData.correctAnswer === 'False'}
+                          onChange={() => setFormData({ ...formData, correctAnswer: 'False' })}
+                          className="sr-only"
                         />
-                        <span className="text-lg font-bold">False</span>
-                        {formData.correctAnswer === 'B' && (
-                          <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">Correct</span>
+                        <span className="text-2xl font-bold">F</span>
+                        <span className="font-semibold">False</span>
+                        {formData.correctAnswer === 'False' && (
+                          <span className="ml-auto rounded-full bg-[#00478d] px-2 py-0.5 text-xs font-bold text-white">Correct</span>
                         )}
                       </label>
                     </div>
                   </div>
                 )}
-
-                {/* MULTI-SELECT Options */}
                 {isMultiSelect && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-2">
@@ -705,49 +706,6 @@ export default function QuestionEditorDialog({
                   </div>
                 )}
 
-                {/* TrueFalse Question Type */}
-                {isTrueFalse && (
-                  <div className="space-y-4">
-                    <label className="block text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      Correct Answer
-                    </label>
-                    <div className="flex gap-4">
-                      <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
-                        formData.correctAnswer === 'True'
-                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
-                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
-                      }`}>
-                        <input
-                          type="radio"
-                          name="trueFalse"
-                          value="True"
-                          checked={formData.correctAnswer === 'True'}
-                          onChange={() => setFormData({ ...formData, correctAnswer: 'True' })}
-                          className="sr-only"
-                        />
-                        <span className="text-2xl font-bold">T</span>
-                        <span className="font-semibold">True</span>
-                      </label>
-                      <label className={`flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 p-4 transition-all ${
-                        formData.correctAnswer === 'False'
-                          ? 'border-[#00478d] bg-[#00478d]/5 text-[#00478d]'
-                          : 'border-[#c2c6d4]/30 bg-[#eceef0]/50 text-[#424752] hover:border-[#00478d]/30'
-                      }`}>
-                        <input
-                          type="radio"
-                          name="trueFalse"
-                          value="False"
-                          checked={formData.correctAnswer === 'False'}
-                          onChange={() => setFormData({ ...formData, correctAnswer: 'False' })}
-                          className="sr-only"
-                        />
-                        <span className="text-2xl font-bold">F</span>
-                        <span className="font-semibold">False</span>
-                      </label>
-                    </div>
-                  </div>
-                )}
-
                 {/* FillInBlank Question Type */}
                 {isFillInBlank && (
                   <div className="space-y-3">
@@ -857,69 +815,33 @@ export default function QuestionEditorDialog({
                   </div>
                 )}
 
-                {/* HINT AND EXPLANATION SECTION - For Practice Mode */}
-                <div className="space-y-4 rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50 p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-amber-200 px-2 py-1 text-xs font-bold text-amber-900">PRACTICE MODE</span>
-                    <span className="text-xs text-amber-800">Hint và Explanation chỉ hiện khi quiz ở Practice Mode</span>
+                <div className="flex items-center justify-between border-t border-[#c2c6d4]/50 bg-[#eceef0] -mx-10 px-10 py-6 mt-6">
+                  <div className="flex items-center text-[#727783]">
+                    <Info className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">
+                      Changes autosaved to draft
+                    </span>
                   </div>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      <span className="rounded bg-amber-200 px-2 py-0.5 text-amber-900">HINT</span>
-                      Gợi ý cho sinh viên (tùy chọn)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.hint || ''}
-                      onChange={(e) => setFormData({ ...formData, hint: e.target.value })}
-                      className="w-full rounded-xl border-0 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-                      placeholder="VD: Xem xét kỹ vị trí gãy trên hình X-ray..."
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#727783]">
-                      <span className="rounded bg-blue-200 px-2 py-0.5 text-blue-900">EXPLANATION</span>
-                      Giải thích đáp án đúng (tùy chọn)
-                    </label>
-                    <textarea
-                      value={formData.explanation || ''}
-                      onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
-                      className="w-full resize-none rounded-xl border-0 bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-                      rows={3}
-                      placeholder="VD: Đáp án đúng là A vì xương đùi gãy ở 1/3 giữa là phổ biến nhất do..."
-                    />
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      disabled={loading}
+                      className="rounded-full px-6 py-3 text-sm font-bold text-[#424752] transition-colors hover:bg-[#e6e8ea] disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex items-center justify-center gap-2 rounded-full bg-gradient-to-br from-[#00478d] to-[#005eb8] px-8 py-3 text-sm font-bold text-white shadow-lg shadow-[#00478d]/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                    >
+                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Save Question
+                    </button>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between border-t border-[#c2c6d4]/50 bg-[#eceef0] px-10 py-6">
-            <div className="flex items-center text-[#727783]">
-              <Info className="mr-2 h-4 w-4 shrink-0" />
-              <span className="text-[10px] font-bold uppercase tracking-wider">
-                Changes autosaved to draft
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="rounded-full px-6 py-3 text-sm font-bold text-[#424752] transition-colors hover:bg-[#e6e8ea] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex items-center justify-center gap-2 rounded-full bg-gradient-to-br from-[#00478d] to-[#005eb8] px-8 py-3 text-sm font-bold text-white shadow-lg shadow-[#00478d]/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Save Question
-              </button>
             </div>
           </div>
         </form>

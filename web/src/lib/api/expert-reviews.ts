@@ -10,6 +10,7 @@ import {
   parseNormalizedBoundingBox,
   parsePercentageBoundingBox,
 } from '@/lib/utils/annotations';
+import { normalizeDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 
 export const REVIEW_WORKFLOW_CONFLICT = 'REVIEW_WORKFLOW_CONFLICT';
 
@@ -148,6 +149,28 @@ function mapExpertCitation(row: unknown): Citation | null {
     })(),
     flagged: typeof rawFlagged === 'boolean' ? rawFlagged : undefined,
   };
+}
+
+function extractDicomMetadataFromRecord(r: Record<string, unknown>) {
+  const candidates: unknown[] = [
+    r.dicomMetadata,
+    r.dicom_metadata,
+    r.DicomMetadata,
+    r.metadata,
+    r.Metadata,
+    r.studyMetadata,
+    r.study_metadata,
+  ];
+  const session = r.session;
+  if (session && typeof session === 'object') {
+    const s = session as Record<string, unknown>;
+    candidates.push(s.dicomMetadata, s.dicom_metadata, s.DicomMetadata, s.metadata, s.Metadata);
+  }
+  for (const candidate of candidates) {
+    const normalized = normalizeDicomMetadata(candidate);
+    if (normalized) return normalized;
+  }
+  return null;
 }
 
 function mapExpertItem(row: unknown): ExpertReviewItem | null {
@@ -352,6 +375,7 @@ function mapExpertItem(row: unknown): ExpertReviewItem | null {
   const caseKeyFindings = String(r.caseKeyFindings ?? r.CaseKeyFindings ?? '').trim() || null;
   const caseTitle =
     String(r.caseTitle ?? r.CaseTitle ?? r.caseName ?? r.CaseName ?? '').trim() || null;
+  const dicomMetadata = extractDicomMetadataFromRecord(r);
 
   const askedAtRaw =
     r.escalatedAt ??
@@ -382,6 +406,7 @@ function mapExpertItem(row: unknown): ExpertReviewItem | null {
           ? String(r.customImageUrl)
           : undefined,
     imageId: r.imageId != null ? String(r.imageId) : null,
+    dicomMetadata,
     customImageUrl: r.customImageUrl != null ? String(r.customImageUrl) : null,
     promotedCaseId:
       r.promotedCaseId != null
@@ -543,25 +568,33 @@ export async function fetchExpertReviewDetail(sessionId: string): Promise<Expert
 }
 
 /** Primary queue: case-answer reviews; fallback to escalated; then dashboard pending list if both are empty. */
-export async function fetchExpertReviewQueue(): Promise<ExpertReviewItem[]> {
+export type ExpertReviewQueueStatus = 'Pending' | 'History' | 'Approved' | 'Rejected';
+
+export async function fetchExpertReviewQueue(options?: {
+  status?: ExpertReviewQueueStatus;
+}): Promise<ExpertReviewItem[]> {
+  const status = options?.status ?? 'Pending';
+  const params = status === 'Pending' ? undefined : { status };
+
   try {
-    const { data } = await http.get<unknown>('/api/expert/reviews/case-answer');
+    const { data } = await http.get<unknown>('/api/expert/reviews/case-answer', { params });
     const primary = unwrapReviewList(data)
       .map(mapExpertItem)
       .filter((x): x is ExpertReviewItem => x !== null);
-    if (primary.length > 0) return primary;
+    if (primary.length > 0 || status !== 'Pending') return primary;
   } catch {
     /* fall through to escalated */
   }
   try {
-    const { data } = await http.get<unknown>('/api/expert/reviews/escalated');
+    const { data } = await http.get<unknown>('/api/expert/reviews/escalated', { params });
     const secondary = unwrapReviewList(data)
       .map(mapExpertItem)
       .filter((x): x is ExpertReviewItem => x !== null);
-    if (secondary.length > 0) return secondary;
+    if (secondary.length > 0 || status !== 'Pending') return secondary;
   } catch (e) {
-    throw new Error(getApiErrorMessage(e));
+    if (status !== 'Pending') throw new Error(getApiErrorMessage(e));
   }
+  if (status !== 'Pending') return [];
   try {
     const pending = await fetchExpertPendingReviews();
     return pending

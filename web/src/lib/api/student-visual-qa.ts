@@ -392,32 +392,10 @@ export async function requestStudentVisualQaReview(
   }
 }
 
+/** @deprecated Prefer `fetchVisualQaThread` from `@/lib/api/visual-qa`. */
 export async function fetchStudentVisualQaSession(
   sessionId: string,
 ): Promise<VisualQaSessionReport> {
-  const id = sessionId.trim();
-  if (!id) throw new Error('Session id is required.');
-  const candidateUrls = [
-    `/api/student/visual-qa/history/${encodeURIComponent(id)}`,
-    `/api/student/visual-qa/history`,
-    `/api/student/visual-qa/${encodeURIComponent(id)}`,
-  ];
-
-  for (const url of candidateUrls) {
-    try {
-      const { data } = await http.get<unknown>(url, url.endsWith('/history') ? { params: { sessionId: id } } : undefined);
-      const payload = unwrapVisualQaPayload(data);
-      return normalizeVisualQaSessionReport(payload);
-    } catch (e) {
-      if (axios.isAxiosError(e) && (e.response?.status === 404 || e.response?.status === 405)) {
-        continue;
-      }
-      if (axios.isAxiosError(e)) {
-        throw e;
-      }
-      throw new Error(getApiErrorMessage(e));
-    }
-  }
-
-  throw new Error('Could not restore this Visual QA session.');
+  const { fetchVisualQaThread } = await import('@/lib/api/visual-qa/history');
+  return fetchVisualQaThread(sessionId);
 }
