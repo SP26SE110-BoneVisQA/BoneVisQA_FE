@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState, useCallback, useRef } from 'react';
+import { use, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/toast';
@@ -9,13 +9,10 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
-  Sparkles,
   Tag,
   CheckCircle2,
   XCircle,
   ExternalLink,
-  BrainCircuit,
-  Lightbulb,
   RefreshCw,
   Image as ImageIcon,
 } from 'lucide-react';
@@ -44,8 +41,6 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
   } | null>(null);
   const [reviewData, setReviewData] = useState<DetailedReview | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [generating, setGenerating] = useState(false);
-
   // Auto-refresh mechanism: detect when score changes (e.g., after lecturer edits)
   const lastScoreRef = useRef<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -119,28 +114,6 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
       toast.error('Failed to load review data');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGenerateExplanations = async () => {
-    if (!quizInfo?.attemptId) {
-      toast.error('No attempt ID found. Please try refreshing the page.');
-      return;
-    }
-    setGenerating(true);
-    try {
-      await quizExtensionsApi.generateReviewItems(quizInfo.attemptId);
-      toast.success('AI explanations are being generated. Refreshing...');
-      setTimeout(async () => {
-        await fetchData();
-      }, 2000);
-    } catch (error) {
-      console.error('Error generating explanations:', error);
-      const { getApiErrorMessage } = await import('@/lib/api/client');
-      const message = getApiErrorMessage(error);
-      toast.error(`Failed to generate explanations: ${message}`);
-    } finally {
-      setGenerating(false);
     }
   };
 
@@ -258,34 +231,6 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
           </Card>
         </div>
 
-        {/* Generate AI Explanations Button */}
-        <Card className="mb-8 border-primary/20 bg-primary/5">
-          <CardContent className="py-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-semibold">AI-Powered Explanations</p>
-                  <p className="text-sm text-muted-foreground">
-                    Get detailed explanations for each question to understand your mistakes
-                  </p>
-                </div>
-              </div>
-              <Button
-                onClick={handleGenerateExplanations}
-                disabled={generating}
-                className="bg-gradient-to-r from-primary to-[#007BFF] min-w-[160px]"
-              >
-                <Loader2 className={`h-4 w-4 mr-2 ${generating ? 'animate-spin' : 'hidden'}`} />
-                <BrainCircuit className={`h-4 w-4 mr-2 ${generating ? 'hidden' : ''}`} />
-                <span>{generating ? 'Generating...' : 'Generate with AI'}</span>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Question Navigation Tabs */}
         <div className="flex flex-wrap gap-2 mb-6">
           {reviewData.questions.map((q, idx) => {
@@ -375,22 +320,6 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
                   <div className="p-4 rounded-lg bg-success/10 border border-success/20">
                     <p className="text-sm font-semibold mb-2 text-muted-foreground">Correct Answer</p>
                     <p className="font-medium text-success">{currentQuestion.correctAnswer}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* AI Explanation */}
-              <div className="rounded-lg border border-primary/20 bg-gradient-to-r from-primary/5 to-transparent p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  <h4 className="font-semibold text-primary">AI Explanation</h4>
-                </div>
-                {currentQuestion.aiExplanation ? (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{currentQuestion.aiExplanation}</p>
-                ) : (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Lightbulb className="h-4 w-4" />
-                    <span>Explanation not yet generated. Click &quot;Generate with AI&quot; above to create explanations.</span>
                   </div>
                 )}
               </div>

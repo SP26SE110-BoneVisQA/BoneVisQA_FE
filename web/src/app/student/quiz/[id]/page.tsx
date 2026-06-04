@@ -344,15 +344,16 @@ export default function QuizSessionPage({
   // ================================================================
   // ĐẾM SỐ CÂU HỎI ĐÃ TRẢ LỜI
   // ================================================================
-  // Logic đếm khác nhau theo loại câu hỏi:
+  // Logic đếm:
   // - Multi-select: đếm nếu có ít nhất 1 đáp án được chọn
-  // - Essay: KHÔNG đếm trong answeredCount (cần lecturer chấm)
+  // - Essay: đếm nếu có nội dung (essay được submit cùng với các loại khác)
   // - Các loại khác (MCQ, True/False, Fill-in-blank): đếm nếu có đáp án
   //
   // LƯU Ý: answeredCount dùng để:
   // 1. Hiển thị tiến độ "X/Y answered"
   // 2. Kiểm tra canSubmit (phải trả lời ít nhất 1 câu)
   // 3. KHÔNG ảnh hưởng đến tính điểm (điểm do backend tính)
+  // 4. Trạng thái chấm essay được hiển thị riêng qua ungradedEssayCount
   // ================================================================
   const answeredCount = (() => {
     let count = 0;
@@ -362,8 +363,10 @@ export default function QuizSessionPage({
         // Multi-select: count question as answered if at least 1 option selected
         const selected = multiSelectAnswers[q.questionId];
         if (selected && selected.length > 0) count++;
-      } else if (qType !== 'essay') {
-        // Other types: count if answer exists
+      } else {
+        // All other types including essay: count if answer exists
+        // Note: essay questions are submitted with essayAnswer field
+        // Grading status is handled separately via ungradedEssayCount
         if (answers[q.questionId]) count++;
       }
     }

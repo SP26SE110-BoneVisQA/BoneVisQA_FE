@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Header from '@/components/Header';
-import { quizExtensionsApi, type ReviewItem, type SpacedRepetitionStats } from '@/lib/api/quiz-extensions';
+import { quizExtensionsApi, type ReviewItem } from '@/lib/api/quiz-extensions';
 import { 
   fetchFlashcardRecommendations, 
   fetchFlashcardDecks, 
@@ -35,14 +35,11 @@ import {
   ArrowLeft,
   BrainCircuit,
   Target,
-  AlertTriangle,
   BookMarked,
   Loader2,
   Plus,
   Trash2,
   FlipHorizontal,
-  Trophy,
-  Clock,
   TrendingUp,
   ChevronRight,
   ChevronLeft,
@@ -62,7 +59,6 @@ import {
 
 export default function FlashcardReviewPage() {
   const [dueReviews, setDueReviews] = useState<ReviewItem[]>([]);
-  const [stats, setStats] = useState<SpacedRepetitionStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentReview, setCurrentReview] = useState<ReviewItem | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -162,8 +158,16 @@ export default function FlashcardReviewPage() {
 
   // Reset pagination when filters change
   useEffect(() => {
-    setCurrentPage(1);
-  }, [deckSearchQuery, selectedCategory, sortBy]);
+    if (selectedDeck) {
+      setCardCurrentPage(1);
+    }
+  }, [deckSearchQuery, selectedCategory, sortBy, selectedDeck]);
+
+  useEffect(() => {
+    if (selectedDeck) {
+      setCardCurrentPage(1);
+    }
+  }, [cardSearchQuery, selectedDeck]);
 
   useEffect(() => {
     fetchData();
@@ -173,12 +177,8 @@ export default function FlashcardReviewPage() {
 
   const fetchData = async () => {
     try {
-      const [reviews, statsData] = await Promise.all([
-        quizExtensionsApi.getDueReviews(20),
-        quizExtensionsApi.getSpacedRepetitionStats(),
-      ]);
+      const reviews = await quizExtensionsApi.getDueReviews(20);
       setDueReviews(reviews);
-      setStats(statsData);
       if (reviews.length > 0 && !currentReview) {
         setCurrentReview(reviews[0]);
       }
@@ -300,8 +300,6 @@ export default function FlashcardReviewPage() {
       setCurrentReview(remaining.length > 0 ? remaining[0] : null);
       setShowAnswer(false);
       setIsFlipped(false);
-      const newStats = await quizExtensionsApi.getSpacedRepetitionStats();
-      setStats(newStats);
     } catch (error) {
       console.error('Error submitting review:', error);
     } finally {
@@ -372,11 +370,6 @@ export default function FlashcardReviewPage() {
       (cardCurrentPage - 1) * CARDS_PER_PAGE,
       cardCurrentPage * CARDS_PER_PAGE
     );
-
-    // Reset card page when search changes
-    useEffect(() => {
-      setCardCurrentPage(1);
-    }, [cardSearchQuery]);
 
     // Single card view uses full filtered list
     const currentCardIndexInFiltered = deckCards.findIndex(c => c.id === paginatedCards[0]?.id);
@@ -818,16 +811,6 @@ export default function FlashcardReviewPage() {
         <Header title="Flashcard Review" subtitle="Spaced repetition for better retention" />
         
         <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-          {/* Stats */}
-          {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard icon={<AlertTriangle className="h-5 w-5" />} label="Quá hạn" value={stats.overdue ?? 0} color="red" />
-              <StatCard icon={<Clock className="h-5 w-5" />} label="Hôm nay" value={stats.dueToday ?? 0} color="amber" />
-              <StatCard icon={<BookOpen className="h-5 w-5" />} label="Ngày mai" value={stats.dueTomorrow ?? 0} color="blue" />
-              <StatCard icon={<Trophy className="h-5 w-5" />} label="Đã thuộc" value={stats.mastered ?? 0} color="emerald" />
-            </div>
-          )}
-
           {/* Mastery Score */}
           {recommendations?.success && recommendations.masteryScore > 0 && (
             <div className="bg-white rounded-2xl p-6 border border-slate-200">
@@ -1148,23 +1131,6 @@ export default function FlashcardReviewPage() {
             </div>
           </div>
 
-          {/* Empty State */}
-          <div className="bg-white rounded-2xl p-16 text-center border border-slate-200">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-emerald-50 flex items-center justify-center">
-              <CheckCircle className="h-10 w-10 text-emerald-500" />
-            </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-3">Tuyệt vời!</h2>
-            <p className="text-slate-600 mb-8">Bạn đã hoàn thành hết các thẻ ôn tập trong ngày.</p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button asChild size="lg" className="gap-2">
-                <Link href="/student/quizzes?tab=practice"><Target className="h-5 w-5 mr-2" />Làm Quiz</Link>
-              </Button>
-              <Button asChild variant="outline" size="lg">
-                <Link href="/student/dashboard">Dashboard</Link>
-              </Button>
-            </div>
-          </div>
-
           {/* AI Tips */}
           {recommendations?.success && recommendations.studyTips && (
             <div className="bg-slate-100 rounded-2xl p-6 border border-slate-200">
@@ -1357,27 +1323,6 @@ function FlipCard({ card, index, onDelete, onExpand }: { card: FlashcardDto; ind
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-// Stat Card
-function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: 'red' | 'amber' | 'blue' | 'emerald'; }) {
-  const colorMap = {
-    red: { bg: 'bg-red-50', border: 'border-red-100', icon: 'text-red-500', text: 'text-red-600' },
-    amber: { bg: 'bg-amber-50', border: 'border-amber-100', icon: 'text-amber-500', text: 'text-amber-600' },
-    blue: { bg: 'bg-blue-50', border: 'border-blue-100', icon: 'text-blue-500', text: 'text-blue-600' },
-    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-100', icon: 'text-emerald-500', text: 'text-emerald-600' },
-  };
-  const c = colorMap[color];
-  
-  return (
-    <div className={cn("bg-white rounded-xl p-5 border transition-all hover:shadow-md", c.bg, c.border)}>
-      <div className={cn("flex items-center gap-3 mb-2", c.icon)}>
-        {icon}
-        <span className="text-sm font-medium text-slate-600">{label}</span>
-      </div>
-      <p className={cn("text-2xl font-bold", c.text)}>{value}</p>
     </div>
   );
 }

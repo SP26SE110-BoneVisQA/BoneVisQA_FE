@@ -357,19 +357,37 @@ export function LecturerQuizCreatePage() {
   };
 
   const handleAddAIQuestionsToQuiz = () => {
-    const newQuestions: CreateQuizQuestionRequest[] = aiQuestions.map((q) => ({
-      quizId: createdQuizId || '',
-      questionText: q.questionText,
-      type: q.type || 'MultipleChoice',
-      optionA: q.optionA,
-      optionB: q.optionB,
-      optionC: q.optionC,
-      optionD: q.optionD,
-      correctAnswer: q.correctAnswer,
-      caseId: q.caseId,
-    }));
+    const normalize = (text: string) =>
+      (text ?? '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
 
-    setTempQuestions([...tempQuestions, ...newQuestions]);
+    const seen = new Set<string>();
+    for (const q of tempQuestions) {
+      seen.add(normalize(q.questionText));
+    }
+
+    const uniqueAi: CreateQuizQuestionRequest[] = [];
+    for (const q of aiQuestions) {
+      const textKey = normalize(q.questionText);
+      if (!seen.has(textKey)) {
+        seen.add(textKey);
+        uniqueAi.push({
+          quizId: createdQuizId || '',
+          questionText: q.questionText,
+          type: q.type || 'MultipleChoice',
+          optionA: q.optionA,
+          optionB: q.optionB,
+          optionC: q.optionC,
+          optionD: q.optionD,
+          correctAnswer: q.correctAnswer,
+          caseId: q.caseId,
+        });
+      }
+    }
+
+    setTempQuestions((prev) => [...prev, ...uniqueAi]);
     setAiQuestions([]);
     setAiSuggestionMode(null);
   };
@@ -391,7 +409,23 @@ export function LecturerQuizCreatePage() {
       const payload = { ...buildCreatePayload(), isAiGenerated: true };
       const quiz = await createQuiz(payload);
 
-      const payloads: CreateQuizQuestionRequest[] = aiQuestions.map((q) => ({
+      const normalize = (text: string) =>
+        (text ?? '')
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+          .trim();
+
+      const seen = new Set<string>();
+      const uniqueAi: typeof aiQuestions = [];
+      for (const q of aiQuestions) {
+        const key = normalize(q.questionText);
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueAi.push(q);
+        }
+      }
+
+      const payloads: CreateQuizQuestionRequest[] = uniqueAi.map((q) => ({
         quizId: quiz.id,
         questionText: q.questionText,
         type: q.type || 'MultipleChoice',

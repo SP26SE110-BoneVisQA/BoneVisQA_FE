@@ -10,16 +10,27 @@ import { ClipboardList, Sparkles } from 'lucide-react';
 
 type QuizTab = 'assigned' | 'practice';
 
+const PAGE_SIZE = 5;
+
 export function QuizzesPage() {
   const searchParams = useSearchParams();
   const initialTab: QuizTab = searchParams.get('tab') === 'practice' ? 'practice' : 'assigned';
   const [tab, setTab] = useState<QuizTab>(initialTab);
+  const [pageIndex, setPageIndex] = useState(0);
   const assignedQuery = useStudentAssignedQuizzes();
 
   useEffect(() => {
     const t = searchParams.get('tab') === 'practice' ? 'practice' : 'assigned';
     setTab(t);
   }, [searchParams]);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [assignedQuery.data]);
+
+  const assignedQuizzes = assignedQuery.data ?? [];
+  const totalItems = assignedQuizzes.length;
+  const pageItems = assignedQuizzes.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE);
 
   return (
     <ListPageLayout
@@ -66,9 +77,13 @@ export function QuizzesPage() {
     >
       {tab === 'assigned' ? (
         <AssignedQuizzesList
-          items={assignedQuery.data ?? []}
+          items={pageItems}
           isPending={assignedQuery.isPending}
           error={assignedQuery.error}
+          totalItems={totalItems}
+          pageSize={PAGE_SIZE}
+          pageIndex={pageIndex}
+          onPageChange={setPageIndex}
         />
       ) : (
         <StudentPracticeQuizContent embedded />

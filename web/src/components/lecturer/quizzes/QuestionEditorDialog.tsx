@@ -35,7 +35,6 @@ interface QuestionEditorDialogProps {
 const TYPE_OPTIONS: { value: string; label: string; description: string }[] = [
   { value: 'MultipleChoice', label: 'Multiple Choice', description: 'Chọn 1 đáp án đúng (A, B, C, D)' },
   { value: 'TrueFalse', label: 'True / False', description: 'Đúng hoặc Sai' },
-  { value: 'MultiSelect', label: 'Multi-Select', description: 'Chọn nhiều đáp án đúng' },
   { value: 'FillInBlank', label: 'Fill in Blank', description: 'Điền vào chỗ trống' },
   { value: 'Essay', label: 'Essay', description: 'Tự luận - Giảng viên chấm tay' },
 ];
