@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowLeft, ChevronDown, LogOut, RotateCcw, Settings, User } from 'lucide-react';
+import { ArrowLeft, ChevronDown, LogOut, Moon, RotateCcw, Settings, Sun, User } from 'lucide-react';
 import { useAuth } from '@/lib/useAuth';
 import { useLogout } from '@/lib/useLogout';
 import { resolveApiAssetUrl } from '@/lib/api/client';
@@ -11,6 +11,7 @@ import { fetchNotifications } from '@/lib/api/notifications';
 import { notificationTargetToAppPath } from '@/lib/notification-app-path';
 import type { AppNotificationItem, NotificationDto } from '@/lib/api/types';
 import { useSignalR } from '@/hooks/useSignalR';
+import { useTheme } from '@/components/providers/ThemeProvider';
 import { NotificationCenter } from '@/components/shared/NotificationCenter';
 import {
   DropdownMenu,
@@ -51,6 +52,7 @@ export function UnifiedDashboardHeader({ className }: { className?: string }) {
   const [serverNotifications, setServerNotifications] = useState<AppNotificationItem[]>([]);
   const [failedAvatarSrc, setFailedAvatarSrc] = useState<string | null>(null);
   const { connectionStatus, notifications: realtimeNotifications } = useSignalR();
+  const { theme, toggleTheme } = useTheme();
 
   const fullName = user?.fullName?.trim() || user?.email?.trim() || 'Authenticated User';
   const emailDisplay = user?.email?.trim() || '';
@@ -164,6 +166,19 @@ export function UnifiedDashboardHeader({ className }: { className?: string }) {
             serverItems={mergedNotifications}
             connectionLive={connectionStatus === 'connected'}
           />
+
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {theme === 'dark' ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

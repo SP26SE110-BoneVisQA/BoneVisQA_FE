@@ -209,7 +209,7 @@ function mapLecturerProfile(raw: Record<string, unknown>): LecturerProfile {
 
 export async function fetchLecturerProfile(): Promise<LecturerProfile> {
   try {
-    const { data } = await http.get<unknown>('/api/lecturer/profile');
+    const { data } = await http.get<unknown>('/api/profile');
     return mapLecturerProfile(data as Record<string, unknown>);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
@@ -220,7 +220,7 @@ export async function updateLecturerProfile(
   payload: UpdateLecturerProfilePayload,
 ): Promise<LecturerProfile> {
   try {
-    const { data } = await http.put<unknown>('/api/lecturer/profile', payload);
+    const { data } = await http.put<unknown>('/api/profile', payload);
     return mapLecturerProfile(data as Record<string, unknown>);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
@@ -409,7 +409,7 @@ function mapAdminProfile(raw: Record<string, unknown>): AdminProfile {
 
 export async function fetchAdminProfile(): Promise<AdminProfile> {
   try {
-    const { data } = await http.get<unknown>('/api/admin/profile');
+    const { data } = await http.get<unknown>('/api/profile');
     return mapAdminProfile(data as Record<string, unknown>);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
@@ -420,7 +420,7 @@ export async function updateAdminProfile(
   payload: UpdateAdminProfilePayload,
 ): Promise<AdminProfile> {
   try {
-    const { data } = await http.put<unknown>('/api/admin/profile', payload);
+    const { data } = await http.put<unknown>('/api/profile', payload);
     return mapAdminProfile(data as Record<string, unknown>);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));

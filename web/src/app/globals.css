@@ -51,6 +51,39 @@
   --app-header-height: 4rem;
 }
 
+.dark {
+  color-scheme: dark;
+
+  --background: #0b1220;
+  --surface: #111827;
+  --sidebar: #0f172a;
+  --primary: #60a5fa;
+  --primary-hover: #3b82f6;
+  --cyan-accent: #22d3ee;
+  --text-main: #e2e8f0;
+  --text-muted: #94a3b8;
+  --border-color: #1e293b;
+  --danger: #f87171;
+  --warning: #fbbf24;
+  --success: #34d399;
+
+  --foreground: var(--text-main);
+  --muted: #0f172a;
+  --muted-foreground: var(--text-muted);
+  --card: #0f172a;
+  --card-foreground: var(--text-main);
+  --border: var(--border-color);
+  --input: #0f172a;
+  --ring: var(--cyan-accent);
+  --secondary: #0f172a;
+  --primary-light: var(--cyan-accent);
+  --sidebar-bg: var(--sidebar);
+  --sidebar-text: #e2e8f0;
+  --sidebar-text-muted: #94a3b8;
+  --sidebar-hover: #1e293b;
+  --sidebar-active: #60a5fa;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
@@ -145,18 +178,30 @@ h3,
 }
 
 .medical-glass-panel {
-  border: 1px solid rgb(226 232 240 / 0.65);
-  background: rgb(255 255 255 / 0.82);
+  border: 1px solid rgba(226, 232, 240, 0.65);
+  background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(16px);
-  box-shadow: 0 8px 30px rgb(15 23 42 / 0.06);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
   border-radius: 1.5rem;
 }
 
+.dark .medical-glass-panel {
+  border: 1px solid rgba(30, 41, 59, 0.7);
+  background: rgba(15, 23, 42, 0.82);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
 .medical-bento-card {
-  border: 1px solid rgb(226 232 240 / 0.72);
-  background: rgb(255 255 255 / 0.94);
-  box-shadow: 0 8px 30px rgb(15 23 42 / 0.04);
+  border: 1px solid rgba(226, 232, 240, 0.72);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.04);
   border-radius: 1.5rem;
+}
+
+.dark .medical-bento-card {
+  border: 1px solid rgba(30, 41, 59, 0.75);
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
 }
 
 .medical-dark-panel {
@@ -309,9 +354,13 @@ textarea::placeholder {
   width: 6px;
   height: 6px;
   border-radius: 9999px;
-  background: rgb(100 116 139);
+  background: currentColor;
+  color: #64748b;
   will-change: transform, opacity;
   animation: messenger-dot-bounce 1.15s ease-in-out infinite;
+}
+.dark .messenger-typing-dot {
+  color: #cbd5e1;
 }
 .messenger-typing-dot:nth-child(2) {
   animation-delay: 0.2s;

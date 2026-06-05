@@ -375,6 +375,9 @@ export default function QuizSessionPage({
   const positionPct = totalQ > 0 ? Math.round(((currentIndex + 1) / totalQ) * 100) : 0;
   const moduleLabel = session?.topic ?? quizInfo?.className ?? 'Clinical module';
 
+  // Practice Mode: quizMode = 2, khong hien thi timer
+  const isPracticeMode = (session?.quizMode ?? quizInfo?.quizMode) === 2;
+
   const rawTimeLimit = session?.timeLimit ?? quizInfo?.timeLimit;
   const timeLimitMinutes =
     rawTimeLimit != null && Number(rawTimeLimit) > 0 ? Math.round(Number(rawTimeLimit)) : null;
@@ -382,9 +385,10 @@ export default function QuizSessionPage({
   // Thời gian đóng (ms) - null nếu không có thời gian đóng
   const sessionCloseTimeMs = session?.closeTime ? new Date(session.closeTime).getTime() : null;
 
-  // Đếm ngược: luôn đếm từ timeLimit; được giới hạn bởi closeTime nên không bao giờ vượt quá thời gian còn lại trước khi quiz đóng
+  // Dem nguoc: chi chay khi KHONG phai Practice Mode
   const getSecondsRemaining = (): number | null => {
     if (submitted || timeLimitMinutes == null) return null;
+    if (isPracticeMode) return null;
     const timeLimitSeconds = timeLimitMinutes * 60;
     if (sessionCloseTimeMs != null) {
       const now = Date.now();
@@ -396,14 +400,14 @@ export default function QuizSessionPage({
   };
 
   const timerDisplaySeconds =
-    !submitted && timeLimitMinutes != null ? (secondsLeft ?? getSecondsRemaining()) : null;
+    !submitted && timeLimitMinutes != null && !isPracticeMode ? (secondsLeft ?? getSecondsRemaining()) : null;
 
   useEffect(() => {
     if (!session || submitted) {
       setSecondsLeft(null);
       return;
     }
-    if (timeLimitMinutes == null) {
+    if (timeLimitMinutes == null || isPracticeMode) {
       setSecondsLeft(null);
       return;
     }
@@ -418,10 +422,11 @@ export default function QuizSessionPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.attemptId, timeLimitMinutes, submitted, session?.closeTime]);
 
-  // Tự động nộp khi hết giờ: chạy khi timeLimit hoặc closeTime hết hạn
+  // Tu dong nap khi het gio: chi chay khi KHONG phai Practice Mode
   useEffect(() => {
     if (secondsLeft !== 0) return;
     if (submitted || submitting || timeLimitMinutes == null || !session) return;
+    if (isPracticeMode) return;
     if (timeUpAutoSubmitTriggered.current) return;
     timeUpAutoSubmitTriggered.current = true;
     void handleSubmit();
@@ -928,7 +933,7 @@ export default function QuizSessionPage({
               </span>
             </div>
           )}
-          {!submitted && timeLimitMinutes != null ? (
+          {!submitted && timeLimitMinutes != null && !isPracticeMode ? (
             <div
               className={`flex items-center gap-2 rounded-lg px-3 py-1.5 font-headline text-sm font-bold tabular-nums sm:px-4 ${
                 timerDisplaySeconds === 0
@@ -1005,7 +1010,7 @@ export default function QuizSessionPage({
                 Question {currentIndex + 1} of {totalQ}
               </span>
             </div>
-            {timeLimitMinutes != null ? (
+            {timeLimitMinutes != null && !isPracticeMode ? (
               <div
                 className={`flex items-center gap-2 font-headline text-base font-bold tabular-nums sm:text-lg ${
                   timerDisplaySeconds === 0 ? 'text-destructive' : 'text-primary'

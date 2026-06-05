@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { AppProviders } from '@/components/providers';
+import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import I18nProvider from '@/components/providers/I18nProvider';
 
 export const metadata: Metadata = {
@@ -14,18 +15,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="light" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{document.documentElement.classList.remove('dark');localStorage.removeItem('bonevisqa-theme');}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('bonevisqa-theme');if(t==='dark'){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}}catch(e){}})();`,
           }}
         />
       </head>
       <body suppressHydrationWarning className="font-sans antialiased bg-background text-text-main">
-        <AppProviders>
-          <I18nProvider>{children}</I18nProvider>
-        </AppProviders>
+        <ThemeProvider>
+          <AppProviders>
+            <I18nProvider>{children}</I18nProvider>
+          </AppProviders>
+        </ThemeProvider>
       </body>
     </html>
   );
