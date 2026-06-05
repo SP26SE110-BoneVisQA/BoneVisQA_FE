@@ -29,8 +29,8 @@ import {
 } from '@/lib/api/users';
 import {
   fetchLecturerDashboardStats,
-  type LecturerDashboardStats,
 } from '@/lib/api/lecturer-dashboard';
+import type { LecturerDashboardStats } from '@/lib/api/types';
 import { emitAuthRefresh } from '@/lib/useAuth';
 import { appToast } from '@/lib/api/errors/app-toast';
 import { getApiErrorMessage } from '@/lib/api/client';
