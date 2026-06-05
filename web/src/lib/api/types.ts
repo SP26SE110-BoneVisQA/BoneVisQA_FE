@@ -1032,7 +1032,7 @@ export interface AssignedQuizDto {
   creatorName?: string | null;
   creatorType?: string | null; // "Expert" or "Lecturer"
   /** Quiz mode: 1=Exam, 2=Practice, 3=Adaptive */
-  quizMode?: number;
+  quizMode?: number | null;
 }
 
 export interface CreateQuizRequest {

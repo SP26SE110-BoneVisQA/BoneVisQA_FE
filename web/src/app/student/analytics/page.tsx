@@ -2,26 +2,36 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Header from '@/components/Header';
-import { analyticsApi, type StudentDashboardData, type StudentCompetency, type ErrorPattern, type LearningInsight } from '@/lib/api/analytics';
+import { analyticsApi, type StudentDashboardData } from '@/lib/api/analytics';
 import { quizExtensionsApi, type SpacedRepetitionStats, type ReviewItem } from '@/lib/api/quiz-extensions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   BarChart3,
   TrendingUp,
+  TrendingDown,
   AlertTriangle,
   Lightbulb,
   Target,
   CheckCircle,
   Clock,
   BookOpen,
-  ChevronRight,
   RefreshCw,
   XCircle,
+  Zap,
+  Award,
+  Brain,
+  Calendar,
+  Star,
+  Trophy,
+  Play,
+  ArrowRight,
+  Activity,
+  BarChart,
+  PieChart,
+  LineChart,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -30,45 +40,23 @@ export default function StudentAnalyticsPage() {
   const [srStats, setSrStats] = useState<SpacedRepetitionStats | null>(null);
   const [dueReviews, setDueReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dashboardError, setDashboardError] = useState<string | null>(null);
-  const [srStatsError, setSrStatsError] = useState<string | null>(null);
-  const [dueReviewsError, setDueReviewsError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    setDashboardError(null);
-    setSrStatsError(null);
-    setDueReviewsError(null);
-
+    setError(null);
     try {
       const [dashboard, stats, reviews] = await Promise.all([
         analyticsApi.getStudentDashboard(),
         quizExtensionsApi.getSpacedRepetitionStats(),
         quizExtensionsApi.getDueReviews(5),
       ]);
-
       setDashboardData(dashboard);
       setSrStats(stats);
       setDueReviews(reviews);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error occurred';
-      console.error('Error fetching analytics:', error);
-
-      // Classify which specific calls failed
-      if (message.includes('dashboard') || message.includes('/api/analytics')) {
-        setDashboardError('Failed to load analytics data.');
-      }
-      if (message.includes('spaced-repetition/stats') || message.includes('stats')) {
-        setSrStatsError('Failed to load review statistics.');
-      }
-      if (message.includes('spaced-repetition/due') || message.includes('due')) {
-        setDueReviewsError('Failed to load due reviews.');
-      }
-
-      // If we can't determine which call failed, show a generic error
-      if (!dashboardError && !srStatsError && !dueReviewsError) {
-        setDashboardError('Failed to load analytics. Please try again later.');
-      }
+    } catch (err) {
+      console.error('Error fetching analytics:', err);
+      setError('Failed to load analytics data');
     } finally {
       setLoading(false);
     }
@@ -78,459 +66,541 @@ export default function StudentAnalyticsPage() {
     fetchAll();
   }, [fetchAll]);
 
-  const retryFetch = () => {
-    fetchAll();
-  };
-
-  const getMasteryColor = (level: string) => {
-    switch (level) {
-      case 'Expert': return 'bg-green-500';
-      case 'Proficient': return 'bg-blue-500';
-      case 'Intermediate': return 'bg-yellow-500';
-      case 'Beginner': return 'bg-red-500';
-      default: return 'bg-gray-500';
-    }
-  };
-
-  const getMasteryBadgeVariant = (level: string) => {
-    switch (level) {
-      case 'Expert': return 'default' as const;
-      case 'Proficient': return 'secondary' as const;
-      case 'Intermediate': return 'outline' as const;
-      default: return 'destructive' as const;
-    }
-  };
-
-  const renderGlobalErrorBanner = () => {
-    if (!dashboardError && !srStatsError && !dueReviewsError) return null;
-
-    return (
-      <Alert variant="destructive" className="mb-6">
-        <XCircle className="h-4 w-4" />
-        <AlertTitle>Unable to load some analytics</AlertTitle>
-        <AlertDescription className="space-y-1">
-          {dashboardError && <p>{dashboardError}</p>}
-          {srStatsError && <p>{srStatsError}</p>}
-          {dueReviewsError && <p>{dueReviewsError}</p>}
-          <Button variant="outline" size="sm" className="mt-2" onClick={retryFetch}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Retry
-          </Button>
-        </AlertDescription>
-      </Alert>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen">
-        <Header title="Analytics" subtitle="Track your learning progress" />
-        <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
-          <div className="grid gap-4 md:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <Card key={i}>
-                <CardContent className="pt-6">
-                  <Skeleton className="h-20" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            {[1, 2].map((i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-6 w-40" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-48" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-40" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-48" />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  const hasAnyData = dashboardData && (
+  const hasData = dashboardData && (
     dashboardData.competencies.length > 0 ||
-    dashboardData.insights.length > 0 ||
-    dashboardData.errorPatterns.length > 0 ||
     dashboardData.summary.totalQuizzes > 0 ||
-    dashboardData.summary.averageScore > 0 ||
     (srStats && srStats.totalReviews > 0)
   );
 
-  const renderSummaryCard = (
-    icon: React.ReactNode,
-    label: string,
-    value: React.ReactNode,
-    iconBg: string,
-    iconColor: string,
-    isLoading: boolean,
-    error: string | null,
-    onRetry?: () => void
-  ) => {
-    if (error) {
-      return (
-        <Card className="border-destructive/50">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center justify-center gap-3 py-4 text-center">
-              <XCircle className={`h-8 w-8 text-destructive`} />
-              <p className="text-sm text-destructive font-medium">{label}</p>
-              <p className="text-xs text-muted-foreground">Failed to load</p>
-              {onRetry && (
-                <Button variant="ghost" size="sm" onClick={onRetry}>
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Retry
-                </Button>
-              )}
+  return (
+    <div className="min-h-screen bg-slate-50/50">
+      <Header title="Analytics" subtitle="Your learning insights and performance" />
+
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        {loading ? (
+          <LoadingState />
+        ) : error ? (
+          <ErrorState onRetry={fetchAll} error={error} />
+        ) : !hasData ? (
+          <WelcomeState />
+        ) : (
+          <>
+            {/* Performance Summary - Horizontal Bar */}
+            <div className="mb-6">
+              <PerformanceSummaryCard
+                averageScore={dashboardData!.summary.averageScore}
+                totalQuizzes={dashboardData!.summary.totalQuizzes}
+                weakTopics={dashboardData!.summary.weakTopicCount}
+                dueToday={srStats?.dueToday ?? 0}
+              />
             </div>
+
+            {/* Main Grid - Different from Dashboard */}
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* Left Column - Topics Analysis */}
+              <div className="space-y-6 lg:col-span-2">
+                {/* Topic Breakdown with Visual Bars */}
+                <TopicBreakdownCard competencies={dashboardData!.competencies} />
+
+                {/* Error Analysis */}
+                <ErrorAnalysisCard
+                  errorPatterns={dashboardData!.errorPatterns}
+                  insights={dashboardData!.insights}
+                />
+              </div>
+
+              {/* Right Column - Quick Stats & Actions */}
+              <div className="space-y-6">
+                {/* Spaced Repetition Overview */}
+                <SpacedRepetitionOverviewCard
+                  srStats={srStats}
+                  dueReviews={dueReviews}
+                />
+
+                {/* Insights Summary */}
+                <InsightsSummaryCard insights={dashboardData!.insights} />
+
+                {/* Quick Actions */}
+                <QuickActionsCard dueReviewsCount={dueReviews.length} />
+              </div>
+            </div>
+
+            {/* Detailed Analytics Section */}
+            <div className="mt-6">
+              <DetailedAnalyticsCard
+                competencies={dashboardData!.competencies}
+                summary={dashboardData!.summary}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Performance Summary - Full Width Horizontal Card
+function PerformanceSummaryCard({
+  averageScore,
+  totalQuizzes,
+  weakTopics,
+  dueToday
+}: {
+  averageScore: number;
+  totalQuizzes: number;
+  weakTopics: number;
+  dueToday: number;
+}) {
+  const scoreColor = averageScore >= 80 ? 'text-emerald-600' : averageScore >= 60 ? 'text-blue-600' : averageScore >= 40 ? 'text-amber-600' : 'text-red-600';
+
+  return (
+    <Card className="border-slate-200">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          {/* Main Score */}
+          <div className="flex items-center gap-6">
+            <div className="text-center">
+              <p className="text-sm font-medium text-slate-500 mb-1">Average Score</p>
+              <p className={`text-5xl font-bold ${scoreColor}`}>{averageScore.toFixed(0)}%</p>
+            </div>
+            <div className="h-16 w-px bg-slate-200" />
+          </div>
+
+          {/* Stats Grid */}
+          <div className="flex items-center gap-8">
+            <div className="text-center">
+              <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100 mb-2">
+                <Trophy className="h-6 w-6 text-blue-600" />
+              </div>
+              <p className="text-2xl font-bold text-slate-800">{totalQuizzes}</p>
+              <p className="text-xs text-slate-500">Quizzes</p>
+            </div>
+
+            <div className="text-center">
+              <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-100 mb-2">
+                <AlertTriangle className="h-6 w-6 text-amber-600" />
+              </div>
+              <p className="text-2xl font-bold text-slate-800">{weakTopics}</p>
+              <p className="text-xs text-slate-500">Weak Areas</p>
+            </div>
+
+            <div className="text-center">
+              <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-purple-100 mb-2">
+                <Clock className="h-6 w-6 text-purple-600" />
+              </div>
+              <p className="text-2xl font-bold text-slate-800">{dueToday}</p>
+              <p className="text-xs text-slate-500">Due Today</p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Topic Breakdown Card with Visual Progress Bars
+function TopicBreakdownCard({ competencies }: { competencies: any[] }) {
+  return (
+    <Card className="border-slate-200">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <BarChart className="h-5 w-5 text-blue-600" />
+          Topic Performance
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {competencies.length === 0 ? (
+          <div className="text-center py-8 text-slate-500">
+            <BarChart3 className="h-12 w-12 mx-auto mb-3 text-slate-300" />
+            <p>No topic data available</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {competencies.map((comp, idx) => {
+              const scoreColor = comp.score >= 80 ? 'bg-emerald-500' : comp.score >= 60 ? 'bg-blue-500' : comp.score >= 40 ? 'bg-amber-500' : 'bg-red-500';
+              const masteryLabel = comp.score >= 80 ? 'Expert' : comp.score >= 60 ? 'Good' : comp.score >= 40 ? 'Developing' : 'Needs Work';
+              const masteryColor = comp.score >= 80 ? 'bg-emerald-100 text-emerald-700' : comp.score >= 60 ? 'bg-blue-100 text-blue-700' : comp.score >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
+
+              return (
+                <div key={comp.id} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
+                      <span className="font-semibold text-slate-800">{comp.boneSpecialty?.name ?? 'Unknown'}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${masteryColor}`}>{masteryLabel}</span>
+                      <span className="text-sm font-bold text-slate-700 w-12 text-right">{comp.score.toFixed(0)}%</span>
+                    </div>
+                  </div>
+                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${scoreColor} rounded-full transition-all duration-500`}
+                      style={{ width: `${comp.score}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">{comp.correctAttempts}/{comp.totalAttempts} correct attempts</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Error Analysis Card
+function ErrorAnalysisCard({ errorPatterns, insights }: { errorPatterns: any[]; insights: any[] }) {
+  const weakInsights = insights.filter((i: any) => i.insightType === 'WeakTopic');
+  const errorInsights = insights.filter((i: any) => i.insightType === 'ErrorPattern');
+
+  return (
+    <Card className="border-slate-200">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Brain className="h-5 w-5 text-amber-600" />
+          Learning Analysis
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Weak Topics */}
+          <div>
+            <h4 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-red-500" />
+              Areas to Improve
+            </h4>
+            {weakInsights.length === 0 ? (
+              <div className="text-center py-6 bg-emerald-50 rounded-xl">
+                <CheckCircle className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
+                <p className="text-sm text-emerald-700">No weak topics identified!</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {weakInsights.slice(0, 3).map((insight: any) => (
+                  <div key={insight.id} className="p-3 bg-red-50 rounded-lg border border-red-100">
+                    <p className="font-medium text-sm text-red-800">{insight.title}</p>
+                    <p className="text-xs text-red-600 mt-1">{insight.description}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Error Patterns */}
+          <div>
+            <h4 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
+              <Activity className="h-4 w-4 text-orange-500" />
+              Common Mistakes
+            </h4>
+            {errorPatterns.length === 0 ? (
+              <div className="text-center py-6 bg-emerald-50 rounded-xl">
+                <CheckCircle className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
+                <p className="text-sm text-emerald-700">No repeated mistakes!</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {errorPatterns.slice(0, 3).map((pattern: any) => (
+                  <div key={pattern.id} className="p-3 bg-orange-50 rounded-lg border border-orange-100">
+                    <div className="flex justify-between items-start">
+                      <p className="font-medium text-sm text-orange-800">{pattern.errorTopic ?? 'Unknown'}</p>
+                      <Badge variant="outline" className="text-xs">{pattern.errorCount}x</Badge>
+                    </div>
+                    <p className="text-xs text-orange-600 mt-1">Repeated {pattern.errorCount} times</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Spaced Repetition Overview Card
+function SpacedRepetitionOverviewCard({ srStats, dueReviews }: { srStats: SpacedRepetitionStats | null; dueReviews: ReviewItem[] }) {
+  return (
+    <Card className="border-slate-200">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Calendar className="h-5 w-5 text-purple-600" />
+          Review Schedule
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {srStats && srStats.totalReviews > 0 ? (
+          <>
+            {/* Mini Stats */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="text-center p-3 bg-red-50 rounded-xl">
+                <p className="text-2xl font-bold text-red-600">{srStats.overdue}</p>
+                <p className="text-xs text-red-600">Overdue</p>
+              </div>
+              <div className="text-center p-3 bg-yellow-50 rounded-xl">
+                <p className="text-2xl font-bold text-yellow-600">{srStats.dueToday}</p>
+                <p className="text-xs text-yellow-600">Due Today</p>
+              </div>
+            </div>
+
+            {/* Due Reviews List */}
+            {dueReviews.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Due Items</p>
+                {dueReviews.slice(0, 3).map((review) => (
+                  <div key={review.scheduleId} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                    <span className="text-sm truncate flex-1">{review.caseTitle}</span>
+                    <Button size="sm" variant="ghost" asChild className="text-xs">
+                      <Link href={`/student/review?id=${review.scheduleId}`}>Review</Link>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <Button asChild className="w-full mt-4" variant="outline">
+              <Link href="/student/review">
+                View All Reviews
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Link>
+            </Button>
+          </>
+        ) : (
+          <div className="text-center py-8">
+            <Star className="h-12 w-12 mx-auto mb-3 text-purple-300" />
+            <p className="text-sm text-slate-600 mb-4">Complete quizzes to build your review schedule</p>
+            <Button asChild size="sm">
+              <Link href="/student/quizzes">Start Learning</Link>
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Insights Summary Card
+function InsightsSummaryCard({ insights }: { insights: any[] }) {
+  return (
+    <Card className="border-slate-200">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Lightbulb className="h-5 w-5 text-amber-500" />
+          AI Insights
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {insights.length === 0 ? (
+          <div className="text-center py-6">
+            <Award className="h-10 w-10 mx-auto mb-2 text-amber-300" />
+            <p className="text-sm text-slate-500">Complete quizzes to receive personalized insights</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {insights.slice(0, 4).map((insight: any) => (
+              <div
+                key={insight.id}
+                className={`p-3 rounded-lg border ${
+                  !insight.isRead ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <Lightbulb className={`h-4 w-4 mt-0.5 ${
+                    insight.insightType === 'WeakTopic' ? 'text-red-500' :
+                    insight.insightType === 'ErrorPattern' ? 'text-orange-500' : 'text-blue-500'
+                  }`} />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-800">{insight.title}</p>
+                    <p className="text-xs text-slate-500 mt-1">{insight.description}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Quick Actions Card
+function QuickActionsCard({ dueReviewsCount }: { dueReviewsCount: number }) {
+  return (
+    <Card className="border-slate-200 bg-gradient-to-br from-blue-600 to-indigo-600 text-white">
+      <CardContent className="p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="bg-white/20 rounded-xl p-2">
+            <Zap className="h-5 w-5 text-yellow-300" />
+          </div>
+          <h3 className="font-bold text-lg">Quick Actions</h3>
+        </div>
+        <div className="space-y-2">
+          <Button asChild className="w-full bg-white text-blue-600 hover:bg-blue-50 justify-start">
+            <Link href="/student/quizzes">
+              <Play className="h-4 w-4 mr-2" />
+              Start New Quiz
+            </Link>
+          </Button>
+          {dueReviewsCount > 0 && (
+            <Button asChild variant="outline" className="w-full border-white/30 text-white hover:bg-white/10 justify-start">
+              <Link href="/student/review">
+                <Clock className="h-4 w-4 mr-2" />
+                Review ({dueReviewsCount} due)
+              </Link>
+            </Button>
+          )}
+          <Button asChild variant="outline" className="w-full border-white/30 text-white hover:bg-white/10 justify-start">
+            <Link href="/student/cases">
+              <BookOpen className="h-4 w-4 mr-2" />
+              Browse Cases
+            </Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Detailed Analytics Card
+function DetailedAnalyticsCard({ competencies, summary }: { competencies: any[]; summary: any }) {
+  const totalAttempts = competencies.reduce((sum: number, c: any) => sum + c.totalAttempts, 0);
+  const totalCorrect = competencies.reduce((sum: number, c: any) => sum + c.correctAttempts, 0);
+  const overallAccuracy = totalAttempts > 0 ? (totalCorrect / totalAttempts) * 100 : 0;
+
+  return (
+    <Card className="border-slate-200">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <PieChart className="h-5 w-5 text-slate-600" />
+          Performance Summary
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-6 md:grid-cols-4">
+          <div className="text-center p-4 bg-slate-50 rounded-xl">
+            <p className="text-3xl font-bold text-slate-800">{summary.totalQuizzes}</p>
+            <p className="text-sm text-slate-500 mt-1">Total Quizzes</p>
+          </div>
+          <div className="text-center p-4 bg-slate-50 rounded-xl">
+            <p className="text-3xl font-bold text-slate-800">{totalAttempts}</p>
+            <p className="text-sm text-slate-500 mt-1">Total Attempts</p>
+          </div>
+          <div className="text-center p-4 bg-slate-50 rounded-xl">
+            <p className="text-3xl font-bold text-slate-800">{overallAccuracy.toFixed(0)}%</p>
+            <p className="text-sm text-slate-500 mt-1">Overall Accuracy</p>
+          </div>
+          <div className="text-center p-4 bg-slate-50 rounded-xl">
+            <p className="text-3xl font-bold text-slate-800">{competencies.length}</p>
+            <p className="text-sm text-slate-500 mt-1">Topics Covered</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Welcome State
+function WelcomeState() {
+  return (
+    <div className="space-y-6">
+      <Card className="border-slate-200 bg-white">
+        <CardContent className="py-12 px-8 text-center">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <BarChart3 className="h-10 w-10 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-3">Analytics Dashboard</h2>
+          <p className="text-slate-600 mb-8 max-w-md mx-auto">
+            Track your learning progress, identify areas for improvement, and get personalized insights.
+          </p>
+          <div className="flex justify-center gap-4">
+            <Button asChild size="lg" className="bg-blue-600 hover:bg-blue-700">
+              <Link href="/student/quizzes">
+                <Play className="h-5 w-5 mr-2" />
+                Take Your First Quiz
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/student/cases">
+                <BookOpen className="h-5 w-5 mr-2" />
+                Browse Cases
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Feature Preview */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="p-6">
+            <BarChart className="h-8 w-8 text-blue-500 mb-3" />
+            <h3 className="font-semibold text-slate-800 mb-1">Topic Analysis</h3>
+            <p className="text-sm text-slate-500">Track your performance across different bone specialties</p>
           </CardContent>
         </Card>
-      );
-    }
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="p-6">
+            <Lightbulb className="h-8 w-8 text-amber-500 mb-3" />
+            <h3 className="font-semibold text-slate-800 mb-1">AI Insights</h3>
+            <p className="text-sm text-slate-500">Get personalized recommendations based on your progress</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-purple-500">
+          <CardContent className="p-6">
+            <Calendar className="h-8 w-8 text-purple-500 mb-3" />
+            <h3 className="font-semibold text-slate-800 mb-1">Spaced Repetition</h3>
+            <p className="text-sm text-slate-500">Review material at optimal intervals for better retention</p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
 
-    return (
+// Loading State
+function LoadingState() {
+  return (
+    <div className="space-y-6">
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <div className={`rounded-full ${iconBg} p-3`}>
-              {icon}
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{label}</p>
-              <p className="text-2xl font-bold">
-                {isLoading ? <Skeleton className="h-8 w-16" /> : value}
-              </p>
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-16 w-32" />
+            <div className="flex gap-4">
+              <Skeleton className="h-20 w-20" />
+              <Skeleton className="h-20 w-20" />
+              <Skeleton className="h-20 w-20" />
             </div>
           </div>
         </CardContent>
       </Card>
-    );
-  };
-
-  return (
-    <div className="min-h-screen">
-      <Header
-        title="Analytics"
-        subtitle={hasAnyData ? 'Track your learning progress and insights' : 'Your learning overview'}
-      />
-
-      <div className="mx-auto max-w-7xl px-4 py-8 space-y-8">
-        {renderGlobalErrorBanner()}
-
-        {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          {renderSummaryCard(
-            <Target className="h-6 w-6 text-primary" />,
-            'Average Score',
-            `${dashboardData?.summary.averageScore.toFixed(1) ?? '0'}%`,
-            'bg-primary/10',
-            'text-primary',
-            false,
-            dashboardError,
-            dashboardError ? retryFetch : undefined
-          )}
-
-          {renderSummaryCard(
-            <BookOpen className="h-6 w-6 text-blue-500" />,
-            'Quizzes Taken',
-            dashboardData?.summary.totalQuizzes ?? 0,
-            'bg-blue-500/10',
-            'text-blue-500',
-            false,
-            dashboardError,
-            dashboardError ? retryFetch : undefined
-          )}
-
-          {renderSummaryCard(
-            <AlertTriangle className="h-6 w-6 text-red-500" />,
-            'Weak Topics',
-            dashboardData?.summary.weakTopicCount ?? 0,
-            'bg-red-500/10',
-            'text-red-500',
-            false,
-            dashboardError,
-            dashboardError ? retryFetch : undefined
-          )}
-
-          {renderSummaryCard(
-            <Clock className="h-6 w-6 text-purple-500" />,
-            'Due for Review',
-            srStats?.dueToday ?? 0,
-            'bg-purple-500/10',
-            'text-purple-500',
-            false,
-            dueReviewsError,
-            dueReviewsError ? retryFetch : undefined
-          )}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-6">
+          <Card><CardContent className="p-6"><Skeleton className="h-64" /></CardContent></Card>
+          <Card><CardContent className="p-6"><Skeleton className="h-40" /></CardContent></Card>
         </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Competency Breakdown */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Topic Competency
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {dashboardError ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
-                  <XCircle className="h-10 w-10 text-destructive" />
-                  <p className="text-sm text-muted-foreground">Failed to load topic competency.</p>
-                  <Button variant="outline" size="sm" onClick={retryFetch}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Retry
-                  </Button>
-                </div>
-              ) : dashboardData?.competencies && dashboardData.competencies.length > 0 ? (
-                <div className="space-y-4">
-                  {dashboardData.competencies.map((comp) => (
-                    <div key={comp.id} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{comp.boneSpecialty?.name ?? 'Unknown Topic'}</span>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={getMasteryBadgeVariant(comp.masteryLevel)}>
-                            {comp.masteryLevel}
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">
-                            {comp.score.toFixed(0)}%
-                          </span>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <Progress
-                          value={comp.score}
-                          className="h-2"
-                        />
-                        <div
-                          className={`absolute top-0 left-0 h-2 rounded-full ${getMasteryColor(comp.masteryLevel)} opacity-30`}
-                          style={{ width: `${comp.score}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {comp.correctAttempts}/{comp.totalAttempts} correct attempts
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No quiz data yet. Take some quizzes to see your progress!</p>
-                  <Button asChild className="mt-4">
-                    <Link href="/student/quizzes">Start Practice</Link>
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* AI Insights */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Lightbulb className="h-5 w-5" />
-                Learning Insights
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {dashboardError ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
-                  <XCircle className="h-10 w-10 text-destructive" />
-                  <p className="text-sm text-muted-foreground">Failed to load learning insights.</p>
-                  <Button variant="outline" size="sm" onClick={retryFetch}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Retry
-                  </Button>
-                </div>
-              ) : dashboardData?.insights && dashboardData.insights.length > 0 ? (
-                <div className="space-y-4">
-                  {dashboardData.insights.slice(0, 5).map((insight) => (
-                    <div
-                      key={insight.id}
-                      className={`p-4 rounded-lg border ${
-                        !insight.isRead ? 'bg-primary/5 border-primary/20' : 'bg-muted/50'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className={`rounded-full p-2 ${
-                          insight.insightType === 'WeakTopic' ? 'bg-red-100' :
-                          insight.insightType === 'ErrorPattern' ? 'bg-orange-100' :
-                          'bg-blue-100'
-                        }`}>
-                          {insight.insightType === 'WeakTopic' ? (
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                          ) : insight.insightType === 'ErrorPattern' ? (
-                            <TrendingUp className="h-4 w-4 text-orange-600" />
-                          ) : (
-                            <Lightbulb className="h-4 w-4 text-blue-600" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium">{insight.title}</p>
-                          <p className="text-sm text-muted-foreground mt-1">{insight.description}</p>
-                          {insight.recommendedAction && (
-                            <p className="text-sm text-primary mt-2">
-                              Action: {insight.recommendedAction}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Lightbulb className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Complete more quizzes to receive personalized insights!</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Error Patterns */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-orange-500" />
-                Error Patterns
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {dashboardError ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
-                  <XCircle className="h-10 w-10 text-destructive" />
-                  <p className="text-sm text-muted-foreground">Failed to load error patterns.</p>
-                  <Button variant="outline" size="sm" onClick={retryFetch}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Retry
-                  </Button>
-                </div>
-              ) : dashboardData?.errorPatterns && dashboardData.errorPatterns.length > 0 ? (
-                <div className="space-y-4">
-                  {dashboardData.errorPatterns.map((pattern) => (
-                    <div key={pattern.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <div>
-                        <p className="font-medium">{pattern.errorTopic ?? 'Unknown Topic'}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Repeated {pattern.errorCount} times
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            await analyticsApi.resolveErrorPattern(pattern.id);
-                            setDashboardData(prev => prev ? {
-                              ...prev,
-                              errorPatterns: prev.errorPatterns.filter(p => p.id !== pattern.id)
-                            } : null);
-                          } catch (error) {
-                            console.error('Error resolving pattern:', error);
-                          }
-                        }}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Mark Resolved
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50 text-green-500" />
-                  <p>No active error patterns. Great job!</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Spaced Repetition */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-purple-500" />
-                Spaced Repetition
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {srStatsError ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
-                  <XCircle className="h-10 w-10 text-destructive" />
-                  <p className="text-sm text-muted-foreground">Failed to load spaced repetition data.</p>
-                  <Button variant="outline" size="sm" onClick={retryFetch}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Retry
-                  </Button>
-                </div>
-              ) : srStats && srStats.totalReviews > 0 ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div className="p-3 rounded-lg bg-red-50">
-                      <p className="text-2xl font-bold text-red-600">{srStats.overdue}</p>
-                      <p className="text-xs text-muted-foreground">Overdue</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-yellow-50">
-                      <p className="text-2xl font-bold text-yellow-600">{srStats.dueToday}</p>
-                      <p className="text-xs text-muted-foreground">Due Today</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-green-50">
-                      <p className="text-2xl font-bold text-green-600">{srStats.mastered}</p>
-                      <p className="text-xs text-muted-foreground">Mastered</p>
-                    </div>
-                  </div>
-
-                  {dueReviews.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Due for review:</p>
-                      {dueReviews.slice(0, 3).map((review) => (
-                        <div key={review.scheduleId} className="flex items-center justify-between p-2 rounded bg-muted/50">
-                          <div>
-                            <p className="text-sm font-medium truncate">{review.caseTitle}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {review.daysOverdue > 0 ? `${review.daysOverdue} days overdue` : 'Due today'}
-                            </p>
-                          </div>
-                          <Badge variant={review.daysOverdue > 0 ? 'destructive' : 'secondary'}>
-                            {review.repetitionCount}x reviewed
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <Button asChild className="w-full">
-                    <Link href="/student/review">
-                      Start Review Session
-                      <ChevronRight className="h-4 w-4 ml-2" />
-                    </Link>
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No reviews scheduled. Complete quizzes to start building your review queue!</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <div className="space-y-6">
+          <Card><CardContent className="p-6"><Skeleton className="h-48" /></CardContent></Card>
+          <Card><CardContent className="p-6"><Skeleton className="h-48" /></CardContent></Card>
         </div>
       </div>
     </div>
+  );
+}
+
+// Error State
+function ErrorState({ onRetry, error }: { onRetry: () => void; error: string }) {
+  return (
+    <Card className="border-red-200 bg-red-50">
+      <CardContent className="py-12 text-center">
+        <XCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
+        <h3 className="text-xl font-bold text-red-700 mb-2">Unable to Load Analytics</h3>
+        <p className="text-red-600 mb-6">{error}</p>
+        <Button onClick={onRetry} variant="outline">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Try Again
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

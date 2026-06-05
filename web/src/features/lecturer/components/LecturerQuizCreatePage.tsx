@@ -1105,28 +1105,21 @@ export function LecturerQuizCreatePage() {
                   className="w-full resize-none rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs outline-none transition-all focus:border-primary"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">Quiz Mode</label>
-                <div className="grid grid-cols-1 gap-2">
-                  {QUIZ_MODE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, quizMode: opt.value })}
-                      className={`flex flex-col items-start gap-0.5 rounded-lg border p-2.5 text-left transition-all ${
-                        formData.quizMode === opt.value
-                          ? `${opt.color} border-2 shadow-sm`
-                          : 'border-border bg-muted/30 hover:border-muted-foreground/30'
-                      }`}
-                    >
-                      <span className={`text-xs font-bold ${formData.quizMode === opt.value ? '' : 'text-foreground'}`}>
-                        {opt.label}
-                      </span>
-                      <span className={`text-[10px] ${formData.quizMode === opt.value ? 'opacity-80' : 'text-muted-foreground'}`}>
-                        {opt.description}
-                      </span>
-                    </button>
-                  ))}
+                <div className="relative">
+                  <select
+                    value={formData.quizMode}
+                    onChange={(e) => setFormData({ ...formData, quizMode: Number(e.target.value) })}
+                    className="w-full cursor-pointer appearance-none rounded-lg border border-border bg-muted/50 px-3 py-2 pr-8 text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  >
+                    {QUIZ_MODE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label} — {opt.description}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 </div>
               </div>
             </div>

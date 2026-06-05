@@ -74,6 +74,7 @@ interface EnrichedQuiz {
   passingScore?: number | null;
   creatorName?: string | null;
   creatorType?: string | null;
+  quizMode?: number | null;
 }
 
 interface EnrichedAssignedQuiz extends AssignedQuizDto {
@@ -86,6 +87,7 @@ interface EnrichedAssignedQuiz extends AssignedQuizDto {
   compactAssigned: string;
   creatorName?: string | null;
   creatorType?: string | null;
+  quizMode?: number | null;
 }
 
 const PAGE_SIZE = 5;
@@ -146,6 +148,8 @@ export function LecturerQuizzesPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [selectedMode, setSelectedMode] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EnrichedQuiz | EnrichedAssignedQuiz | null>(null);
@@ -321,6 +325,7 @@ export function LecturerQuizzesPage() {
           passingScore: q.passingScore ?? null,
           creatorName: q.creatorName ?? null,
           creatorType: q.creatorType ?? null,
+          quizMode: q.quizMode ?? null,
         };
       });
       setMyQuizzes(enriched);
@@ -362,6 +367,7 @@ export function LecturerQuizzesPage() {
           compactAssigned: formatAssignedCompact(q.assignedAt ?? null),
           creatorName: q.creatorName ?? null,
           creatorType: q.creatorType ?? null,
+          quizMode: q.quizMode ?? null,
         };
       });
       setAssignedQuizzes(enriched);
@@ -417,6 +423,7 @@ export function LecturerQuizzesPage() {
           passingScore: q.passingScore ?? null,
           creatorName: q.creatorName ?? null,
           creatorType: q.creatorType ?? null,
+          quizMode: q.quizMode ?? null,
         } as EnrichedQuiz;
       });
     },
@@ -450,6 +457,7 @@ export function LecturerQuizzesPage() {
           compactAssigned: formatAssignedCompact(q.assignedAt ?? null),
           creatorName: q.creatorName ?? null,
           creatorType: q.creatorType ?? null,
+          quizMode: q.quizMode ?? null,
         } as EnrichedAssignedQuiz;
       });
     },
@@ -479,17 +487,16 @@ export function LecturerQuizzesPage() {
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     setPage(1);
-    // Clear filters and selections when switching tabs
     setSearchTerm('');
     setSelectedClass('all');
+    setSelectedMode('all');
+    setSelectedStatus('all');
     setSelectedQuizIds(new Set());
-    // Load data for the new tab
     if (tab === 'my-quizzes') {
       void myQuizzesQuery.refetch();
     } else if (tab === 'assigned-quizzes') {
       void assignedQuizzesQuery.refetch();
     }
-    // expert-library loads within its own component
   };
 
   const currentQuizzes = activeTab === 'my-quizzes' ? myQuizzes : assignedQuizzes;
@@ -502,7 +509,9 @@ export function LecturerQuizzesPage() {
       (quiz.topic?.toLowerCase().includes(term) ?? false) ||
       (quiz.topicLabel?.toLowerCase().includes(term) ?? false);
     const matchesClass = selectedClass === 'all' || quiz.className === selectedClass;
-    return matchesSearch && matchesClass;
+    const matchesMode = selectedMode === 'all' || String(quiz.quizMode ?? 1) === selectedMode;
+    const matchesStatus = selectedStatus === 'all' || quiz.status === selectedStatus;
+    return matchesSearch && matchesClass && matchesMode && matchesStatus;
   });
 
   const totalPages = filtered.length === 0 ? 0 : Math.ceil(filtered.length / PAGE_SIZE);
@@ -530,6 +539,7 @@ export function LecturerQuizzesPage() {
   const totalQuizzes = currentQuizzes.length;
   const activeModules = currentQuizzes.filter((q) => q.status === 'Active').length;
   const pendingDrafts = currentQuizzes.filter((q) => q.status === 'Draft').length;
+  const completedQuizzes = currentQuizzes.filter((q) => q.status === 'Completed').length;
 
   const listStart = filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
   const listEnd = filtered.length === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, filtered.length);
@@ -614,12 +624,12 @@ export function LecturerQuizzesPage() {
             </div>
             <div className="rounded-3xl border border-border/10 bg-card p-6 shadow-sm">
               <div className="mb-4 flex items-start justify-between">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary/20">
-                  <TrendingUp className="h-5 w-5 text-secondary" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/30">
+                  <Check className="h-5 w-5 text-muted-foreground" />
                 </div>
               </div>
-              <p className="text-sm font-medium text-muted-foreground">Avg. Score</p>
-              <p className="mt-1 text-3xl font-black text-card-foreground">—</p>
+              <p className="text-sm font-medium text-muted-foreground">Completed</p>
+              <p className="mt-1 text-3xl font-black text-card-foreground">{completedQuizzes}</p>
             </div>
           </div>
 
@@ -652,6 +662,40 @@ export function LecturerQuizzesPage() {
                   >
                     <option value="all">All Classes</option>
                     {uniqueClasses.map((cls) => (<option key={cls} value={cls}>{cls}</option>))}
+                  </select>
+                  <select
+                    value={selectedMode}
+                    onChange={(e) => { setSelectedMode(e.target.value); setPage(1); }}
+                    className="appearance-none rounded-full border border-border bg-white px-4 py-2 pr-8 text-xs font-bold text-muted-foreground focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                  >
+                    <option value="all">All Modes</option>
+                    <option value="1">Exam</option>
+                    <option value="2">Practice</option>
+                    <option value="3">Adaptive</option>
+                  </select>
+                </div>
+              )}
+              {activeTab === 'my-quizzes' && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <select
+                    value={selectedMode}
+                    onChange={(e) => { setSelectedMode(e.target.value); setPage(1); }}
+                    className="appearance-none rounded-full border border-border bg-white px-4 py-2 pr-8 text-xs font-bold text-muted-foreground focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                  >
+                    <option value="all">All Modes</option>
+                    <option value="1">Exam</option>
+                    <option value="2">Practice</option>
+                    <option value="3">Adaptive</option>
+                  </select>
+                  <select
+                    value={selectedStatus}
+                    onChange={(e) => { setSelectedStatus(e.target.value); setPage(1); }}
+                    className="appearance-none rounded-full border border-border bg-white px-4 py-2 pr-8 text-xs font-bold text-muted-foreground focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="Active">Active</option>
+                    <option value="Draft">Draft</option>
+                    <option value="Completed">Completed</option>
                   </select>
                 </div>
               )}
@@ -704,6 +748,7 @@ export function LecturerQuizzesPage() {
                     {activeTab === 'assigned-quizzes' && <th className="px-2 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Class</th>}
                     <th className="px-2 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Topic</th>
                     <th className="px-1 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-2 sm:py-4 sm:text-xs">Q#</th>
+                    <th className="px-2 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Mode</th>
                     <th className="px-2 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Status</th>
                     <th className="px-2 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Opens / Closes</th>
                     <th className="px-2 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:px-3 sm:py-4 sm:text-xs">Actions</th>
@@ -712,7 +757,7 @@ export function LecturerQuizzesPage() {
                 <tbody className="divide-y divide-border">
                   {paged.length === 0 ? (
                     <tr>
-                      <td colSpan={activeTab === 'assigned-quizzes' ? 8 : 7} className="px-4 py-20 text-center sm:px-8">
+                      <td colSpan={activeTab === 'assigned-quizzes' ? 9 : 8} className="px-4 py-20 text-center sm:px-8">
                         <p className="text-muted-foreground">No quizzes found.</p>
                       </td>
                     </tr>
@@ -759,6 +804,35 @@ export function LecturerQuizzesPage() {
                           </td>
                           <td className="px-1 py-4 text-center align-top sm:py-5">
                             <span className="text-sm font-bold text-card-foreground">{quiz.questionCount || '—'}</span>
+                          </td>
+                          <td className="px-2 py-4 align-top sm:px-3 sm:py-5">
+                            <select
+                              value={String(quiz.quizMode ?? 1)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                const newMode = Number(e.target.value);
+                                // Update local state
+                                if (activeTab === 'my-quizzes') {
+                                  setMyQuizzes((prev) =>
+                                    prev.map((q) =>
+                                      q.quizId === quizId ? { ...q, quizMode: newMode } : q
+                                    )
+                                  );
+                                } else {
+                                  setAssignedQuizzes((prev) =>
+                                    prev.map((q) =>
+                                      q.quizId === quizId ? { ...q, quizMode: newMode } : q
+                                    )
+                                  );
+                                }
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="appearance-none rounded-full border border-border bg-white px-2 py-1 pr-6 text-[10px] font-bold text-muted-foreground focus:ring-1 focus:ring-primary/20 cursor-pointer sm:px-2.5 sm:py-0.5 sm:text-xs"
+                            >
+                              <option value="1">Exam</option>
+                              <option value="2">Practice</option>
+                            
+                            </select>
                           </td>
                           <td className="px-2 py-4 align-top sm:px-3 sm:py-5">
                             <span className={`inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs ${quiz.status === 'Active' ? 'bg-secondary/15 text-secondary' : quiz.status === 'Completed' ? 'bg-muted text-muted-foreground' : 'bg-warning/10 text-warning'}`}>
