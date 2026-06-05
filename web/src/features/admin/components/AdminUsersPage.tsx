@@ -34,12 +34,16 @@ import { getQueryErrorMessage } from '@/lib/query-utils';
 import { ChevronDown, Filter, Plus, Search, Upload, Users } from 'lucide-react';
 
 const directoryRoleTabs = ['Student', 'Lecturer', 'Expert'] as const satisfies readonly UserRole[];
+const roleFilterOptions = ['All', 'Pending', 'Unassigned', 'Student', 'Lecturer', 'Expert', 'Admin'] as const;
 type RoleTab = UserRole | 'Pending' | 'Unassigned' | 'All';
+type RoleFilter = (typeof roleFilterOptions)[number];
 
 export function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<RoleTab>('All');
   const [filterStatus, setFilterStatus] = useState<UserStatus | 'All'>('All');
+  const [filterRole, setFilterRole] = useState<RoleFilter>('All');
+  const [pageIndex, setPageIndex] = useState(0);
 
   const [statusTarget, setStatusTarget] = useState<UiUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UiUser | null>(null);
@@ -81,9 +85,37 @@ export function AdminUsersPage() {
         u.email.toLowerCase().includes(needle) ||
         (u.className?.toLowerCase().includes(needle) ?? false);
       const matchStatus = filterStatus === 'All' || u.status === filterStatus;
-      return matchSearch && matchStatus;
+      const matchRole = filterRole === 'All' || u.role === filterRole;
+      return matchSearch && matchStatus && matchRole;
     });
-  }, [users, search, activeTab, filterStatus]);
+  }, [users, search, activeTab, filterStatus, filterRole]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = pageIndex * 5;
+    return filtered.slice(start, start + 5);
+  }, [filtered, pageIndex]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 5));
+
+  const handleTabChange = (tab: RoleTab) => {
+    setActiveTab(tab);
+    setPageIndex(0);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPageIndex(0);
+  };
+
+  const handleStatusChange = (status: UserStatus | 'All') => {
+    setFilterStatus(status);
+    setPageIndex(0);
+  };
+
+  const handleRoleFilterChange = (role: RoleFilter) => {
+    setFilterRole(role);
+    setPageIndex(0);
+  };
 
   const countsByTab = useMemo(
     () => ({
@@ -165,19 +197,19 @@ export function AdminUsersPage() {
         toolbar={
           <div className="space-y-4">
             <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1">
-              <TabButton label="All" count={users.length} active={activeTab === 'All'} onClick={() => setActiveTab('All')} />
+              <TabButton label="All" count={users.length} active={activeTab === 'All'} onClick={() => handleTabChange('All')} />
               <TabButton
                 label="Pending"
                 count={countsByTab.Pending}
                 active={activeTab === 'Pending'}
-                onClick={() => setActiveTab('Pending')}
+                onClick={() => handleTabChange('Pending')}
                 highlight
               />
               <TabButton
                 label="Unassigned"
                 count={countsByTab.Unassigned}
                 active={activeTab === 'Unassigned'}
-                onClick={() => setActiveTab('Unassigned')}
+                onClick={() => handleTabChange('Unassigned')}
               />
               {directoryRoleTabs.map((role) => (
                 <TabButton
@@ -185,7 +217,7 @@ export function AdminUsersPage() {
                   label={role}
                   count={countsByTab[role]}
                   active={activeTab === role}
-                  onClick={() => setActiveTab(role)}
+                  onClick={() => handleTabChange(role)}
                 />
               ))}
             </div>
@@ -197,7 +229,7 @@ export function AdminUsersPage() {
                     className="h-12 pl-12"
                     placeholder="Search by name, email, or class..."
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                   />
                 </div>
               </ToolbarField>
@@ -205,8 +237,25 @@ export function AdminUsersPage() {
                 <div className="relative min-w-[200px]">
                   <Filter className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                   <select
+                    value={filterRole}
+                    onChange={(e) => handleRoleFilterChange(e.target.value as RoleFilter)}
+                    className="h-12 w-full appearance-none rounded-lg border border-border bg-input pl-12 pr-10 text-sm"
+                  >
+                    {roleFilterOptions.map((role) => (
+                      <option key={role} value={role}>
+                        {role === 'All' ? 'All roles' : role}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+              </ToolbarField>
+              <ToolbarField>
+                <div className="relative min-w-[200px]">
+                  <Filter className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                  <select
                     value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value as UserStatus | 'All')}
+                    onChange={(e) => handleStatusChange(e.target.value as UserStatus | 'All')}
                     className="h-12 w-full appearance-none rounded-lg border border-border bg-input pl-12 pr-10 text-sm"
                   >
                     <option value="All">All statuses</option>
@@ -222,8 +271,12 @@ export function AdminUsersPage() {
       >
         <DataTable
           columns={columns}
-          data={filtered}
-          pageSize={15}
+          data={paginatedUsers}
+          pageSize={5}
+          manualPagination
+          pageCount={totalPages}
+          pageIndex={pageIndex}
+          onPageChange={setPageIndex}
           isLoading={usersQuery.isPending}
           emptyIcon={<Users className="h-6 w-6 text-primary" />}
           emptyTitle="No users found"

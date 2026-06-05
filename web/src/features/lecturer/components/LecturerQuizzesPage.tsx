@@ -28,7 +28,6 @@ import {
   Copy,
   Check,
   Trash,
-  BookOpen,
   User,
   UserCheck,
   Eye,
@@ -43,13 +42,12 @@ import { exportAllQuizResultsExcel } from '@/lib/api/lecturer';
 import type { ClassQuizDto, AssignedQuizDto, QuizDto } from '@/lib/api/types';
 import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import ExpertQuizLibrary from '@/components/lecturer/quizzes/ExpertQuizLibrary';
 import { fetchExpertQuizQuestions, assignExpertQuizToClass } from '@/lib/api/lecturer-expert-quiz';
 import { fetchLecturerClasses } from '@/lib/api/lecturer-classes';
 import { resolveApiAssetUrl } from '@/lib/api/client';
 
 type QuizStatus = 'Active' | 'Draft' | 'Completed';
-type TabType = 'my-quizzes' | 'expert-library' | 'assigned-quizzes';
+type TabType = 'my-quizzes' | 'assigned-quizzes';
 
 interface EnrichedQuiz {
   quizId: string;
@@ -570,14 +568,6 @@ export function LecturerQuizzesPage() {
         </button>
         <button
           type="button"
-          onClick={() => handleTabChange('expert-library')}
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'expert-library' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-        >
-          <BookOpen className="h-4 w-4" />
-          Quiz Library
-        </button>
-        <button
-          type="button"
           onClick={() => handleTabChange('assigned-quizzes')}
           className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'assigned-quizzes' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
         >
@@ -586,13 +576,8 @@ export function LecturerQuizzesPage() {
         </button>
       </div>
 
-      {/* Quiz Library Tab */}
-      {activeTab === 'expert-library' ? (
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <ExpertQuizLibrary onAssignSuccess={() => handleTabChange('assigned-quizzes')} />
-        </div>
-      ) : (
-        <div className="space-y-8">
+      {/* Quizzes Content */}
+      <div className="space-y-8">
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="rounded-3xl border border-border/10 bg-card p-6 shadow-sm">
@@ -927,7 +912,6 @@ export function LecturerQuizzesPage() {
             </div>
           </div>
         </div>
-      )}
 
       {/* Footer */}
       <div className="mt-8 flex flex-col gap-4 border-t border-border pt-8 sm:flex-row sm:items-center sm:justify-between">

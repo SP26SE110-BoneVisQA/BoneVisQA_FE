@@ -18,6 +18,23 @@ function formatDue(closeTime?: string | null, openTime?: string | null) {
   return 'Schedule set by your lecturer';
 }
 
+const QUIZ_MODE_LABELS: Record<number, { label: string; color: string; bg: string }> = {
+  1: { label: 'Exam Mode', color: 'text-red-700', bg: 'bg-red-100' },
+  2: { label: 'Practice Mode', color: 'text-green-700', bg: 'bg-green-100' },
+  3: { label: 'Adaptive Mode', color: 'text-purple-700', bg: 'bg-purple-100' },
+};
+
+function QuizModeBadge({ mode }: { mode: number | null | undefined }) {
+  if (mode == null) return null;
+  const info = QUIZ_MODE_LABELS[mode];
+  if (!info) return null;
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${info.bg} ${info.color}`}>
+      {info.label}
+    </span>
+  );
+}
+
 type AssignedQuizzesListProps = {
   items: AssignedQuizItem[];
   isPending: boolean;
@@ -26,6 +43,7 @@ type AssignedQuizzesListProps = {
   pageSize: number;
   pageIndex: number;
   onPageChange: (pageIndex: number) => void;
+  hasActiveFilters?: boolean;
 };
 
 export function AssignedQuizzesList({
@@ -36,6 +54,7 @@ export function AssignedQuizzesList({
   pageSize,
   pageIndex,
   onPageChange,
+  hasActiveFilters = false,
 }: AssignedQuizzesListProps) {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const start = pageIndex * pageSize + 1;
@@ -57,7 +76,7 @@ export function AssignedQuizzesList({
     return (
       <EmptyState
         icon={<ClipboardList className="h-6 w-6 text-muted-foreground" />}
-        title="No practice quizzes yet"
+        title={hasActiveFilters ? 'No quizzes match your filters' : 'No assigned quizzes yet'}
       />
     );
   }
@@ -75,6 +94,7 @@ export function AssignedQuizzesList({
                 <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
                   Required
                 </span>
+                <QuizModeBadge mode={q.quizMode} />
                 {q.isCompleted ? (
                   <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-800">
                     Completed

@@ -1461,7 +1461,7 @@ export default function QuizSessionPage({
             {/* ================================================================
                 ANSWER & EXPLANATION - Hiển thị khi đã Reveal Answers
                 ================================================================ */}
-            {submitted && showFeedback && currentQ && (currentQ.explanation || currentQ.correctAnswer) && (
+            {submitted && showFeedback && currentQ && !isPracticeMode && (currentQ.explanation || currentQ.correctAnswer) && (
               <div className="mt-6 space-y-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-6">
                 <div className="flex items-center gap-2 mb-3">
                   <Lightbulb className="h-5 w-5 text-primary" />

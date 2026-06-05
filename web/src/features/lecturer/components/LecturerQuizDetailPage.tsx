@@ -119,6 +119,7 @@ export function LecturerQuizDetailPage() {
   const [topic, setTopic] = useState('');
   const [difficulty, setDifficulty] = useState('Medium');
   const [classification, setClassification] = useState<(typeof CLASSIFICATION_OPTIONS)[number]>('Resident Year 1');
+  const [quizMode, setQuizMode] = useState<number>(1);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -183,6 +184,9 @@ export function LecturerQuizDetailPage() {
     if (quiz.classification && (CLASSIFICATION_OPTIONS as readonly string[]).includes(quiz.classification)) {
       setClassification(quiz.classification as (typeof CLASSIFICATION_OPTIONS)[number]);
     }
+    if (quiz.quizMode != null) {
+      setQuizMode(quiz.quizMode);
+    }
   }, [quiz]);
 
   useEffect(() => {
@@ -190,6 +194,12 @@ export function LecturerQuizDetailPage() {
       setError(quizQuery.error instanceof Error ? quizQuery.error.message : 'Failed to load quiz');
     }
   }, [quizQuery.error]);
+
+  useEffect(() => {
+    if (showTitleWarning && title.trim()) {
+      setShowTitleWarning(false);
+    }
+  }, [title, showTitleWarning]);
 
   // Fetch release status when quiz and classId are available
   useEffect(() => {
@@ -222,20 +232,22 @@ export function LecturerQuizDetailPage() {
   }, [quizId]);
 
   const handleSave = async () => {
-    // Check if title is empty
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       setShowTitleWarning(true);
+      setError('Please enter a quiz title before publishing.');
+      appToast.error('Please enter a quiz title before publishing.');
       return;
     }
 
+    setShowTitleWarning(false);
     setSaving(true);
     setError(null);
     try {
       await updateQuizMutation.mutateAsync({
         id: quizId,
         body: {
-          title,
+          title: trimmedTitle,
           openTime: datetimeLocalToIso(openTimeLocal),
           closeTime: datetimeLocalToIso(closeTimeLocal),
           timeLimit: timeLimit ? parseInt(timeLimit, 10) : null,
@@ -243,6 +255,7 @@ export function LecturerQuizDetailPage() {
           topic: topic || null,
           difficulty: difficulty || null,
           classification: classification || null,
+          quizMode: quizMode,
         },
       });
       if (selectedClassId && selectedClassId !== originalClassId) {
@@ -510,7 +523,7 @@ export function LecturerQuizDetailPage() {
           <div className="flex-1">
             <p className="font-semibold text-amber-800 dark:text-amber-200">Quiz title is empty</p>
             <p className="mt-0.5 text-sm text-amber-700 dark:text-amber-300">
-              Please enter a title before saving. Students will not see this quiz without a title.
+              Please enter a title before publishing. Students will not see this quiz without a title.
             </p>
           </div>
           <button
@@ -716,6 +729,20 @@ export function LecturerQuizDetailPage() {
                   placeholder="Description..."
                   className="w-full resize-none rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs outline-none transition-all focus:border-primary"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">Quiz Mode</label>
+                <div className="relative">
+                  <select
+                    value={quizMode}
+                    onChange={(e) => setQuizMode(Number(e.target.value))}
+                    className="w-full cursor-pointer appearance-none rounded-lg border border-border bg-muted/50 px-3 py-2 pr-8 text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  >
+                      <option value={1}>Exam Mode — Formal assessment with time limit</option>
+                      <option value={2}>Practice Mode — Practice without time pressure</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
               </div>
             </div>
           </div>

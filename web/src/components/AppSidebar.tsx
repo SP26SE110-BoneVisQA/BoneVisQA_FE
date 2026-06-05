@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useLogout } from '@/lib/useLogout';
@@ -141,7 +140,7 @@ export function AppSidebar({
         <ul className="space-y-1">
           {dashboardItem ? (
             <li key={dashboardItem.href}>
-              <Link
+              <a
                 href={dashboardItem.href}
                 title={collapsed ? dashboardItem.label : undefined}
                 className={`flex items-center rounded-lg text-sm font-semibold transition-colors duration-150 ${
@@ -151,10 +150,11 @@ export function AppSidebar({
                     ? 'bg-[var(--sidebar-active)] text-white'
                     : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--sidebar-text)]'
                 }`}
+                onClick={() => window.location.href = dashboardItem.href}
               >
                 <dashboardItem.icon className="h-5 w-5 shrink-0" />
                 {!collapsed ? <span className="truncate">{dashboardItem.label}</span> : null}
-              </Link>
+              </a>
             </li>
           ) : null}
           {!collapsed ? (
@@ -170,7 +170,7 @@ export function AppSidebar({
 
             return (
               <li key={item.href}>
-                <Link
+                <a
                   href={item.href}
                   title={collapsed ? item.label : undefined}
                   className={`flex items-center rounded-lg text-sm font-medium transition-colors duration-150 ${
@@ -180,10 +180,11 @@ export function AppSidebar({
                       ? 'bg-[var(--sidebar-active)] text-white'
                       : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--sidebar-text)]'
                   }`}
+                  onClick={() => window.location.href = item.href}
                 >
                   <Icon className="h-5 w-5 shrink-0" />
                   {!collapsed ? <span className="truncate">{item.label}</span> : null}
-                </Link>
+                </a>
               </li>
             );
           })}
@@ -191,12 +192,12 @@ export function AppSidebar({
       </nav>
 
       <div className="space-y-2 border-t border-[var(--border-color)] p-2">
-        <Link href={meta.actionHref} className="block" title={collapsed ? meta.actionLabel : undefined}>
+        <a href={meta.actionHref} className="block" title={collapsed ? meta.actionLabel : undefined} onClick={() => window.location.href = meta.actionHref}>
           <Button className={`w-full justify-center ${collapsed ? 'px-2' : ''}`}>
             <Plus className="h-4 w-4 shrink-0" />
             {!collapsed ? <span className="ml-2">{meta.actionLabel}</span> : null}
           </Button>
-        </Link>
+        </a>
         <Button
           onClick={logout}
           variant="outline"

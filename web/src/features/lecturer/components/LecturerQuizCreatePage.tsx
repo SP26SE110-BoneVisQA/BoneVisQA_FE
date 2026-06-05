@@ -180,6 +180,15 @@ export function LecturerQuizCreatePage() {
 
   // Track if quiz is accessible (between openTime and before closeTime)
   const [isQuizOpenTimeReached, setIsQuizOpenTimeReached] = useState(false);
+  const [showTitleWarning, setShowTitleWarning] = useState(false);
+  const [showTitleWarningDraft, setShowTitleWarningDraft] = useState(false);
+
+  useEffect(() => {
+    if ((showTitleWarning || showTitleWarningDraft) && formData.title.trim()) {
+      setShowTitleWarning(false);
+      setShowTitleWarningDraft(false);
+    }
+  }, [formData.title, showTitleWarning, showTitleWarningDraft]);
 
   useEffect(() => {
     const checkOpenTime = () => {
@@ -451,9 +460,11 @@ export function LecturerQuizCreatePage() {
   // ========== Quiz Handlers ==========
   const handleSaveDraft = async () => {
     if (!formData.title.trim()) {
-      setError('Please enter an assessment title');
+      setShowTitleWarningDraft(true);
+      setError('Please enter a quiz title before saving the draft.');
       return;
     }
+    setShowTitleWarningDraft(false);
     setLoading(true);
     setError(null);
     try {
@@ -475,13 +486,15 @@ export function LecturerQuizCreatePage() {
 
   const handleCreateQuiz = async () => {
     if (!formData.title.trim()) {
-      setError('Please enter an assessment title');
+      setShowTitleWarning(true);
+      setError('Please enter a quiz title before publishing.');
       return;
     }
     if (allQuestions.length === 0) {
       setError('Add at least one question before publishing.');
       return;
     }
+    setShowTitleWarning(false);
     setLoading(true);
     setError(null);
     try {
@@ -699,6 +712,32 @@ export function LecturerQuizCreatePage() {
           )}
         </div>
       </div>
+
+      {/* Title warning */}
+      {(showTitleWarning || showTitleWarningDraft) && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800">Quiz title is required</p>
+            <p className="mt-0.5 text-sm text-amber-700">
+              {showTitleWarning
+                ? 'Please enter a title before publishing the quiz.'
+                : 'Please enter a title before saving the draft.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowTitleWarning(false);
+              setShowTitleWarningDraft(false);
+            }}
+            className="shrink-0 rounded-lg p-1 text-amber-600 transition-colors hover:bg-amber-100"
+            aria-label="Dismiss warning"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

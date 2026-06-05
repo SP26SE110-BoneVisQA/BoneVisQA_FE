@@ -733,6 +733,7 @@ function mapQuizListItem(item: Record<string, unknown>): AssignedQuizItem {
     attemptId: item.attemptId != null ? String(item.attemptId) : item.AttemptId != null ? String(item.AttemptId) : null,
     createdAt: item.createdAt != null ? String(item.createdAt) : item.CreatedAt != null ? String(item.CreatedAt) : null,
     answersReleased: Boolean(item.answersReleased ?? item.AnswersReleased ?? false),
+    quizMode: asOptionalNumber(item.quizMode) ?? asOptionalNumber(item.QuizMode) ?? null,
   };
 }
 
