@@ -30,7 +30,7 @@ import {
 import { fetchAdminUsers } from '@/lib/api/admin-users';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import Header from '@/components/Header';
+import { useDashboardHeader } from '@/components/layouts/dashboard-header-context';
 
 function isLecturerSlotRow(e: ClassEnrollment): boolean {
   return Boolean(e.lecturerId?.trim()) && !e.studentId?.trim();
@@ -240,14 +240,13 @@ export default function ClassEnrollmentsPage() {
   };
 
   const cls = roster as AdminClassModel;
+  useDashboardHeader({
+    title: cls.className || 'Class Enrollments',
+    showBack: true,
+  });
 
   return (
     <div className="min-h-screen bg-background pb-12">
-      <Header
-        title={cls.className || 'Class Enrollments'}
-        subtitle="Manage lecturers, experts, and students enrolled in this class"
-      />
-
       <div className="mx-auto max-w-[1600px] space-y-6 p-6">
         <Button
           variant="ghost"
@@ -273,9 +272,6 @@ export default function ClassEnrollmentsPage() {
                 </span>
               )}
             </div>
-            {classId && (
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{classId}</p>
-            )}
           </div>
         </div>
 

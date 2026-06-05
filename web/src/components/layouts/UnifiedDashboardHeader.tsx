@@ -43,7 +43,13 @@ function notificationDtoToAppItem(d: NotificationDto): AppNotificationItem {
   };
 }
 
-export function UnifiedDashboardHeader({ className }: { className?: string }) {
+export function UnifiedDashboardHeader({
+  role,
+  className,
+}: {
+  role?: 'admin' | 'lecturer' | 'expert' | 'student';
+  className?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const header = useDashboardHeaderReader();
@@ -165,6 +171,7 @@ export function UnifiedDashboardHeader({ className }: { className?: string }) {
           <NotificationCenter
             serverItems={mergedNotifications}
             connectionLive={connectionStatus === 'connected'}
+            role={role}
           />
 
           <button

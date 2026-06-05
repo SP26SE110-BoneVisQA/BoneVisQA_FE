@@ -66,7 +66,6 @@ export function ClassManagementTable({
         const matchSearch =
           c.className.toLowerCase().includes(term) ||
           c.semester.toLowerCase().includes(term) ||
-          c.id.toLowerCase().includes(term) ||
           (c.classSpecialtyName?.toLowerCase().includes(term)) ||
           (c.expertName?.toLowerCase().includes(term));
         if (!matchSearch) return false;
@@ -81,7 +80,7 @@ export function ClassManagementTable({
     });
   }, [classes, search, filterSpecialtyId]);
 
-  const colCount = showSpecialtyColumn ? 9 : 8;
+  const colCount = showSpecialtyColumn ? 8 : 7;
 
   return (
     <div className="flex flex-col gap-4">
@@ -90,7 +89,7 @@ export function ClassManagementTable({
           <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
-            placeholder={t('classes.searchPlaceholder', 'Search by name, semester, or class ID...')}
+            placeholder={t('classes.searchPlaceholder', 'Search by name, semester, specialty, lecturer, or expert...')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-12 w-full rounded-xl border border-border bg-input pl-12 pr-4 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -122,7 +121,6 @@ export function ClassManagementTable({
           <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-bold">Class</th>
-              <th className="px-4 py-3 font-bold">Class ID</th>
               <th className="px-4 py-3 font-bold">Semester</th>
               {showSpecialtyColumn && <th className="min-w-[140px] px-4 py-3 font-bold">Specialty</th>}
               <th className="px-4 py-3 font-bold text-center">Students</th>
@@ -151,11 +149,6 @@ export function ClassManagementTable({
                         <div className="font-semibold text-card-foreground">{cls.className}</div>
                       </div>
                     </div>
-                  </td>
-                  <td className="max-w-[200px] px-4 py-3">
-                    <span className="break-all font-mono text-[11px] leading-snug text-muted-foreground">
-                      {cls.id}
-                    </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <div className="flex items-center gap-1.5 font-medium">

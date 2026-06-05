@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Save, RotateCcw, Server, Database, Mail, Shield, Globe, Loader2 } from 'lucide-react';
-import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { systemConfigApi, type SystemConfigItem } from '@/lib/api/systemConfig';
+import { useDashboardHeader } from '@/components/layouts/dashboard-header-context';
 
 interface SystemConfig {
   siteName: string;
@@ -55,6 +55,10 @@ export default function AdminSystemConfigPage() {
   const [fetching, setFetching] = useState(true);
   const [saved, setSaved] = useState(false);
   const [config, setConfig] = useState<SystemConfig>(DEFAULT_CONFIG);
+  useDashboardHeader({
+    title: t('systemConfig.title', 'System Configuration'),
+    showBack: true,
+  });
 
   useEffect(() => {
     fetchConfig();
@@ -146,11 +150,6 @@ export default function AdminSystemConfigPage() {
 
   return (
     <div className="min-h-screen bg-background pb-12">
-      <Header
-        title={t('systemConfig.title', 'System Configuration')}
-        subtitle={t('systemConfig.subtitle', 'Manage system-wide settings and parameters')}
-      />
-
       <div className="mx-auto max-w-4xl space-y-6 p-6">
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-3">

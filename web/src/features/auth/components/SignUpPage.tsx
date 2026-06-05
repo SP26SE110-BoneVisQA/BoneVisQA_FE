@@ -18,6 +18,8 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [schoolCohort, setSchoolCohort] = useState("");
+  const [medicalSchool, setMedicalSchool] = useState("");
+  const [medicalStudentId, setMedicalStudentId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -44,15 +46,25 @@ export default function RegisterPage() {
       setError("School cohort must be at least 2 characters.");
       return;
     }
+    if (medicalSchool.trim().length < 2) {
+      setError("Medical school must be at least 2 characters.");
+      return;
+    }
+    if (medicalStudentId.trim().length < 2) {
+      setError("Student ID must be at least 2 characters.");
+      return;
+    }
 
     setLoading(true);
 
     try {
       const data = await register({
-        fullName,
-        email,
+        fullName: fullName.trim(),
+        email: email.trim(),
         password,
-        schoolCohort,
+        schoolCohort: schoolCohort.trim(),
+        medicalSchool: medicalSchool.trim(),
+        medicalStudentId: medicalStudentId.trim(),
       });
 
       if (data.success) {
@@ -181,6 +193,42 @@ export default function RegisterPage() {
                 value={schoolCohort}
                 onChange={(e) => setSchoolCohort(e.target.value)}
                 placeholder="K68 Medical"
+                required
+                className="mt-1.5 w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm text-text-main placeholder:text-outline/50 focus:outline-none focus:ring-2 focus:ring-primary-container/40"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="medicalSchool"
+                className="ml-1 block text-xs font-semibold text-on-surface-variant"
+              >
+                Medical School
+              </label>
+              <input
+                id="medicalSchool"
+                type="text"
+                value={medicalSchool}
+                onChange={(e) => setMedicalSchool(e.target.value)}
+                placeholder="Hanoi Medical University"
+                required
+                className="mt-1.5 w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm text-text-main placeholder:text-outline/50 focus:outline-none focus:ring-2 focus:ring-primary-container/40"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="medicalStudentId"
+                className="ml-1 block text-xs font-semibold text-on-surface-variant"
+              >
+                Student ID
+              </label>
+              <input
+                id="medicalStudentId"
+                type="text"
+                value={medicalStudentId}
+                onChange={(e) => setMedicalStudentId(e.target.value)}
+                placeholder="MED2024001"
                 required
                 className="mt-1.5 w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm text-text-main placeholder:text-outline/50 focus:outline-none focus:ring-2 focus:ring-primary-container/40"
               />

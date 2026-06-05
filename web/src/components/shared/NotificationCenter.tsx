@@ -8,37 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { notificationTargetToAppPath } from '@/lib/notification-app-path';
+import type { AppRoleKey } from '@/lib/auth/rbac';
 import type { AppNotificationItem } from '@/lib/api/types';
-
-const MOCK_NOTIFICATIONS: AppNotificationItem[] = [
-  {
-    id: 'mock-expert-approved',
-    type: 'expert_review',
-    title: 'Expert approved your question',
-    message: 'Your Visual QA answer on distal radius fracture was verified.',
-    route: '/student/history',
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    isRead: false,
-  },
-  {
-    id: 'mock-quiz-assigned',
-    type: 'quiz_assigned',
-    title: 'New quiz assigned',
-    message: 'Musculoskeletal Radiology — due Friday.',
-    route: '/student/quiz',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-    isRead: false,
-  },
-  {
-    id: 'mock-class-announcement',
-    type: 'announcement',
-    title: 'Class announcement',
-    message: 'Lecturer posted a new case assignment for Week 8.',
-    route: '/student/classes',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    isRead: true,
-  },
-];
 
 function formatWhen(iso?: string): string {
   if (!iso) return '';
@@ -55,12 +26,14 @@ function formatWhen(iso?: string): string {
 type NotificationCenterProps = {
   serverItems: AppNotificationItem[];
   connectionLive?: boolean;
+  role?: AppRoleKey;
   className?: string;
 };
 
 export function NotificationCenter({
   serverItems,
   connectionLive = false,
+  role,
   className,
 }: NotificationCenterProps) {
   const router = useRouter();
@@ -70,7 +43,7 @@ export function NotificationCenter({
 
   const merged = useMemo(() => {
     const map = new Map<string, AppNotificationItem>();
-    for (const item of [...MOCK_NOTIFICATIONS, ...serverItems]) {
+    for (const item of serverItems) {
       map.set(item.id, { ...item });
     }
     return Array.from(map.values()).sort((a, b) => {
@@ -98,7 +71,7 @@ export function NotificationCenter({
 
   const handleClick = (item: AppNotificationItem) => {
     setReadIds((prev) => new Set(prev).add(item.id));
-    if (item.type === 'quiz_assigned') {
+    if (item.type === 'quiz_assigned' && role === 'student') {
       router.push('/student/quiz');
       setOpen(false);
       return;
@@ -108,8 +81,6 @@ export function NotificationCenter({
       setOpen(false);
     }
   };
-
-  const list = tab === 'unread' ? unread : items;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

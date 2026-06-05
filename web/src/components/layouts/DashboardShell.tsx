@@ -115,7 +115,7 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
             onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
           />
           <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-            <UnifiedDashboardHeader />
+            <UnifiedDashboardHeader role={role} />
             <main
               className={cn(
                 'min-h-0 min-w-0 flex-1',
