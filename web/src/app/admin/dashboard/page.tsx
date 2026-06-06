@@ -15,6 +15,7 @@ import {
   FileText,
   Award,
   Clock,
+  Shield,
 } from 'lucide-react';
 import {
   fetchAdminUserStats,
@@ -119,6 +120,14 @@ export default function AdminDashboardPage() {
       icon: Award,
       iconColor: 'bg-success/10 text-success',
     },
+    {
+      title: 'Admins',
+      value: admins.toString(),
+      change: 'system accounts',
+      changeType: 'positive' as const,
+      icon: Shield,
+      iconColor: 'bg-destructive/10 text-destructive',
+    },
   ];
 
   const isLoading = overviewQuery.isPending || recentUsersQuery.isPending;
@@ -129,7 +138,7 @@ export default function AdminDashboardPage() {
       isLoading={isLoading}
       error={statsError}
     >
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         {currentStats.map((stat) => (
           <StatCard key={stat.title} {...stat} />
         ))}

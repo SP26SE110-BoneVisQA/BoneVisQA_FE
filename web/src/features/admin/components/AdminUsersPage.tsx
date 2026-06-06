@@ -33,7 +33,7 @@ import type { CreateUserPayload } from '@/lib/api/admin-users';
 import { getQueryErrorMessage } from '@/lib/query-utils';
 import { ChevronDown, Filter, Plus, Search, Upload, Users } from 'lucide-react';
 
-const directoryRoleTabs = ['Student', 'Lecturer', 'Expert'] as const satisfies readonly UserRole[];
+const directoryRoleTabs = ['Student', 'Lecturer', 'Expert', 'Admin'] as const satisfies readonly UserRole[];
 const roleFilterOptions = ['All', 'Pending', 'Unassigned', 'Student', 'Lecturer', 'Expert', 'Admin'] as const;
 type RoleTab = UserRole | 'Pending' | 'Unassigned' | 'All';
 type RoleFilter = (typeof roleFilterOptions)[number];
@@ -124,6 +124,7 @@ export function AdminUsersPage() {
       Student: users.filter((u) => u.role === 'Student').length,
       Lecturer: users.filter((u) => u.role === 'Lecturer').length,
       Expert: users.filter((u) => u.role === 'Expert').length,
+      Admin: users.filter((u) => u.role === 'Admin').length,
     }),
     [users],
   );
