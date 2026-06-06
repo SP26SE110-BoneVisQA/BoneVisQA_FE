@@ -32,9 +32,15 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 function resolveCatalogImageUrl(detail: StudentCaseCatalogDetail): string | null {
-  const fromImages = detail.images?.[0]?.imageUrl?.trim();
-  if (fromImages) return resolveApiAssetUrl(fromImages);
-  if (detail.imageUrl?.trim()) return resolveApiAssetUrl(detail.imageUrl);
+  const candidates = [
+    detail.images?.[0]?.imageUrl,
+    detail.imageUrl,
+    ...((detail.images ?? []).map((img) => img.imageUrl)),
+  ];
+  for (const candidate of candidates) {
+    const trimmed = candidate?.trim();
+    if (trimmed) return resolveApiAssetUrl(trimmed);
+  }
   return null;
 }
 
@@ -74,7 +80,6 @@ export function WorkspacePageClient() {
   } | null>(null);
   const storeDicomMetadata = useVisualQaStore((s) => s.dicomMetadata);
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0);
-  const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [emptyLandingHistoryOpen, setEmptyLandingHistoryOpen] = useState(false);
   const [awaitingNewSession, setAwaitingNewSession] = useState(false);
   const bootKeyRef = useRef<string | null>(null);
@@ -232,15 +237,8 @@ export function WorkspacePageClient() {
   }, [caseDetail, previewImageUrl]);
 
   const title = headerTitle;
-
-  const turnLabel = useMemo(() => {
-    const used = capabilities?.turnsUsed;
-    const limit = capabilities?.turnLimit;
-    if (typeof used === 'number' && typeof limit === 'number') {
-      return `${used}/${limit} turns`;
-    }
-    return null;
-  }, [capabilities?.turnLimit, capabilities?.turnsUsed]);
+  const isCatalogFlow = flow === 'catalog' || queryFlow === 'catalog';
+  const answerVariant = isCatalogFlow ? 'catalog' : 'full';
 
   const handleUploadSuccess = useCallback(
     (result: VisualQaUploadPersonalResponse, file?: File) => {
@@ -272,7 +270,6 @@ export function WorkspacePageClient() {
       const sid = targetSessionId.trim();
       if (!sid) return;
       setAwaitingNewSession(false);
-      setMobileHistoryOpen(false);
       setEmptyLandingHistoryOpen(false);
       const prefill = readAndClearSessionPrefillImage(sid);
       if (prefill) {
@@ -329,7 +326,7 @@ export function WorkspacePageClient() {
     router.replace('/student/visual-qa/workspace');
   }, [resetSession, router]);
 
-  const readOnlyImage = capabilities?.isReadOnly === true;
+  const readOnlyImage = isCatalogFlow || capabilities?.isReadOnly === true;
   const composerDisabled =
     isUploading || (!effectiveCaseId && !effectiveSessionId) || bootLoading || Boolean(bootError);
 
@@ -338,12 +335,13 @@ export function WorkspacePageClient() {
       <WorkspaceImagePanel
         imageUrl={displayImageUrl}
         imageAlt={title}
-        loading={isUploading}
+        loading={isUploading || (isCatalogFlow && bootLoading && !displayImageUrl)}
         readOnly={readOnlyImage}
+        catalogMode={isCatalogFlow}
       />
       <WorkspaceContextPanel
-        flow={flow === 'personal' ? 'personal' : null}
-        caseDetail={null}
+        flow={flow === 'catalog' ? 'catalog' : flow === 'personal' ? 'personal' : null}
+        caseDetail={flow === 'catalog' ? caseDetail : null}
         personalMeta={{
           ...personalMeta,
           dicomMetadata: personalMeta?.dicomMetadata ?? storeDicomMetadata,
@@ -408,36 +406,23 @@ export function WorkspacePageClient() {
     );
   }
 
-  const showHistorySidebar = flow === 'personal' || Boolean(effectiveSessionId);
+  const showHistorySidebar = flow === 'personal' && Boolean(effectiveSessionId);
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.12),_transparent_28%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(241,245,249,0.92))]">
-      {mobileHistoryOpen ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-[55] bg-black/40 lg:hidden"
-          aria-label="Close chat history"
-          onClick={() => setMobileHistoryOpen(false)}
-        />
-      ) : null}
+      <WorkspaceFlowBar flow={flow} onNewChat={handleNewSession} />
 
-      <WorkspaceFlowBar
-        flow={flow}
-        turnLabel={turnLabel}
-        onNewChat={handleNewSession}
-        onOpenHistory={showHistorySidebar ? () => setMobileHistoryOpen(true) : undefined}
-        historyOpen={mobileHistoryOpen}
-      />
-
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(240px,292px)_minmax(0,1fr)]">
+      <div
+        className={cn(
+          'grid min-h-0 flex-1 overflow-hidden',
+          showHistorySidebar
+            ? 'grid-cols-1 lg:grid-cols-[minmax(240px,292px)_minmax(0,1fr)]'
+            : 'grid-cols-1',
+        )}
+      >
         {showHistorySidebar ? (
           <VisualQaSessionHistorySidebar
-            className={cn(
-              'min-h-0',
-              mobileHistoryOpen
-                ? 'max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-[60] max-lg:flex max-lg:w-[min(92vw,300px)] max-lg:rounded-none max-lg:border-r max-lg:shadow-xl'
-                : 'max-lg:hidden',
-            )}
+            className="min-h-0 max-lg:hidden"
             selectedSessionId={effectiveSessionId || null}
             onSelectSession={handleSelectHistorySession}
             refreshNonce={historyRefreshNonce}
@@ -445,7 +430,7 @@ export function WorkspacePageClient() {
         ) : null}
 
         <WorkspaceShell
-          className="min-h-0"
+          className="min-h-0 min-w-0"
           mobileTab={mobileTab}
           onMobileTabChange={setMobileTab}
           imagePanel={imagePanel}
@@ -461,6 +446,7 @@ export function WorkspacePageClient() {
               onRequestExpertSupport={requestExpertSupport}
               onSend={handleSend}
               onClear={handleNewSession}
+              answerVariant={answerVariant}
             />
           }
         />

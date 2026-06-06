@@ -130,7 +130,6 @@ export default function CaseListRow({
           </Link>
           
           <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-            <span>Expert: {addedBy}</span>
             <span>Created: {dateLabel}</span>
           </div>
         </div>

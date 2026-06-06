@@ -68,6 +68,12 @@ export function VisualQaSessionHistorySidebar({
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
+        setItems([]);
+        setLoading(false);
+        setError(null);
+        return;
+      }
       try {
         setLoading(true);
         setError(null);

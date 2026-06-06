@@ -6,6 +6,7 @@ import { ChatConversation } from '@/components/student/ChatConversation';
 import type { ExpertSupportUiState } from '@/lib/student/visual-qa-expert-support';
 import type { VisualQaCapabilities } from '@/lib/api/visual-qa/types';
 import type { VisualQaTurn } from '@/lib/api/types';
+import type { WorkspaceAnswerVariant } from '@/features/visual-qa/components/WorkspaceStructuredAnswer';
 
 type WorkspaceChatPanelProps = {
   turns: VisualQaTurn[];
@@ -18,6 +19,7 @@ type WorkspaceChatPanelProps = {
   onRequestExpertSupport?: (turn: VisualQaTurn) => void | Promise<void>;
   onSend: (text: string) => void | Promise<void>;
   onClear: () => void;
+  answerVariant?: WorkspaceAnswerVariant;
 };
 
 export function WorkspaceChatPanel({
@@ -31,27 +33,22 @@ export function WorkspaceChatPanel({
   onRequestExpertSupport,
   onSend,
   onClear,
+  answerVariant = 'full',
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState('');
 
-  const canAskNext = capabilities?.canAskNext !== false;
-  const composerLocked = composerDisabled || !canAskNext || isAsking;
-
-  const capabilityReason = capabilities?.reason?.trim() || '';
-  const lockHint = !canAskNext
-    ? capabilityReason || 'You have used all questions allowed in this Visual QA session.'
-    : null;
+  const composerLocked = composerDisabled || isAsking;
 
   const sessionCapabilities = useMemo(
     () =>
       capabilities
         ? {
-            canAskNext: capabilities.canAskNext,
+            canAskNext: true,
             canRequestReview: capabilities.canRequestReview,
-            isReadOnly: capabilities.isReadOnly,
+            isReadOnly: false,
             turnsUsed: capabilities.turnsUsed,
             turnLimit: capabilities.turnLimit,
-            reason: capabilities.reason ?? null,
+            reason: null,
           }
         : undefined,
     [capabilities],
@@ -74,21 +71,9 @@ export function WorkspaceChatPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur-md sm:px-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-slate-200/70 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-            Clinical conversation
-          </span>
-          {capabilities?.turnsUsed != null && capabilities?.turnLimit != null ? (
-            <span className="rounded-full border border-slate-200/70 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
-              {capabilities.turnsUsed}/{capabilities.turnLimit} turns used
-            </span>
-          ) : null}
-          {capabilities?.isReadOnly ? (
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-900">
-              Read-only
-            </span>
-          ) : null}
-        </div>
+        <span className="rounded-full border border-slate-200/70 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+          Clinical conversation
+        </span>
       </div>
       <ChatConversation
         messages={turns}
@@ -102,14 +87,10 @@ export function WorkspaceChatPanel({
         onRequestExpertSupport={(turn) => void onRequestExpertSupport?.(turn)}
         onSendMessage={handleRetryFromConversation}
         onClear={onClear}
+        answerVariant={answerVariant}
       />
 
       <div className="shrink-0 border-t border-slate-200/70 bg-white/95 px-4 py-4 backdrop-blur-md sm:px-5">
-        {lockHint ? (
-          <p className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs font-medium text-amber-900" role="status">
-            {lockHint}
-          </p>
-        ) : null}
         <ChatComposer
           value={draft}
           onChange={setDraft}
@@ -117,8 +98,8 @@ export function WorkspaceChatPanel({
           disabled={composerLocked}
           isLoading={isAsking}
           placeholder={
-            composerLocked && !isAsking
-              ? 'Session locked — you cannot send more questions.'
+            answerVariant === 'catalog'
+              ? 'Ask a short question about this teaching case…'
               : 'Ask a question about the X-ray image…'
           }
         />

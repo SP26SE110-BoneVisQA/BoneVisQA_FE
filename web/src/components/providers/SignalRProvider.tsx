@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { HubConnectionState, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 
 /** Library logs at Warning flood the console when the hub is down (negotiate “Failed to fetch”, WS 1006). */
@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { getPublicApiOrigin } from '@/lib/api/client';
 import type { DocumentIngestionStatusDto, NotificationDto } from '@/lib/api/types';
 import { useAuth } from '@/lib/useAuth';
+import { isPublicAppRoute } from '@/lib/auth/rbac';
 import { notificationTargetToAppPath } from '@/lib/notification-app-path';
 
 function mapReceivePayload(raw: unknown): NotificationDto | null {
@@ -125,6 +126,7 @@ const SignalRContext = createContext<SignalRContextValue | null>(null);
  */
 export function SignalRProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const pathname = usePathname();
   const router = useRouter();
   const [connectionStatus, setConnectionStatus] = useState<SignalRConnectionStatus>('disconnected');
   const [notifications, setNotifications] = useState<NotificationDto[]>([]);
@@ -173,7 +175,9 @@ export function SignalRProvider({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') return;
 
     const token = localStorage.getItem('token');
-    if (!user || !token) {
+    const onPublicRoute = pathname ? isPublicAppRoute(pathname) : false;
+    if (!user || !token || onPublicRoute) {
+      setConnectionStatus('disconnected');
       return;
     }
 
@@ -246,7 +250,7 @@ export function SignalRProvider({ children }: { children: ReactNode }) {
       connection.off('DocumentIndexingProgressUpdated');
       void connection.stop();
     };
-  }, [user, onNotification]);
+  }, [user, pathname, onNotification]);
 
   const value = useMemo(
     () => ({

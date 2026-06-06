@@ -186,6 +186,28 @@ function EvidencePanel({
 
 function ReportSections({ report }: { report: VisualQaReport }) {
   const imagingLines = splitLearningBullets(report.keyImagingFindings ?? undefined);
+  const reflectiveText = reflectiveQuestionsToEditText(report, null);
+  const hasStructured =
+    Boolean(report.suggestedDiagnosis?.trim()) ||
+    report.keyFindings.length > 0 ||
+    imagingLines.length > 0 ||
+    Boolean(reflectiveText.trim());
+
+  if (!hasStructured && report.answerText?.trim()) {
+    return (
+      <section>
+        <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-900">
+          Structured diagnosis (AI)
+        </h4>
+        <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-4 text-sm leading-relaxed text-slate-900 shadow-sm">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ ...markdownExternalLinkComponents }}>
+            {report.answerText.trim()}
+          </ReactMarkdown>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {report.suggestedDiagnosis ? (
@@ -554,65 +576,46 @@ export function ExpertReviewWorkspace({
         </section>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-        <div>
-          <EvidencePanel
-            citations={item.citations ?? []}
-            queueSummary={item.queueSource === 'dashboard-summary'}
-          />
-        </div>
-        <div className="space-y-4">
-          <Card className="border-primary/20 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-foreground">Student question</CardTitle>
-              <CardDescription className="text-xs">Original escalation from the learner</CardDescription>
-            </CardHeader>
-            <CardContent className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm font-medium leading-relaxed text-foreground">
-              {item.question}
-            </CardContent>
-          </Card>
+      <div className="mt-6 space-y-4">
+        <EvidencePanel
+          citations={item.citations ?? []}
+          queueSummary={item.queueSource === 'dashboard-summary'}
+        />
 
-          <Card className="border-border shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-foreground">AI generated answer</CardTitle>
-              <CardDescription className="text-xs">Review before editing or approving for students</CardDescription>
-            </CardHeader>
-            <CardContent className="rounded-xl border border-border bg-card px-4 py-3 text-sm leading-relaxed text-foreground">
-              {item.report.answerText?.trim() ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ ...markdownExternalLinkComponents }}>
-                  {item.report.answerText.trim()}
-                </ReactMarkdown>
-              ) : (
-                <p className="text-muted-foreground">No AI answer text was returned for this session.</p>
-              )}
-            </CardContent>
-          </Card>
+        <Card className="border-primary/20 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-foreground">Student question</CardTitle>
+            <CardDescription className="text-xs">Original escalation from the learner</CardDescription>
+          </CardHeader>
+          <CardContent className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm font-medium leading-relaxed text-foreground">
+            {item.question}
+          </CardContent>
+        </Card>
 
-          <Card className="border-amber-200/60 bg-amber-50/30 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-foreground">Expert clinical override</CardTitle>
-              <CardDescription className="text-xs">
-                Refine structured diagnosis, imaging findings, and reflective prompts
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-          <ReportWorkbench
-            report={item.report}
-            isEditing={isEditing}
-            lockFields={pairMismatch}
-            diag={diag}
-            keyText={keyText}
-            keyImagingText={keyImagingEdit}
-            reflectiveText={reflectiveEdit}
-            onDiagChange={onDiagChange}
-            onKeyTextChange={onKeyTextChange}
-            onKeyImagingChange={onKeyImagingChange}
-            onReflectiveChange={onReflectiveChange}
-            onBeginEdit={onOpenEdit}
-          />
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="border-amber-200/60 bg-amber-50/30 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-foreground">Expert clinical override</CardTitle>
+            <CardDescription className="text-xs">
+              Refine structured diagnosis, imaging findings, and reflective prompts
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ReportWorkbench
+              report={item.report}
+              isEditing={isEditing}
+              lockFields={pairMismatch}
+              diag={diag}
+              keyText={keyText}
+              keyImagingText={keyImagingEdit}
+              reflectiveText={reflectiveEdit}
+              onDiagChange={onDiagChange}
+              onKeyTextChange={onKeyTextChange}
+              onKeyImagingChange={onKeyImagingChange}
+              onReflectiveChange={onReflectiveChange}
+              onBeginEdit={onOpenEdit}
+            />
+          </CardContent>
+        </Card>
       </div>
 
       {!isTerminal(item.status) ? (

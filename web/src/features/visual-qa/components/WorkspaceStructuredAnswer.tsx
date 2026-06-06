@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { BookOpen, SearchCheck, Sparkles, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { BookOpen, GraduationCap, SearchCheck, Sparkles, TriangleAlert, type LucideIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { markdownExternalLinkComponents } from '@/components/shared/markdownExternalLinks';
@@ -14,6 +14,8 @@ import {
 import { WorkspaceRagSources } from '@/features/visual-qa/components/WorkspaceRagSources';
 import { cn } from '@/lib/utils';
 
+export type WorkspaceAnswerVariant = 'full' | 'catalog';
+
 export type WorkspaceStructuredAnswerProps = {
   markdown?: string;
   diagnosis?: string | null;
@@ -23,6 +25,9 @@ export type WorkspaceStructuredAnswerProps = {
   differentialDiagnoses?: string[];
   reflectiveQuestions?: string[];
   citations?: VisualQaCitation[];
+  /** Lecturer / expert review text — shown once in the educator section (not as a separate colored banner). */
+  educatorFeedback?: string | null;
+  variant?: WorkspaceAnswerVariant;
   className?: string;
 };
 
@@ -41,6 +46,17 @@ function uniqueLines(values: string[]): string[] {
     seen.add(key);
     return true;
   });
+}
+
+function stripDuplicateEducatorText(narrative: string | undefined, educatorFeedback: string | null | undefined): string {
+  const feedback = educatorFeedback?.trim();
+  const body = narrative?.trim() ?? '';
+  if (!feedback || !body) return body;
+  if (body === feedback) return '';
+  if (body.includes(feedback)) {
+    return body.replace(feedback, '').trim();
+  }
+  return body;
 }
 
 type StructuredSectionCardProps = {
@@ -88,15 +104,20 @@ export function WorkspaceStructuredAnswer({
   differentialDiagnoses = [],
   reflectiveQuestions = [],
   citations = [],
+  educatorFeedback,
+  variant = 'full',
   className,
 }: WorkspaceStructuredAnswerProps) {
+  const isCatalog = variant === 'catalog';
+  const educatorText = educatorFeedback?.trim() || '';
+
   const displayDiagnosis = useMemo(
     () => mergeDiagnosisForDisplay(diagnosis, structuredDiagnosis),
     [diagnosis, structuredDiagnosis],
   );
 
   const narrativeMarkdown = dedupeNarrativeAgainstClinicalFields(
-    markdown,
+    stripDuplicateEducatorText(markdown, educatorText),
     displayDiagnosis || null,
     findings,
     differentialDiagnoses,
@@ -116,6 +137,52 @@ export function WorkspaceStructuredAnswer({
   );
   const diagnosisText =
     displayDiagnosis || 'The AI did not provide a structured main diagnosis for this turn.';
+
+  if (isCatalog) {
+    return (
+      <div
+        className={cn(
+          'vqa-ai-voice-panel space-y-3 rounded-[1.2rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]',
+          className,
+        )}
+      >
+        <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <BookOpen className="h-4 w-4" aria-hidden />
+          </span>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Case library Q&amp;A</p>
+            <p className="text-xs text-slate-500">Concise AI guidance using the teaching case context.</p>
+          </div>
+        </div>
+
+        {displayDiagnosis ? (
+          <section className="rounded-[1.1rem] border border-slate-200/90 bg-white px-4 py-3 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-700">Suggested focus</p>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-950">{displayDiagnosis}</p>
+          </section>
+        ) : null}
+
+        {showNarrative ? (
+          <div className="rounded-[1.1rem] border border-slate-200/80 bg-white px-4 py-3 text-sm leading-relaxed text-slate-950 break-words [&_a]:break-all">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownExternalLinkComponents}>
+              {narrativeMarkdown}
+            </ReactMarkdown>
+          </div>
+        ) : null}
+
+        {educatorText ? (
+          <EducatorFeedbackSection markdown={educatorText} />
+        ) : null}
+
+        {citations.length > 0 ? (
+          <div className="rounded-[1.1rem] border border-emerald-200/70 bg-emerald-50/70 px-3 py-3 shadow-sm">
+            <WorkspaceRagSources citations={citations} className="mt-0 border-t-0 pt-0" defaultExpanded />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -148,9 +215,7 @@ export function WorkspaceStructuredAnswer({
             Suggested main diagnosis
           </p>
         </div>
-        <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-950">
-          {diagnosisText}
-        </p>
+        <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-950">{diagnosisText}</p>
       </section>
 
       <div className="space-y-3">
@@ -178,15 +243,15 @@ export function WorkspaceStructuredAnswer({
       </div>
 
       {showNarrative ? (
-          <div className="rounded-[1.1rem] border border-slate-200/80 bg-white px-4 py-3 text-sm leading-relaxed text-slate-950 break-words [&_a]:break-all">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-700">
-            Teaching explanation
-          </p>
+        <div className="rounded-[1.1rem] border border-slate-200/80 bg-white px-4 py-3 text-sm leading-relaxed text-slate-950 break-words [&_a]:break-all">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-700">Clinical explanation</p>
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownExternalLinkComponents}>
             {narrativeMarkdown}
           </ReactMarkdown>
         </div>
       ) : null}
+
+      {educatorText ? <EducatorFeedbackSection markdown={educatorText} /> : null}
 
       {citations.length > 0 ? (
         <div className="rounded-[1.1rem] border border-emerald-200/70 bg-emerald-50/70 px-3 py-3 shadow-sm">
@@ -200,5 +265,24 @@ export function WorkspaceStructuredAnswer({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function EducatorFeedbackSection({ markdown }: { markdown: string }) {
+  return (
+    <section className="rounded-[1.1rem] border border-indigo-200/90 bg-indigo-50/80 px-4 py-3 shadow-sm">
+      <div className="mb-2 flex items-center gap-2">
+        <GraduationCap className="h-4 w-4 text-indigo-800" aria-hidden />
+        <p className="text-xs font-bold uppercase tracking-wide text-indigo-950">Educator feedback</p>
+      </div>
+      <p className="mb-2 text-[11px] text-indigo-900/80">
+        Response from your lecturer or clinical expert on this question.
+      </p>
+      <div className="text-sm leading-relaxed text-indigo-950 break-words [&_a]:break-all">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownExternalLinkComponents}>
+          {markdown}
+        </ReactMarkdown>
+      </div>
+    </section>
   );
 }

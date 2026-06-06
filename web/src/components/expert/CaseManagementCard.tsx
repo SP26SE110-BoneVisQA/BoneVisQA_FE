@@ -60,6 +60,12 @@ function difficultyLabel(d: CaseManagementCardProps['difficulty']): string {
   return d.charAt(0).toUpperCase() + d.slice(1);
 }
 
+function shouldShowExpertAttribution(addedBy: string | null | undefined): boolean {
+  const value = (addedBy ?? '').trim();
+  if (!value || value === '—') return false;
+  return value.toLowerCase() !== 'unknown';
+}
+
 export default function CaseManagementCard({
   id,
   title,
@@ -151,11 +157,13 @@ export default function CaseManagementCard({
         </div>
 
         <div className="mt-auto grid grid-cols-2 gap-3 rounded-lg border border-border bg-muted/30 p-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Expert</p>
-            <p className="truncate text-sm font-medium text-card-foreground">{addedBy}</p>
-          </div>
-          <div>
+          {shouldShowExpertAttribution(addedBy) ? (
+            <div>
+              <p className="text-xs text-muted-foreground">Expert</p>
+              <p className="truncate text-sm font-medium text-card-foreground">{addedBy}</p>
+            </div>
+          ) : null}
+          <div className={shouldShowExpertAttribution(addedBy) ? undefined : 'col-span-2'}>
             <p className="text-xs text-muted-foreground">Created</p>
             <p className="text-sm font-medium text-card-foreground">{dateLabel}</p>
           </div>

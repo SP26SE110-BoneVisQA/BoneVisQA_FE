@@ -24,6 +24,7 @@ import {
 } from "@/lib/api/client";
 import type { LoginResponse } from "@/lib/api/types";
 import { appToast } from "@/lib/api/errors/app-toast";
+import { useVisualQaStore } from "@/features/visual-qa/store/visual-qa-store";
 import { signInSchema } from "@/lib/forms/schemas";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -117,6 +118,9 @@ function LoginPageInner({ googleEnabled, googleClientId }: LoginPageInnerProps) 
     const savedEmail = localStorage.getItem("rememberedEmail");
     if (savedEmail) {
       setEmail(savedEmail);
+    }
+    if (!localStorage.getItem("token")) {
+      useVisualQaStore.getState().resetSession();
     }
   }, []);
 

@@ -146,6 +146,9 @@ export function useVisualQA() {
   const hydrateSession = useCallback(async (targetSessionId: string) => {
     const id = targetSessionId.trim();
     if (!id) throw new Error('sessionId is required.');
+    if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
+      return null;
+    }
     const state = useVisualQaStore.getState();
     const softRefresh = state.turns.length > 0 && state.sessionId?.trim() === id;
     if (!softRefresh) state.setIsAsking(true);

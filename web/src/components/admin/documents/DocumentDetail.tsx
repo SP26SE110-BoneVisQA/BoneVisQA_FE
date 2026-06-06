@@ -24,14 +24,11 @@ import {
   Layers,
   Loader2,
   RefreshCw,
-  Wifi,
-  WifiOff,
   XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { useSignalR } from '@/hooks/useSignalR';
 import { cn } from '@/lib/utils';
 import { DestructiveConfirmDialog } from '@/components/shared/DestructiveConfirmDialog';
 import { appToast } from '@/lib/api/errors/app-toast';
@@ -57,7 +54,6 @@ function asNonNegInt(value: unknown): number | undefined {
 }
 
 export default function DocumentDetail({ id }: { id: string }) {
-  const { connectionStatus } = useSignalR();
   const [doc, setDoc] = useState<AdminDocumentDetail | null>(null);
   const [liveStatus, setLiveStatus] = useState<IngestionSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -360,16 +356,6 @@ export default function DocumentDetail({ id }: { id: string }) {
     };
   })();
 
-  const liveLabel =
-    connectionStatus === 'connected'
-      ? { Icon: Wifi, text: 'Live progress (SignalR)', className: 'text-emerald-700' }
-      : connectionStatus === 'connecting' || connectionStatus === 'reconnecting'
-        ? { Icon: Loader2, text: 'Connecting to realtime…', className: 'text-amber-700' }
-        : { Icon: WifiOff, text: 'Realtime unavailable (REST fallback)', className: 'text-slate-500' };
-  const LiveConnIcon = liveLabel.Icon;
-  const liveConnSpin =
-    connectionStatus === 'connecting' || connectionStatus === 'reconnecting';
-
   const barVariantFor = (
     phase: IndexingPhaseKey,
   ): 'default' | 'success' | 'destructive' => {
@@ -467,44 +453,36 @@ export default function DocumentDetail({ id }: { id: string }) {
 
               <Card className="w-full border-sky-200/80 bg-sky-50/40 text-left shadow-none">
                 <CardHeader className="space-y-1 pb-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-base text-sky-950">RAG ingestion pipeline</CardTitle>
-                      <CardDescription className="text-sky-900/80">
-                        Download / load → PdfPig parsing → vector embedding. Reserved layout avoids jumps
-                        while progress arrives.
-                      </CardDescription>
-                    </div>
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium ${liveLabel.className}`}
-                    >
-                      <LiveConnIcon className={cn('h-3.5 w-3.5', liveConnSpin && 'animate-spin')} />
-                      {liveLabel.text}
-                    </span>
-                  </div>
+                  <CardTitle className="text-base text-sky-950">RAG ingestion pipeline</CardTitle>
+                  <CardDescription className="text-sky-900/80">
+                    Download &amp; parse → page indexing → chunk persist → metadata &amp; embedding enrichment.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[220px] space-y-5 pt-0">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-semibold text-sky-950">
-                      <span>1 · Download / load file</span>
-                      <span className="tabular-nums text-muted-foreground">{phaseModel.downloadPct}%</span>
+                <CardContent className="min-h-[280px] space-y-5 pt-0">
+                  {(
+                    [
+                      ['download', '1 · Download & parse', phaseModel.downloadPct],
+                      ['pageIndexing', '2 · Page indexing', phaseModel.pageIndexingPct],
+                      ['chunkPersist', '3 · Chunk persist', phaseModel.chunkPersistPct],
+                      ['enrich', '4 · Enrich metadata & embeddings', phaseModel.enrichPct],
+                    ] as const
+                  ).map(([phase, label, pct]) => (
+                    <div
+                      key={phase}
+                      className={cn(
+                        'space-y-2 rounded-lg px-1 py-0.5 transition-colors',
+                        phaseModel.activePhase === phase && normalizedStatus === 'processing'
+                          ? 'bg-sky-100/80 ring-1 ring-sky-300/60'
+                          : undefined,
+                      )}
+                    >
+                      <div className="flex items-center justify-between text-xs font-semibold text-sky-950">
+                        <span>{label}</span>
+                        <span className="tabular-nums text-muted-foreground">{pct}%</span>
+                      </div>
+                      <Progress value={pct} variant={barVariantFor(phase)} />
                     </div>
-                    <Progress value={phaseModel.downloadPct} variant={barVariantFor('download')} />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-semibold text-sky-950">
-                      <span>2 · Parsing (PdfPig)</span>
-                      <span className="tabular-nums text-muted-foreground">{phaseModel.parsingPct}%</span>
-                    </div>
-                    <Progress value={phaseModel.parsingPct} variant={barVariantFor('parsing')} />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-semibold text-sky-950">
-                      <span>3 · Vectorizing content</span>
-                      <span className="tabular-nums text-muted-foreground">{phaseModel.vectorizingPct}%</span>
-                    </div>
-                    <Progress value={phaseModel.vectorizingPct} variant={barVariantFor('vectorizing')} />
-                  </div>
+                  ))}
 
                   {liveStatus?.currentOperation?.trim() ? (
                     <p className="rounded-lg border border-sky-100 bg-white/80 px-3 py-2 text-xs text-muted-foreground">
@@ -646,7 +624,9 @@ export default function DocumentDetail({ id }: { id: string }) {
         open={reindexConfirmOpen}
         onOpenChange={setReindexConfirmOpen}
         title="Re-index this document?"
+        description="This will re-process the current PDF, rebuild chunks, and re-run metadata/embedding enrichment. Existing vectors may be replaced."
         confirmLabel="Start re-indexing"
+        destructive={false}
         isLoading={retryBusy}
         onConfirm={() => void handleRetryIndexing()}
       />

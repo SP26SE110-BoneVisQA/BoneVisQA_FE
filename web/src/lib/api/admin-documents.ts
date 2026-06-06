@@ -53,13 +53,23 @@ export async function uploadAdminDocument(
 ): Promise<DocumentUploadResponse> {
   const form = new FormData();
   form.append('file', params.file);
+  form.append('title', (params.title ?? '').trim() || params.file.name);
   form.append('Title', (params.title ?? '').trim() || params.file.name);
-  form.append('CategoryId', params.categoryId);
-  form.append('Modality', params.modality);
+  if (params.categoryId?.trim()) {
+    form.append('categoryId', params.categoryId.trim());
+    form.append('CategoryId', params.categoryId.trim());
+  }
+  if (params.modality?.trim()) {
+    form.append('defaultModality', params.modality.trim());
+    form.append('Modality', params.modality.trim());
+  }
   if (params.defaultPathologyGroup?.trim()) {
     form.append('DefaultPathologyGroup', params.defaultPathologyGroup.trim());
   }
-  params.tagIds.forEach((id) => form.append('TagIds', id));
+  params.tagIds.forEach((id) => {
+    form.append('tagIds', id);
+    form.append('TagIds', id);
+  });
 
   try {
     const { data } = await http.post<Record<string, unknown>>(

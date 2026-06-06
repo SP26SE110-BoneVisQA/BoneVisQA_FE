@@ -48,6 +48,7 @@ export function useAuth() {
     let latestSnapshot: AuthUser | null = null;
 
     const readAuth = () => {
+      const token = localStorage.getItem('token');
       const fullName = localStorage.getItem('fullName');
       const email = localStorage.getItem('email');
       const activeRole = normalizeRole(localStorage.getItem('activeRole'));
@@ -76,7 +77,9 @@ export function useAuth() {
         setUser(localUser);
       }
 
-      // Prefer canonical profile from API when available.
+      // Prefer canonical profile from API when a session token exists.
+      if (!token) return;
+
       void http
         .get<Record<string, unknown>>('/api/profile')
         .then((response) => {

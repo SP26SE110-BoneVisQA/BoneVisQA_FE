@@ -45,7 +45,7 @@ import type { CreateExpertCaseJsonInput } from '@/lib/api/expert-cases';
 import type { VisualQaDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 import { Loader2 } from 'lucide-react';
 
-const MAX_DICOM_BYTES = 500 * 1024 * 1024;
+const MAX_DICOM_BYTES = 200 * 1024 * 1024;
 
 type Props = {
   onCreated: (caseId: string | undefined) => void;
@@ -108,7 +108,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
       void appToast.promise(ingestPromise, {
         loading: 'Extracting DICOM metadata…',
         success: 'DICOM metadata extracted — form fields updated.',
-        error: 'DICOM ingest failed.',
+        error: 'DICOM ingest failed. Check the archive format and try again.',
       });
       const ingest = await ingestPromise;
 
@@ -141,7 +141,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
       return;
     }
     if (f.size > MAX_DICOM_BYTES) {
-      appToast.error('DICOM archive must be 500 MB or smaller.');
+      appToast.error('DICOM archive must be 200 MB or smaller.');
       return;
     }
     setDicomArchive(f);

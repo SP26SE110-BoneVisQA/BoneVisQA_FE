@@ -8,7 +8,6 @@ import { ListPageLayout } from '@/components/layouts';
 import { DataTable } from '@/components/shared/data-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/components/ui/toast';
 import { buildAdminDocumentsColumns } from '@/features/admin/components/tables/admin-documents-columns';
 import {
   useAdminDocumentMeta,
@@ -20,7 +19,6 @@ import {
   documentListNeedsActivePolling,
   fetchDocumentStatus,
   normalizeIndexingStatus,
-  reindexDocumentMetadata,
 } from '@/lib/api/admin-documents';
 import { resolveApiAssetUrl, withVersionedAssetUrl } from '@/lib/api/client';
 import type { DocumentStatusResponse } from '@/lib/api/types';
@@ -29,7 +27,6 @@ import { FileText, Plus, Search } from 'lucide-react';
 
 export function AdminDocumentsPage() {
   const router = useRouter();
-  const toast = useToast();
   const invalidateDocuments = useInvalidateAdminDocuments();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -38,7 +35,6 @@ export function AdminDocumentsPage() {
   const [statusByDocId, setStatusByDocId] = useState<Record<string, DocumentStatusResponse>>({});
   const [replaceTarget, setReplaceTarget] = useState<{ id: string; title: string } | null>(null);
   const [openingReplaceId, setOpeningReplaceId] = useState<string | null>(null);
-  const [reenrichingDocId, setReenrichingDocId] = useState<string | null>(null);
 
   const metaQuery = useAdminDocumentMeta();
   const documentsQuery = useAdminDocuments({
@@ -127,7 +123,6 @@ export function AdminDocumentsPage() {
         effectiveStatusByDocId,
         hasAnyProcessingLive,
         openingReplaceId,
-        reenrichingDocId,
         onDetails: (id) => router.push(`/admin/documents/${id}`),
         onReplace: (doc) => {
           setOpeningReplaceId(doc.id);
@@ -138,22 +133,6 @@ export function AdminDocumentsPage() {
           const href = withVersionedAssetUrl(resolveApiAssetUrl(doc.filePath), doc.version);
           window.open(href, '_blank', 'noopener,noreferrer');
         },
-        onReenrichMetadata: async (doc) => {
-          setReenrichingDocId(doc.id);
-          try {
-            const result = await reindexDocumentMetadata(doc.id);
-            const detail =
-              result.chunksUpdated != null
-                ? ` Updated ${result.chunksUpdated} chunk(s).`
-                : '';
-            toast.success(result.message?.trim() || `Chunk metadata re-enriched.${detail}`);
-            invalidateDocuments();
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to re-enrich chunk metadata.');
-          } finally {
-            setReenrichingDocId((prev) => (prev === doc.id ? null : prev));
-          }
-        },
       }),
     [
       categoryNameById,
@@ -161,10 +140,7 @@ export function AdminDocumentsPage() {
       effectiveStatusByDocId,
       hasAnyProcessingLive,
       openingReplaceId,
-      reenrichingDocId,
       router,
-      toast,
-      invalidateDocuments,
     ],
   );
 

@@ -32,7 +32,7 @@ export interface ExpertCase {
   isApproved: boolean;
   isActive: boolean;
   addedBy: string;
-  expertName: string;
+  expertName: string | null;
   addedDate: string;
   boneLocation: string;
   description: string;
@@ -174,19 +174,31 @@ function mapMedicalImagesRaw(raw: unknown): ExpertCaseMedicalImageJson[] | undef
 }
 
 /** Maps BE medical case DTOs (expert list/detail, admin list/detail) to `ExpertCase`. */
+const GUID_LIKE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function pickOptionalString(...values: unknown[]): string {
+  for (const value of values) {
+    if (value == null) continue;
+    const text = String(value).trim();
+    if (text && text !== 'null' && text !== 'undefined') return text;
+  }
+  return '';
+}
+
+function resolveCaseDisplayTitle(item: ExpertCaseApiRow, record: Record<string, unknown>): string {
+  const raw = pickOptionalString(item.title, item.caseTitle, record.title, record.Title);
+  if (raw && !GUID_LIKE.test(raw)) return raw;
+  const description = pickOptionalString(item.description, record.description, record.Description);
+  if (description) return description.length > 80 ? `${description.slice(0, 77)}…` : description;
+  return 'Untitled case';
+}
+
 export function mapCase(row: unknown): ExpertCase | null {
   if (!row || typeof row !== 'object') return null;
   const item = row as ExpertCaseApiRow;
   const record = row as Record<string, unknown>;
 
-  const id = String(
-    item.id ??
-      item.caseTitle ??
-      record.caseId ??
-      record.Id ??
-      record.ID ??
-      '',
-  );
+  const id = String(item.id ?? record.caseId ?? record.Id ?? record.ID ?? '').trim();
   if (!id) return null;
 
   const categoryFromNested =
@@ -231,9 +243,13 @@ export function mapCase(row: unknown): ExpertCase | null {
     record.categoryName ??
     'General';
 
-  const expertNameRaw = String(
-    item.expertName ?? record.expertName ?? record.ExpertName ?? record.addedBy ?? record.AddedBy ?? '',
-  ).trim();
+  const expertNameRaw = pickOptionalString(
+    item.expertName,
+    record.expertName,
+    record.ExpertName,
+    record.addedBy,
+    record.AddedBy,
+  );
   const addedByDisplay = expertNameRaw || '—';
 
   const boneRaw = String(
@@ -262,14 +278,14 @@ export function mapCase(row: unknown): ExpertCase | null {
       item.createdByExpertId ?? record.createdByExpertId ?? record.CreatedByExpertId ?? '',
     ),
     categoryId: String(categoryIdRaw ?? ''),
-    title: String(item.title ?? item.caseTitle ?? record.title ?? record.Title ?? 'Untitled case'),
+    title: resolveCaseDisplayTitle(item, record),
     categoryName: String(categoryNameRaw),
     difficulty: mapDifficulty(item.difficulty ?? record.caseDifficulty ?? record.difficulty ?? record.Difficulty),
     status: mapCaseListStatus(item, record),
     isApproved: Boolean(item.isApproved ?? item.approved ?? record.isApproved ?? record.approved ?? record.IsApproved),
     isActive: Boolean(item.isActive ?? item.active ?? record.isActive ?? record.active ?? record.IsActive),
-    addedBy: addedByDisplay,
-    expertName: addedByDisplay,
+    addedBy: addedByDisplay === '—' ? '' : addedByDisplay,
+    expertName: expertNameRaw || null,
     addedDate: createdRaw,
     boneLocation: boneRaw || '—',
     description: String(item.description ?? ''),
@@ -712,7 +728,6 @@ export async function uploadExpertCaseDicomArchive(
 ): Promise<ExpertCaseDicomUploadResult> {
   const form = new FormData();
   form.append('file', file);
-  form.append('File', file);
   const caseId = options?.caseId?.trim();
   if (caseId) {
     form.append('caseId', caseId);

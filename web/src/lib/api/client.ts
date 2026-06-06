@@ -137,7 +137,13 @@ http.interceptors.response.use(
       window.dispatchEvent(new Event('auth:unauthorized'));
     }
     if (process.env.NODE_ENV === 'development') {
-      if (err.response) {
+      const onPublicRoute =
+        typeof window !== 'undefined' &&
+        (window.location.pathname === '/' ||
+          window.location.pathname.startsWith('/auth/'));
+      const hasToken =
+        typeof window !== 'undefined' && Boolean(localStorage.getItem('token'));
+      if (err.response && !(err.response.status === 401 && onPublicRoute && !hasToken)) {
         console.warn(`[API] HTTP ${err.response.status}: ${err.config?.url}`, err.response.data);
       } else if (err.request) {
         console.warn(

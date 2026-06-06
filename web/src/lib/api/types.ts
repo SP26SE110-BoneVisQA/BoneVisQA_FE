@@ -189,9 +189,9 @@ export type DocumentDefaultPathologyGroup = (typeof DOCUMENT_DEFAULT_PATHOLOGY_G
 /** Metadata payload for POST /api/admin/documents/upload (excluding the file binary). */
 export interface DocumentUploadRequest {
   title?: string;
-  categoryId: string;
+  categoryId?: string;
   tagIds: string[];
-  modality: DocumentModality;
+  modality?: DocumentModality;
   defaultPathologyGroup?: DocumentDefaultPathologyGroup;
 }
 

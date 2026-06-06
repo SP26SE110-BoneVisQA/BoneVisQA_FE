@@ -6,7 +6,7 @@ import { DocumentIndexingCell } from '@/components/admin/documents/DocumentIndex
 import { Button } from '@/components/ui/button';
 import { normalizeIndexingStatus, type DocumentDto } from '@/lib/api/admin-documents';
 import type { DocumentStatusResponse } from '@/lib/api/types';
-import { ExternalLink, FileText, FileUp, Loader2, RefreshCw } from 'lucide-react';
+import { ExternalLink, FileText, FileUp, Loader2 } from 'lucide-react';
 
 export function buildAdminDocumentsColumns(opts: {
   categoryNameById: Map<string, string>;
@@ -14,11 +14,9 @@ export function buildAdminDocumentsColumns(opts: {
   effectiveStatusByDocId: Map<string, string>;
   hasAnyProcessingLive: boolean;
   openingReplaceId: string | null;
-  reenrichingDocId: string | null;
   onDetails: (id: string) => void;
   onReplace: (doc: DocumentDto) => void;
   onOpenFile: (doc: DocumentDto) => void;
-  onReenrichMetadata: (doc: DocumentDto) => void;
 }): ColumnDef<DocumentDto>[] {
   return [
     {
@@ -110,8 +108,6 @@ export function buildAdminDocumentsColumns(opts: {
           doc.indexingStatus;
         const normalized = normalizeIndexingStatus(liveStatus);
         const interactionLocked = normalized === 'pending' || normalized === 'processing';
-        const isCompleted = normalized === 'completed';
-        const isReenriching = opts.reenrichingDocId === doc.id;
         return (
           <div className="flex flex-wrap justify-end gap-2">
             <Button
@@ -123,24 +119,6 @@ export function buildAdminDocumentsColumns(opts: {
             >
               Details
             </Button>
-            {isCompleted ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 w-9 shrink-0 p-0"
-                disabled={isReenriching}
-                title="Re-enrich Chunk Metadata"
-                onClick={() => opts.onReenrichMetadata(doc)}
-              >
-                {isReenriching ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                <span className="sr-only">Re-enrich Chunk Metadata</span>
-              </Button>
-            ) : null}
             <Button
               type="button"
               variant="outline"

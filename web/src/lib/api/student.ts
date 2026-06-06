@@ -339,6 +339,8 @@ function parseCatalogDetailImages(item: Record<string, unknown>): StudentCatalog
     item.Images ??
     item.caseImages ??
     item.CaseImages ??
+    item.medicalImages ??
+    item.MedicalImages ??
     item.anonymousImages ??
     item.AnonymousImages;
   if (!Array.isArray(rawList)) return [];

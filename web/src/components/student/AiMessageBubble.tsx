@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { ErrorBoundary } from 'react-error-boundary';
 import { AlertTriangle, Loader2, MoreHorizontal } from 'lucide-react';
 import { shouldSuppressLeakedMedicalJsonMarkdown } from '@/components/student/VisualQaRichAnswer';
-import { WorkspaceStructuredAnswer } from '@/features/visual-qa/components/WorkspaceStructuredAnswer';
+import { WorkspaceStructuredAnswer, type WorkspaceAnswerVariant } from '@/features/visual-qa/components/WorkspaceStructuredAnswer';
 import { WorkspaceRagSources } from '@/features/visual-qa/components/WorkspaceRagSources';
 import type { Components } from 'react-markdown';
 import { markdownExternalLinkComponents } from '@/components/shared/markdownExternalLinks';
@@ -57,16 +57,6 @@ function hasDisplayableAnalysisContent(turn: VisualQaTurn): boolean {
   const md = turn.answerText?.trim();
   if (md && !shouldSuppressLeakedMedicalJsonMarkdown(md)) return true;
   return false;
-}
-
-function resolveReviewFeedbackTone(
-  turn: VisualQaTurn,
-  expertSupportInline: ExpertSupportInline | null | undefined,
-): 'success' | 'danger' {
-  if (expertSupportInline?.kind === 'resolved') return expertSupportInline.tone;
-  const rs = (turn.reviewState ?? turn.answerStatus ?? '').trim().toLowerCase();
-  if (rs.includes('reject')) return 'danger';
-  return 'success';
 }
 
 function sanitizeSystemNoticeMarkdownBody(text: string, noticeCode?: string | null): string {
@@ -125,8 +115,9 @@ export type AiMessageBubbleProps = {
   turnMenuKey: string;
   onToggleMenu: () => void;
   onRequestExpertSupport: () => void;
-  /** Trạng thái Request Expert — không tạo bubble chat riêng, chỉ dòng dưới answer. */
+  /** Trạng thái Request Expert — không tạo bubble chat riêng, chỉ dòng trạng thái gọn. */
   expertSupportInline?: ExpertSupportInline | null;
+  answerVariant?: WorkspaceAnswerVariant;
 };
 
 export function AiMessageBubble({
@@ -144,6 +135,7 @@ export function AiMessageBubble({
   onToggleMenu,
   onRequestExpertSupport,
   expertSupportInline = null,
+  answerVariant = 'full',
 }: AiMessageBubbleProps) {
   const showExpertMenu =
     canRequestReview &&
@@ -182,16 +174,10 @@ export function AiMessageBubble({
     turn.keyImagingFindings?.trim() ||
     'The assistant returned a response.';
 
-  const reviewFeedbackTone = resolveReviewFeedbackTone(turn, expertSupportInline);
-  const reviewFeedbackClass =
-    reviewFeedbackTone === 'danger'
-      ? 'mt-3 rounded-[1rem] border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-900 shadow-sm [&_a]:font-medium [&_a]:text-red-900 [&_a]:underline'
-      : 'mt-3 rounded-[1rem] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 shadow-sm [&_a]:font-medium [&_a]:text-emerald-900 [&_a]:underline';
-  const mdInlineFeedback = buildAssistantMarkdownComponents(
-    reviewFeedbackTone === 'danger'
-      ? 'mb-2 font-medium text-red-900 last:mb-0 leading-relaxed'
-      : 'mb-2 font-medium text-emerald-900 last:mb-0 leading-relaxed',
-  );
+  const educatorFeedback =
+    inlineReviewFeedbackMarkdown?.trim() ||
+    (expertSupportInline?.kind === 'resolved' ? expertSupportInline.text.trim() : '') ||
+    null;
 
   const structuredAnswer = (
     <ErrorBoundary
@@ -212,6 +198,8 @@ export function AiMessageBubble({
         differentialDiagnoses={turn.differentialDiagnoses}
         reflectiveQuestions={turn.reflectiveQuestions}
         citations={turn.citations ?? []}
+        educatorFeedback={educatorFeedback}
+        variant={answerVariant}
       />
     </ErrorBoundary>
   );
@@ -264,28 +252,10 @@ export function AiMessageBubble({
           </div>
         )}
 
-        {inlineReviewFeedbackMarkdown?.trim() ? (
-          <div className={reviewFeedbackClass}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdInlineFeedback}>
-              {inlineReviewFeedbackMarkdown}
-            </ReactMarkdown>
-          </div>
-        ) : null}
-
         {expertSupportInline?.kind === 'awaiting' ? (
           <p className="mt-3 rounded-[1rem] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-            Awaiting expert verification — your preliminary AI analysis remains visible above.
+            Awaiting educator review — your AI answer remains visible above.
           </p>
-        ) : expertSupportInline?.kind === 'resolved' && !inlineReviewFeedbackMarkdown?.trim() ? (
-          <div
-            className={
-              expertSupportInline.tone === 'danger'
-                ? 'mt-3 rounded-[1rem] border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-950'
-                : 'mt-3 rounded-[1rem] border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-950'
-            }
-          >
-            {expertSupportInline.text}
-          </div>
         ) : null}
 
         {showExpertMenu ? (

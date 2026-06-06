@@ -2,17 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { AlertTriangle, ArrowDown, Loader2 } from 'lucide-react';
 import { AiMessageBubble } from '@/components/student/AiMessageBubble';
 import { mergeDiagnosisForDisplay } from '@/components/student/VisualQaRichAnswer';
 import { ChatErrorBoundary } from '@/components/student/ChatErrorBoundary';
 import { StudentMessageBubble } from '@/components/student/StudentMessageBubble';
-import { markdownExternalLinkComponents } from '@/components/shared/markdownExternalLinks';
 import { VISUAL_QA_MESSAGE_IN } from '@/components/student/visualQaMessageClasses';
-import { Button } from '@/components/ui/button';
 import type { ExpertSupportInline } from '@/components/student/AiMessageBubble';
+import type { WorkspaceAnswerVariant } from '@/features/visual-qa/components/WorkspaceStructuredAnswer';
 import type { VisualQaSessionReport, VisualQaTurn } from '@/lib/api/types';
 import { formatReviewFeedbackDisplay } from '@/lib/student/visual-qa-feedback';
 
@@ -45,6 +42,7 @@ type Props = {
     string,
     { phase: 'awaiting' } | { phase: 'resolved'; tone: 'success' | 'danger'; message: string }
   >;
+  answerVariant?: WorkspaceAnswerVariant;
 };
 
 function normalizeResponseKind(kind?: string | null): 'analysis' | 'refusal' | 'clarification' | 'review_update' | 'system_notice' {
@@ -197,35 +195,14 @@ export function ChatConversation({
   onSendMessage,
   onClear,
   expertSupportByAssistantId = {},
+  answerVariant = 'full',
 }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [activeAiMenuKey, setActiveAiMenuKey] = useState<string | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
-  const retryMessage = optimisticMessages[optimisticMessages.length - 1]?.content?.trim() || '';
   const hasInlineAwaitingAssistant = messages.some((m) => m.awaitingAssistant === true);
   const showGlobalTyping =
     isLoading && chatRequestPhase === 'analyzing' && !hasInlineAwaitingAssistant;
-  const canAskNext = capabilities?.canAskNext ?? true;
-  const capabilityReason = capabilities?.reason?.trim() || '';
-  const sessionFooterNoticeLabel = formatSystemNoticeCodeLabel(systemNoticeCode);
-  const isInvalidFormatError =
-    isError &&
-    (errorCode === 'AI_RESPONSE_INVALID_FORMAT' ||
-      (typeof errorMessage === 'string' && /invalid format|malformed ai response|invalid json/i.test(errorMessage)));
-  const isTurnLimitError = isError && errorCode === 'TURN_LIMIT_EXCEEDED';
-  const displayedErrorMessage = isInvalidFormatError
-    ? 'AI returned an invalid format. Try resending or ask a simpler question.'
-    : isTurnLimitError
-      ? capabilityReason || 'You have reached the question limit for this Visual QA session.'
-      : errorMessage;
-
-  const sessionFooterText = (displayedErrorMessage || (!canAskNext ? capabilityReason : '') || '').trim();
-  const blockingTrim = blockingNotice?.trim() ?? '';
-  const hideSessionFooterAsDuplicate =
-    Boolean(blockingTrim && sessionFooterText) &&
-    (sessionFooterText.toLowerCase() === blockingTrim.toLowerCase() ||
-      (sessionFooterText.toLowerCase().includes('read-only') &&
-        blockingTrim.toLowerCase().includes('read-only')));
 
   const reviewFeedbackByTargetKey = useMemo(() => buildReviewFeedbackMap(messages), [messages]);
 
@@ -345,7 +322,9 @@ export function ChatConversation({
           <div className="medical-bento-card flex min-h-[45vh] w-full flex-col items-center justify-center border-dashed bg-white/80 px-6 py-12 text-center">
             <p className="text-sm font-medium text-foreground">No messages yet</p>
             <p className="mt-2 max-w-sm text-xs leading-relaxed text-muted-foreground">
-              Add an image for the first turn, then ask the AI. New replies will stay anchored unless you scroll up to review.
+              {answerVariant === 'catalog'
+                ? 'Ask a question about this teaching case. Follow-up questions are welcome.'
+                : 'Add an image for the first turn, then ask the AI. New replies stay anchored unless you scroll up.'}
             </p>
           </div>
         ) : (
@@ -368,9 +347,11 @@ export function ChatConversation({
                     const systemNoticeLabel = formatSystemNoticeCodeLabel(turnSystemNoticeCode);
                     const turnKey = turn.turnId ?? String(turn.turnIndex);
                     const inlineReviewRaw = reviewFeedbackByTargetKey.get(turnKey) ?? null;
-                    const inlineReviewMarkdown = inlineReviewRaw
-                      ? formatReviewFeedbackDisplay(inlineReviewRaw) || null
-                      : null;
+                    const educatorFromNotes = reviewerNotes.map((message) => message.content.trim()).filter(Boolean).join('\n\n');
+                    const inlineReviewMarkdown =
+                      (inlineReviewRaw ? formatReviewFeedbackDisplay(inlineReviewRaw) : '') ||
+                      educatorFromNotes ||
+                      null;
                     const isLastTurn = idx === renderedTurns.length - 1;
                     const deferLatestNonAnalysisWhileBusy =
                       isLoading &&
@@ -432,49 +413,8 @@ export function ChatConversation({
                           onRequestExpertSupport?.(turn);
                         }}
                         expertSupportInline={expertSupportInline}
+                        answerVariant={answerVariant}
                       />
-
-                      {responseKind !== 'review_update' && reviewerNotes.length > 0 && !inlineReviewMarkdown ? (
-                          <div className="mt-3 space-y-2 rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              Instructor async feedback notes
-                            </p>
-                            {reviewerNotes.map((message) => {
-                              const isExpertNote = message.role === 'expert';
-                              return (
-                                <div
-                                  key={message.id}
-                                  className={`rounded-xl border px-3 py-2 text-sm leading-relaxed ${
-                                    isExpertNote
-                                      ? 'border-emerald-500/45 bg-emerald-50 text-emerald-950'
-                                      : 'border-orange-500/45 bg-orange-50 text-orange-950'
-                                  }`}
-                                >
-                                  <p
-                                    className={`mb-1 text-xs font-semibold uppercase tracking-wide ${
-                                      isExpertNote ? 'text-emerald-900' : 'text-orange-900'
-                                    }`}
-                                  >
-                                    {isExpertNote ? 'Expert feedback' : 'Lecturer feedback'}
-                                  </p>
-                                  <ReactMarkdown
-                                    remarkPlugins={[remarkGfm]}
-                                    components={{
-                                      ...markdownExternalLinkComponents,
-                                      p: ({ children }) => (
-                                        <p className="text-contrast-outline-soft mb-2 last:mb-0 leading-relaxed">
-                                          {children}
-                                        </p>
-                                      ),
-                                    }}
-                                  >
-                                    {message.content}
-                                  </ReactMarkdown>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : null}
                     </div>
                   </motion.div>
                 );
@@ -512,49 +452,6 @@ export function ChatConversation({
                   </motion.div>
                 ) : null}
               </AnimatePresence>
-
-              {!isLoading &&
-              !showGlobalTyping &&
-              !hideSessionFooterAsDuplicate &&
-              ((!canAskNext && capabilityReason) || (isError && displayedErrorMessage)) ? (
-                <motion.div
-                  className={`flex justify-start ${VISUAL_QA_MESSAGE_IN}`}
-                  initial={false}
-                  layout
-                >
-                  <div className="max-w-[min(92vw,92%)] rounded-[1.35rem] border border-violet-200 bg-violet-50/95 px-4 py-3 text-sm text-violet-950 shadow-sm sm:max-w-[92%]">
-                    <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-700">
-                      <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                      System notice
-                    </p>
-                    <p className="mt-2 leading-relaxed">
-                      {displayedErrorMessage || capabilityReason}
-                    </p>
-                    {sessionFooterNoticeLabel ? (
-                      <p className="mt-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                        {sessionFooterNoticeLabel}
-                      </p>
-                    ) : null}
-                    {isError && displayedErrorMessage ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {retryMessage && !isTurnLimitError ? (
-                          <Button type="button" size="sm" variant="outline" onClick={() => void onSendMessage(retryMessage)}>
-                            {isInvalidFormatError ? 'Try Resending' : 'Retry'}
-                          </Button>
-                        ) : null}
-                        {isInvalidFormatError ? (
-                          <Button type="button" size="sm" variant="outline" onClick={onClear}>
-                            Ask a simpler question
-                          </Button>
-                        ) : null}
-                        <Button type="button" size="sm" variant="outline" onClick={onClear}>
-                          Clear
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                </motion.div>
-              ) : null}
             </div>
           </LayoutGroup>
         )}
