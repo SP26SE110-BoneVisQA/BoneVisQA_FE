@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { useDashboardHeader } from '@/components/layouts/dashboard-header-context';
 import { useToast } from '@/components/ui/toast';
 import boneSpecialtyApi, { type BoneSpecialtyDto } from '@/lib/api/admin-bone-specialty';
-import pathologyCategoryApi, { type PathologyCategoryDto } from '@/lib/api/admin-pathology-category';
 import {
   ChevronRight,
   ChevronUp,
@@ -20,7 +19,6 @@ import {
   ArrowUp,
   ArrowDown,
   Bone,
-  Stethoscope,
   ChevronLeft,
   ChevronFirst,
   ChevronLast,
@@ -28,7 +26,6 @@ import {
 
 const ITEMS_PER_PAGE = 5;
 
-type Tab = 'bone' | 'pathology';
 type ViewMode = 'tree' | 'table';
 
 interface FormState {
@@ -38,7 +35,6 @@ interface FormState {
   displayOrder: number;
   isActive: boolean;
   parentId?: string | null;
-  boneSpecialtyId?: string | null;
 }
 
 export default function AdminClassificationsPage() {
@@ -49,21 +45,18 @@ export default function AdminClassificationsPage() {
     title: t('classifications.title', 'Classification Management'),
     showBack: true,
   });
-  const [activeTab, setActiveTab] = useState<Tab>('bone');
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [bonePage, setBonePage] = useState(1);
-  const [pathologyPage, setPathologyPage] = useState(1);
 
   // Helper to invalidate and refetch all classification queries
   const invalidateClassificationQueries = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['admin', 'bone-specialties-tree'] }),
       queryClient.invalidateQueries({ queryKey: ['admin', 'bone-specialties-flat'] }),
-      queryClient.invalidateQueries({ queryKey: ['admin', 'pathology-categories'] }),
     ]);
   };
 
@@ -87,11 +80,6 @@ export default function AdminClassificationsPage() {
   const { data: boneSpecialties = [], isPending: loadingBone } = useQuery({
     queryKey: ['admin', 'bone-specialties-tree'],
     queryFn: () => boneSpecialtyApi.getTree(),
-  });
-
-  const { data: pathologyCategories = [], isPending: loadingPathology } = useQuery({
-    queryKey: ['admin', 'pathology-categories'],
-    queryFn: () => pathologyCategoryApi.getAll({}),
   });
 
   const { data: allBoneSpecialties = [] } = useQuery({
@@ -132,13 +120,6 @@ export default function AdminClassificationsPage() {
 
   const filteredBoneSpecialties = filterBoneSpecialties(boneSpecialties);
 
-  // Reset page when filter or tab changes
-  const handleTabChange = (tab: Tab) => {
-    setActiveTab(tab);
-    setBonePage(1);
-    setPathologyPage(1);
-  };
-
   const handleStatusFilterChange = (filter: 'all' | 'active' | 'inactive') => {
     setStatusFilter(filter);
     setBonePage(1);
@@ -175,13 +156,6 @@ export default function AdminClassificationsPage() {
     bonePage * ITEMS_PER_PAGE
   );
 
-  // Pagination for pathology categories
-  const totalPathologyPages = Math.ceil(pathologyCategories.length / ITEMS_PER_PAGE);
-  const paginatedPathologyItems = pathologyCategories.slice(
-    (pathologyPage - 1) * ITEMS_PER_PAGE,
-    pathologyPage * ITEMS_PER_PAGE
-  );
-
   const resetForm = () => {
     setForm({
       code: '',
@@ -201,13 +175,6 @@ export default function AdminClassificationsPage() {
     return Math.max(...siblings.map((s) => s.displayOrder)) + 1;
   };
 
-  // Helper: Calculate next display order for Pathology siblings (same bone specialty)
-  const getNextPathologyOrder = (boneSpecialtyId: string | null | undefined): number => {
-    const siblings = pathologyCategories.filter((p) => p.boneSpecialtyId === boneSpecialtyId);
-    if (siblings.length === 0) return 1;
-    return Math.max(...siblings.map((p) => p.displayOrder)) + 1;
-  };
-
   const handleCreate = async () => {
     if (!form.code || !form.name) {
       toast.error('Code and Name are required.');
@@ -215,31 +182,18 @@ export default function AdminClassificationsPage() {
     }
 
     // Auto-calculate display order based on siblings
-    const calculatedOrder = activeTab === 'bone'
-      ? getNextBoneOrder(form.parentId)
-      : getNextPathologyOrder(form.boneSpecialtyId);
+    const calculatedOrder = getNextBoneOrder(form.parentId);
 
     try {
-      if (activeTab === 'bone') {
-        await boneSpecialtyApi.create({
-          code: form.code,
-          name: form.name,
-          description: form.description || undefined,
-          displayOrder: calculatedOrder,
-          isActive: form.isActive,
-          parentId: form.parentId || undefined,
-        });
-      } else {
-        await pathologyCategoryApi.create({
-          code: form.code,
-          name: form.name,
-          description: form.description || undefined,
-          displayOrder: calculatedOrder,
-          isActive: form.isActive,
-          boneSpecialtyId: form.boneSpecialtyId || undefined,
-        });
-      }
-      toast.success(`${activeTab === 'bone' ? 'Bone Specialty' : 'Pathology Category'} created successfully.`);
+      await boneSpecialtyApi.create({
+        code: form.code,
+        name: form.name,
+        description: form.description || undefined,
+        displayOrder: calculatedOrder,
+        isActive: form.isActive,
+        parentId: form.parentId || undefined,
+      });
+      toast.success('Bone Specialty created successfully.');
       resetForm();
       await invalidateClassificationQueries();
       await forceRefresh();
@@ -255,28 +209,16 @@ export default function AdminClassificationsPage() {
     }
 
     try {
-      if (activeTab === 'bone') {
-        await boneSpecialtyApi.update({
-          id: editingId,
-          code: form.code,
-          name: form.name,
-          description: form.description || undefined,
-          displayOrder: form.displayOrder,
-          isActive: form.isActive,
-          parentId: form.parentId || undefined,
-        });
-      } else {
-        await pathologyCategoryApi.update({
-          id: editingId,
-          code: form.code,
-          name: form.name,
-          description: form.description || undefined,
-          displayOrder: form.displayOrder,
-          isActive: form.isActive,
-          boneSpecialtyId: form.boneSpecialtyId || undefined,
-        });
-      }
-      toast.success(`${activeTab === 'bone' ? 'Bone Specialty' : 'Pathology Category'} updated successfully.`);
+      await boneSpecialtyApi.update({
+        id: editingId,
+        code: form.code,
+        name: form.name,
+        description: form.description || undefined,
+        displayOrder: form.displayOrder,
+        isActive: form.isActive,
+        parentId: form.parentId || undefined,
+      });
+      toast.success('Bone Specialty updated successfully.');
       resetForm();
       await invalidateClassificationQueries();
       await forceRefresh();
@@ -288,11 +230,7 @@ export default function AdminClassificationsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
     try {
-      if (activeTab === 'bone') {
-        await boneSpecialtyApi.delete(id);
-      } else {
-        await pathologyCategoryApi.delete(id);
-      }
+      await boneSpecialtyApi.delete(id);
       toast.success('Deleted successfully.');
       await invalidateClassificationQueries();
       // Force refresh in background - don't block UI
@@ -302,13 +240,9 @@ export default function AdminClassificationsPage() {
     }
   };
 
-  const handleToggleActive = async (item: BoneSpecialtyDto | PathologyCategoryDto) => {
+  const handleToggleActive = async (item: BoneSpecialtyDto) => {
     try {
-      if (activeTab === 'bone') {
-        await boneSpecialtyApi.toggleActive(item.id, !item.isActive);
-      } else {
-        await pathologyCategoryApi.toggleActive(item.id, !item.isActive);
-      }
+      await boneSpecialtyApi.toggleActive(item.id, !item.isActive);
       await invalidateClassificationQueries();
       await forceRefresh();
     } catch (err) {
@@ -327,7 +261,7 @@ export default function AdminClassificationsPage() {
     }
   };
 
-  const startEdit = (item: BoneSpecialtyDto | PathologyCategoryDto) => {
+  const startEdit = (item: BoneSpecialtyDto) => {
     setEditingId(item.id);
     setIsCreating(false);
     setForm({
@@ -336,8 +270,7 @@ export default function AdminClassificationsPage() {
       description: item.description || '',
       displayOrder: item.displayOrder,
       isActive: item.isActive,
-      parentId: 'parentId' in item ? item.parentId : null,
-      boneSpecialtyId: 'boneSpecialtyId' in item ? item.boneSpecialtyId : null,
+      parentId: item.parentId,
     });
   };
 
@@ -464,71 +397,51 @@ export default function AdminClassificationsPage() {
     ));
   };
 
-  const isLoading = activeTab === 'bone' ? loadingBone : loadingPathology;
+  const isLoading = loadingBone;
 
   return (
     <div className="min-h-screen bg-background pb-12">
       <div className="mx-auto max-w-[1400px] space-y-6 p-6">
-        {/* Tabs & View Mode */}
+        {/* Header & View Mode */}
         <div className="flex items-center justify-between border-b border-border bg-card rounded-t-2xl px-2 pt-2">
           <div className="flex gap-1">
-            <button
-              onClick={() => handleTabChange('bone')}
-              className={`flex items-center gap-3 px-6 py-4 rounded-xl transition-all font-semibold ${
-                activeTab === 'bone'
-                  ? 'bg-primary text-white shadow-lg shadow-primary/30'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
+            <div className="flex items-center gap-3 px-6 py-4 rounded-xl bg-primary text-white shadow-lg shadow-primary/30 font-semibold">
               <Bone className="w-5 h-5" />
               <span className="text-sm">Bone Specialties</span>
-            </button>
-            <button
-              onClick={() => handleTabChange('pathology')}
-              className={`flex items-center gap-3 px-6 py-4 rounded-xl transition-all font-semibold ${
-                activeTab === 'pathology'
-                  ? 'bg-secondary text-secondary-foreground shadow-lg shadow-secondary/30'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <Stethoscope className="w-5 h-5" />
-              <span className="text-sm">Pathology Categories</span>
-            </button>
+            </div>
           </div>
 
-          {/* View Mode Toggle - chỉ hiện khi ở tab Bone */}
-          {activeTab === 'bone' && (
-            <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl mr-2">
-              <span className="text-xs text-muted-foreground px-2 font-medium">View:</span>
-              <button
-                onClick={() => setViewMode('tree')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
-                  viewMode === 'tree'
-                    ? 'bg-primary text-white shadow-md'
-                    : 'text-muted-foreground hover:bg-muted'
-                }`}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 3v18M3 12h18M5 5v14M19 5v14M5 12h14" />
-                </svg>
-                Tree
-              </button>
-              <button
-                onClick={() => setViewMode('table')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
-                  viewMode === 'table'
-                    ? 'bg-primary text-white shadow-md'
-                    : 'text-muted-foreground hover:bg-muted'
-                }`}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
-                </svg>
-                Table
-              </button>
-            </div>
-          )}
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl mr-2">
+            <span className="text-xs text-muted-foreground px-2 font-medium">View:</span>
+            <button
+              onClick={() => setViewMode('tree')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
+                viewMode === 'tree'
+                  ? 'bg-primary text-white shadow-md'
+                  : 'text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 3v18M3 12h18M5 5v14M19 5v14M5 12h14" />
+              </svg>
+              Tree
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
+                viewMode === 'table'
+                  ? 'bg-primary text-white shadow-md'
+                  : 'text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+              </svg>
+              Table
+            </button>
+          </div>
         </div>
 
         {/* Form - Ẩn ban đầu, chỉ hiện khi nhấn Create New hoặc Edit */}
@@ -568,42 +481,23 @@ export default function AdminClassificationsPage() {
                   placeholder="Optional description"
                 />
               </div>
-              {activeTab === 'bone' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Parent Specialty</label>
-                  <select
-                    value={form.parentId || ''}
-                    onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}
-                    className="w-full h-10 px-3 rounded-lg border border-border bg-input text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="">-- Root (No Parent) --</option>
-                    {allBoneSpecialties
-                      .filter((s) => s.id !== editingId)
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.code})
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              )}
-              {activeTab === 'pathology' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Bone Specialty</label>
-                  <select
-                    value={form.boneSpecialtyId || ''}
-                    onChange={(e) => setForm({ ...form, boneSpecialtyId: e.target.value || null })}
-                    className="w-full h-10 px-3 rounded-lg border border-border bg-input text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="">-- General (All Specialties) --</option>
-                    {allBoneSpecialties.map((s) => (
+              <div>
+                <label className="block text-sm font-medium mb-1">Parent Specialty</label>
+                <select
+                  value={form.parentId || ''}
+                  onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-input text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">-- Root (No Parent) --</option>
+                  {allBoneSpecialties
+                    .filter((s) => s.id !== editingId)
+                    .map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name} ({s.code})
                       </option>
                     ))}
-                  </select>
-                </div>
-              )}
+                </select>
+              </div>
               <div>
                 <label className="flex items-center gap-2 h-10 px-3 cursor-pointer">
                   <input
@@ -673,51 +567,47 @@ export default function AdminClassificationsPage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold">
-                    {activeTab === 'bone' ? (viewMode === 'tree' ? 'Bone Specialties Tree' : 'Bone Specialties List') : 'Pathology Categories'}
+                    {viewMode === 'tree' ? 'Bone Specialties Tree' : 'Bone Specialties List'}
                   </h3>
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    {activeTab === 'bone'
-                      ? viewMode === 'table'
-                        ? `${flatBoneSpecialties.length} total specialties (${boneSpecialties.length} root categories)`
-                        : `${boneSpecialties.length} root categories`
-                      : `${pathologyCategories.length} categories`}
+                    {viewMode === 'table'
+                      ? `${flatBoneSpecialties.length} total specialties (${boneSpecialties.length} root categories)`
+                      : `${boneSpecialties.length} root categories`}
                   </p>
                 </div>
               </div>
-              {activeTab === 'bone' && (
-                <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-xl">
-                  <button
-                    onClick={() => handleStatusFilterChange('all')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      statusFilter === 'all'
-                        ? 'bg-card shadow-sm text-foreground font-semibold'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => handleStatusFilterChange('active')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      statusFilter === 'active'
-                        ? 'bg-green-100 text-green-700 font-semibold shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Active
-                  </button>
-                  <button
-                    onClick={() => handleStatusFilterChange('inactive')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      statusFilter === 'inactive'
-                        ? 'bg-red-100 text-red-700 font-semibold shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Inactive
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-xl">
+                <button
+                  onClick={() => handleStatusFilterChange('all')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'all'
+                      ? 'bg-card shadow-sm text-foreground font-semibold'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => handleStatusFilterChange('active')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'active'
+                      ? 'bg-green-100 text-green-700 font-semibold shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Active
+                </button>
+                <button
+                  onClick={() => handleStatusFilterChange('inactive')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    statusFilter === 'inactive'
+                      ? 'bg-red-100 text-red-700 font-semibold shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Inactive
+                </button>
+              </div>
             </div>
           </div>
 
@@ -728,7 +618,7 @@ export default function AdminClassificationsPage() {
               </div>
               <p className="text-muted-foreground font-medium">Loading data...</p>
             </div>
-          ) : activeTab === 'bone' ? (
+          ) : (
             boneSpecialties.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
@@ -909,137 +799,6 @@ export default function AdminClassificationsPage() {
               // Tree View - existing hierarchical display
               <div>{renderBoneTree(filteredBoneSpecialties)}</div>
             )
-          ) : pathologyCategories.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="w-20 h-20 rounded-full bg-secondary/20 flex items-center justify-center">
-                <Stethoscope className="w-10 h-10 text-secondary" />
-              </div>
-              <p className="text-muted-foreground font-medium text-lg">No pathology categories found</p>
-              <p className="text-muted-foreground/70 text-sm">Create your first pathology category using the form above</p>
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-secondary/10 to-primary/5">
-                <tr>
-                  <th className="text-left px-5 py-4 text-sm font-bold text-primary">Code</th>
-                  <th className="text-left px-5 py-4 text-sm font-bold text-primary">Name</th>
-                  <th className="text-left px-5 py-4 text-sm font-bold text-primary">Bone Specialty</th>
-                  <th className="text-left px-5 py-4 text-sm font-bold text-primary">Order</th>
-                  <th className="text-left px-5 py-4 text-sm font-bold text-primary">Status</th>
-                  <th className="text-right px-5 py-4 text-sm font-bold text-primary">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedPathologyItems.map((item) => (
-                  <tr key={item.id} className={`border-b border-border/40 hover:bg-muted/30 transition-colors ${!item.isActive ? 'opacity-65' : ''}`}>
-                    <td className="px-5 py-4">
-                      <span className="text-sm bg-muted px-3 py-1.5 rounded-lg font-mono font-semibold border border-border/50">{item.code}</span>
-                    </td>
-                    <td className="px-5 py-4 font-semibold text-base">{item.name}</td>
-                    <td className="px-5 py-4 text-sm text-muted-foreground font-medium">
-                      {item.boneSpecialtyName || '-'}
-                    </td>
-                    <td className="px-5 py-4 text-sm font-medium">#{item.displayOrder}</td>
-                    <td className="px-5 py-4">
-                      <span className={`text-sm px-3 py-1.5 rounded-lg font-semibold ${item.isActive ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-muted text-muted-foreground border border-border/50'}`}>
-                        {item.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => handleToggleActive(item)}
-                          className="p-2.5 hover:bg-muted rounded-xl transition-colors"
-                          title={item.isActive ? 'Deactivate' : 'Activate'}
-                        >
-                          {item.isActive ? (
-                            <ToggleRight className="w-6 h-6 text-green-600" />
-                          ) : (
-                            <ToggleLeft className="w-6 h-6 text-gray-400" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => startEdit(item)}
-                          className="p-2.5 hover:bg-amber-50 rounded-xl transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-4 h-4 text-amber-600" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="p-2.5 hover:bg-red-50 rounded-xl transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              {totalPathologyPages > 1 && (
-                <tfoot>
-                  <tr>
-                    <td colSpan={6} className="px-5 py-4 bg-muted/20 border-t border-border/40">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          Showing {(pathologyPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(pathologyPage * ITEMS_PER_PAGE, pathologyCategories.length)} of {pathologyCategories.length} items
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => setPathologyPage(1)}
-                            disabled={pathologyPage === 1}
-                            className="p-2 hover:bg-muted rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                            title="First page"
-                          >
-                            <ChevronFirst className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setPathologyPage(p => Math.max(1, p - 1))}
-                            disabled={pathologyPage === 1}
-                            className="p-2 hover:bg-muted rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                            title="Previous page"
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                          </button>
-                          <div className="flex items-center gap-1 px-2">
-                            {Array.from({ length: totalPathologyPages }, (_, i) => i + 1).map((pageNum) => (
-                              <button
-                                key={pageNum}
-                                onClick={() => setPathologyPage(pageNum)}
-                                className={`w-8 h-8 text-sm font-medium rounded-lg transition-colors ${
-                                  pathologyPage === pageNum
-                                    ? 'bg-secondary text-secondary-foreground shadow-sm'
-                                    : 'hover:bg-muted text-muted-foreground'
-                                }`}
-                              >
-                                {pageNum}
-                              </button>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => setPathologyPage(p => Math.min(totalPathologyPages, p + 1))}
-                            disabled={pathologyPage === totalPathologyPages}
-                            className="p-2 hover:bg-muted rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                            title="Next page"
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setPathologyPage(totalPathologyPages)}
-                            disabled={pathologyPage === totalPathologyPages}
-                            className="p-2 hover:bg-muted rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                            title="Last page"
-                          >
-                            <ChevronLast className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
           )}
         </div>
       </div>
