@@ -15,6 +15,27 @@ type PixelBounds = PixelPoint & {
   height: number;
 };
 
+/** Pixel rect of visible image content inside an object-contain `<img>` layout box. */
+export function computeObjectContainContentRect(
+  layoutWidth: number,
+  layoutHeight: number,
+  naturalWidth: number,
+  naturalHeight: number,
+): { left: number; top: number; width: number; height: number } {
+  if (!layoutWidth || !layoutHeight || !naturalWidth || !naturalHeight) {
+    return { left: 0, top: 0, width: layoutWidth, height: layoutHeight };
+  }
+  const scale = Math.min(layoutWidth / naturalWidth, layoutHeight / naturalHeight);
+  const width = naturalWidth * scale;
+  const height = naturalHeight * scale;
+  return {
+    left: (layoutWidth - width) / 2,
+    top: (layoutHeight - height) / 2,
+    width,
+    height,
+  };
+}
+
 export function normalizeClientPointFromRect(
   clientX: number,
   clientY: number,

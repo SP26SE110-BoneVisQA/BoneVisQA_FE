@@ -151,6 +151,22 @@ const ANATOMY_TOKEN_TO_SITE = new Map<string, ExpertAnatomySite>([
   ['thorax', 'Chest'],
 ]);
 
+/** DICOM Body Part Examined codes (e.g. UP_EXM) → canonical anatomy site labels. */
+const DICOM_BODY_PART_CODES = new Map<string, ExpertAnatomySite>([
+  ['up_exm', 'Shoulder'],
+  ['upper_extremity', 'Shoulder'],
+  ['upper extremity', 'Shoulder'],
+  ['lo_exm', 'Knee'],
+  ['lower_extremity', 'Knee'],
+  ['lower extremity', 'Knee'],
+  ['cspine', 'Spine'],
+  ['tspine', 'Spine'],
+  ['lspine', 'Spine'],
+  ['abdomen', 'Other'],
+  ['head', 'Skull & Face'],
+  ['neck', 'Skull & Face'],
+]);
+
 export function mapDicomAnatomyToExpert(
   anatomySite?: string | null,
   bodyPartExamined?: string | null,
@@ -158,11 +174,16 @@ export function mapDicomAnatomyToExpert(
   const candidates = [anatomySite, bodyPartExamined].filter(Boolean) as string[];
   for (const raw of candidates) {
     const token = normalizeAnatomyToken(raw);
+    const dicomCode = DICOM_BODY_PART_CODES.get(token);
+    if (dicomCode) return dicomCode;
+
     const exact = ANATOMY_SITE_BY_EXACT_TOKEN.get(token);
     if (exact) return exact;
 
     const parts = anatomyTokens(raw);
     for (const part of parts) {
+      const codeMatch = DICOM_BODY_PART_CODES.get(part);
+      if (codeMatch) return codeMatch;
       const mapped = ANATOMY_TOKEN_TO_SITE.get(part);
       if (mapped) return mapped;
     }

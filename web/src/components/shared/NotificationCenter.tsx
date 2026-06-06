@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { notificationTargetToAppPath } from '@/lib/notification-app-path';
+import { markAllNotificationsRead, markNotificationRead } from '@/lib/api/notifications';
+import { appToast } from '@/lib/api/errors';
 import type { AppRoleKey } from '@/lib/auth/rbac';
 import type { AppNotificationItem } from '@/lib/api/types';
 
@@ -28,6 +30,7 @@ type NotificationCenterProps = {
   connectionLive?: boolean;
   role?: AppRoleKey;
   className?: string;
+  onItemsUpdated?: (items: AppNotificationItem[]) => void;
 };
 
 export function NotificationCenter({
@@ -35,11 +38,13 @@ export function NotificationCenter({
   connectionLive = false,
   role,
   className,
+  onItemsUpdated,
 }: NotificationCenterProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'unread' | 'all'>('unread');
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
+  const [markingAll, setMarkingAll] = useState(false);
 
   const merged = useMemo(() => {
     const map = new Map<string, AppNotificationItem>();
@@ -65,12 +70,31 @@ export function NotificationCenter({
   const unread = items.filter((i) => !i.isRead);
   const unreadCount = unread.length;
 
-  const markAllRead = () => {
-    setReadIds(new Set(items.map((i) => i.id)));
+  const markAllRead = async () => {
+    if (unreadCount === 0 || markingAll) return;
+    setMarkingAll(true);
+    try {
+      await markAllNotificationsRead();
+      const allRead = items.map((item) => ({ ...item, isRead: true }));
+      setReadIds(new Set(allRead.map((item) => item.id)));
+      onItemsUpdated?.(allRead);
+    } catch (error) {
+      appToast.error(error instanceof Error ? error.message : 'Failed to mark notifications as read.');
+    } finally {
+      setMarkingAll(false);
+    }
   };
 
   const handleClick = (item: AppNotificationItem) => {
-    setReadIds((prev) => new Set(prev).add(item.id));
+    if (!item.isRead && !readIds.has(item.id)) {
+      setReadIds((prev) => new Set(prev).add(item.id));
+      onItemsUpdated?.(
+        items.map((entry) => (entry.id === item.id ? { ...entry, isRead: true } : entry)),
+      );
+      void markNotificationRead(item.id).catch(() => {
+        /* optimistic UI; refetch on next header mount */
+      });
+    }
     if (item.type === 'quiz_assigned' && role === 'student') {
       router.push('/student/quiz');
       setOpen(false);
@@ -115,8 +139,8 @@ export function NotificationCenter({
             variant="ghost"
             size="sm"
             className="h-8 gap-1.5 text-xs"
-            onClick={markAllRead}
-            disabled={unreadCount === 0}
+            onClick={() => void markAllRead()}
+            disabled={unreadCount === 0 || markingAll}
           >
             <CheckCheck className="h-3.5 w-3.5" />
             Mark all read

@@ -50,12 +50,12 @@ export function WorkspaceFlowBar({
             type="button"
             variant="outline"
             size="sm"
-            className="h-9 gap-1.5 rounded-2xl border-slate-200/70 bg-white/85 text-xs shadow-sm hover:bg-slate-50 lg:hidden"
+            className="h-9 gap-1.5 rounded-2xl border-slate-200/70 bg-white/85 text-xs shadow-sm hover:bg-slate-50"
             onClick={onOpenHistory}
             aria-expanded={historyOpen}
           >
             <History className="h-3.5 w-3.5" />
-            History
+            Chat history
           </Button>
         ) : null}
         {onNewChat ? (

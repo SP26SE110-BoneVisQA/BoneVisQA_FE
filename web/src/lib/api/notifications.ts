@@ -76,3 +76,11 @@ export async function markNotificationRead(id: string): Promise<void> {
     throw new Error(getApiErrorMessage(error));
   }
 }
+
+export async function markAllNotificationsRead(): Promise<void> {
+  try {
+    await http.put('/api/notifications/read-all');
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error));
+  }
+}

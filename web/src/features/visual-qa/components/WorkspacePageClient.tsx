@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
+import { History } from 'lucide-react';
 import {
   clearSessionPrefillImages,
   readAndClearSessionPrefillImage,
@@ -27,6 +28,7 @@ import { WorkspaceChatPanel } from '@/features/visual-qa/components/WorkspaceCha
 import { WorkspaceEmptyState } from '@/features/visual-qa/components/WorkspaceEmptyState';
 import { WorkspaceContextPanel } from '@/features/visual-qa/components/WorkspaceContextPanel';
 import { useDashboardHeader } from '@/components/layouts/dashboard-header-context';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 function resolveCatalogImageUrl(detail: StudentCaseCatalogDetail): string | null {
@@ -99,9 +101,27 @@ export function WorkspacePageClient() {
   const headerTitle =
     caseDetail?.title?.trim() || (flow === 'personal' ? 'Personal study' : 'Visual QA');
 
+  const emptyHeaderActions = useMemo(
+    () => (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9 gap-1.5 rounded-2xl border-slate-200/70 bg-white/85 text-xs shadow-sm hover:bg-slate-50"
+        onClick={() => setEmptyLandingHistoryOpen(true)}
+        aria-expanded={emptyLandingHistoryOpen}
+      >
+        <History className="h-3.5 w-3.5" aria-hidden />
+        Chat history
+      </Button>
+    ),
+    [emptyLandingHistoryOpen],
+  );
+
   useDashboardHeader({
     title: isEmptyWorkspace ? 'Visual QA' : headerTitle,
     showBack: false,
+    actions: isEmptyWorkspace ? emptyHeaderActions : undefined,
   });
 
   useEffect(() => {
@@ -383,10 +403,7 @@ export function WorkspacePageClient() {
             />
           </>
         ) : null}
-        <WorkspaceEmptyState
-          onUploaded={(result, file) => handleUploadSuccess(result, file)}
-          onOpenHistory={() => setEmptyLandingHistoryOpen(true)}
-        />
+        <WorkspaceEmptyState onUploaded={(result, file) => handleUploadSuccess(result, file)} />
       </div>
     );
   }

@@ -74,7 +74,7 @@ export function useExpertCaseMeta() {
     queryFn: async () => {
       const [apiCategories, tags] = await Promise.all([
         fetchExpertCategories().catch(() => [] as ExpertCategory[]),
-        fetchExpertTags(1, 200),
+        fetchExpertTags(1, 200).catch(() => []),
       ]);
       return { categories: resolveExpertCategories(apiCategories), tags };
     },

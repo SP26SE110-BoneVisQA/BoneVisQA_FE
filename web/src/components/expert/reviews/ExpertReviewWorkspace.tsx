@@ -29,7 +29,6 @@ import {
   AlertCircle,
   CheckCircle,
   Edit3,
-  Flag,
   Library,
   Link2,
   RefreshCw,
@@ -106,13 +105,9 @@ function isTerminal(status: string) {
 
 function EvidencePanel({
   citations,
-  onFlag,
-  flagsDisabled,
   queueSummary,
 }: {
   citations: ExpertReviewCitation[];
-  onFlag: (chunkId: string) => void;
-  flagsDisabled?: boolean;
   /** Hàng từ dashboard pending: thường không có chunk đầy đủ tới khi queue chính tải. */
   queueSummary?: boolean;
 }) {
@@ -144,8 +139,7 @@ function EvidencePanel({
                   : 'border-slate-300 bg-white'
               }`}
             >
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
                   <span className="rounded-md bg-slate-800 px-2 py-1 font-medium text-white">
                     Chunk {index + 1}
                   </span>
@@ -158,31 +152,6 @@ function EvidencePanel({
                     <span className="rounded-md bg-red-700 px-2 py-1 font-medium text-white">Flagged</span>
                   ) : null}
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={citation.flagged ? 'outline' : 'destructive'}
-                  disabled={citation.flagged || flagsDisabled}
-                  onClick={() => onFlag(citation.chunkId)}
-                  title={
-                    citation.flagged
-                      ? 'Issue already flagged'
-                      : flagsDisabled
-                        ? 'Refresh the queue to continue'
-                        : 'Flag this chunk'
-                  }
-                  aria-label={
-                    citation.flagged
-                      ? 'Issue already flagged'
-                      : flagsDisabled
-                        ? 'Refresh the queue to continue'
-                        : 'Flag this chunk'
-                  }
-                  className="!px-2.5"
-                >
-                  <Flag className="h-4 w-4" />
-                </Button>
-              </div>
 
               <blockquote className="rounded-lg border-y border-r border-slate-200 border-l-4 border-l-blue-600 bg-slate-100 px-4 py-3 text-sm font-medium leading-relaxed text-slate-900 shadow-inner">
                 {citation.sourceText}
@@ -398,12 +367,9 @@ export type ExpertReviewWorkspaceProps = {
   roiClearEpoch?: number;
   onOpenEdit: () => void;
   onSaveDraft: (correctedRoiBoundingBox?: number[] | null) => void;
-  onApprove: (correctedRoiBoundingBox?: number[] | null) => void;
-  onPromote: () => void;
+  onApproveAndPromote: (correctedRoiBoundingBox?: number[] | null) => void;
   onRejectRequest: () => void;
-  canPromote: boolean;
   saving: boolean;
-  onFlagCitation: (chunkId: string) => void;
   /** Trường bắt buộc trước khi đưa case vào thư viện công khai. */
   libraryTitle: string;
   libraryCategoryId: string;
@@ -437,12 +403,9 @@ export function ExpertReviewWorkspace({
   roiClearEpoch,
   onOpenEdit,
   onSaveDraft,
-  onApprove,
-  onPromote,
+  onApproveAndPromote,
   onRejectRequest,
-  canPromote,
   saving,
-  onFlagCitation,
   libraryTitle,
   libraryCategoryId,
   libraryDifficulty,
@@ -553,7 +516,7 @@ export function ExpertReviewWorkspace({
         </CardHeader>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(260px,0.88fr)] xl:gap-5">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(260px,0.88fr)] xl:gap-5">
         <section className="space-y-4">
           <Card className="overflow-hidden border-border/50 shadow-sm shadow-black/[0.04]">
             <CardHeader className="pb-2">
@@ -591,12 +554,10 @@ export function ExpertReviewWorkspace({
         </section>
       </div>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-        <div className="xl:sticky xl:top-6 xl:self-start">
+      <div className="mt-6 grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+        <div>
           <EvidencePanel
             citations={item.citations ?? []}
-            onFlag={onFlagCitation}
-            flagsDisabled={pairMismatch}
             queueSummary={item.queueSource === 'dashboard-summary'}
           />
         </div>
@@ -654,7 +615,7 @@ export function ExpertReviewWorkspace({
         </div>
       </div>
 
-      {canPromote ? (
+      {!isTerminal(item.status) ? (
         <Card className="mt-6 border-emerald-200 bg-emerald-50/40 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-emerald-950">Publish to student library</CardTitle>
@@ -781,24 +742,15 @@ export function ExpertReviewWorkspace({
                 disabled={saving || pairMismatch}
                 className="border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
                 onClick={() =>
-                  onApprove(
+                  onApproveAndPromote(
                     correctedRoi && isValidNormalizedBoundingBox(correctedRoi)
                       ? [correctedRoi.x, correctedRoi.y, correctedRoi.width, correctedRoi.height]
                       : undefined,
                   )
                 }
               >
-                <CheckCircle className="h-4 w-4" />
-                Approve
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={saving || pairMismatch || !canPromote}
-                onClick={() => onPromote()}
-              >
                 <Library className="h-4 w-4" />
-                Add to library
+                Approve &amp; Promote to Library
               </Button>
               <Button type="button" variant="destructive" disabled={saving || pairMismatch} onClick={onRejectRequest}>
                 <XCircle className="h-4 w-4" />

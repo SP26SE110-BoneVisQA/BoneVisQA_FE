@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Loader2, MessageSquare } from 'lucide-react';
+import { Loader2, MessageSquare } from 'lucide-react';
 import { fetchStudentPersonalStudiesHistory } from '@/lib/api/student';
 import type { StudentCaseHistoryItem } from '@/lib/api/types';
 import { formatRelativeTime } from '@/lib/format-relative-time';
@@ -101,13 +100,6 @@ export function VisualQaSessionHistorySidebar({
       )}
     >
       <div className="shrink-0 border-b border-slate-200/70 px-4 py-4">
-        <Link
-          href="/student/visual-qa/workspace"
-          className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-          Back to upload
-        </Link>
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Study history</p>
         <p className="mt-1 text-xs text-slate-500">Personal Visual QA sessions</p>
       </div>

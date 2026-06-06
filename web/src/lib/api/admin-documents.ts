@@ -1,5 +1,11 @@
 import { http, getApiErrorMessage } from './client';
-import type { CategoryOption, DocumentStatusResponse, DocumentUploadResponse, TagOption } from './types';
+import type {
+  CategoryOption,
+  DocumentStatusResponse,
+  DocumentUploadRequest,
+  DocumentUploadResponse,
+  TagOption,
+} from './types';
 
 const ADMIN_DOCUMENTS = '/api/admin/documents';
 
@@ -37,11 +43,8 @@ function mapTag(row: unknown): TagOption {
   return { id: '', name: '' };
 }
 
-export interface UploadDocumentParams {
+export interface UploadDocumentParams extends DocumentUploadRequest {
   file: File;
-  title?: string;
-  categoryId: string;
-  tagIds: string[];
   onUploadProgress?: (percent: number) => void;
 }
 
@@ -52,6 +55,10 @@ export async function uploadAdminDocument(
   form.append('file', params.file);
   form.append('Title', (params.title ?? '').trim() || params.file.name);
   form.append('CategoryId', params.categoryId);
+  form.append('Modality', params.modality);
+  if (params.defaultPathologyGroup?.trim()) {
+    form.append('DefaultPathologyGroup', params.defaultPathologyGroup.trim());
+  }
   params.tagIds.forEach((id) => form.append('TagIds', id));
 
   try {
@@ -269,6 +276,25 @@ export async function reindexAdminDocument(
       `${ADMIN_DOCUMENTS}/${id}/reindex`,
     );
     return data;
+  } catch (e) {
+    throw new Error(getApiErrorMessage(e));
+  }
+}
+
+export interface ReindexDocumentMetadataResponse {
+  message?: string;
+  chunksUpdated?: number;
+}
+
+/** Re-apply Tier-1 chunk metadata to an already-indexed document without re-uploading the PDF. */
+export async function reindexDocumentMetadata(
+  id: string,
+): Promise<ReindexDocumentMetadataResponse> {
+  try {
+    const { data } = await http.post<ReindexDocumentMetadataResponse>(
+      `${ADMIN_DOCUMENTS}/${id}/reindex-metadata`,
+    );
+    return data ?? {};
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }

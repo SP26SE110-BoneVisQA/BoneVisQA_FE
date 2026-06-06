@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowLeft, ChevronDown, LogOut, Moon, RotateCcw, Settings, Sun, User } from 'lucide-react';
+import { ArrowLeft, ChevronDown, LogOut, Moon, Settings, Sun, User } from 'lucide-react';
 import { useAuth } from '@/lib/useAuth';
 import { useLogout } from '@/lib/useLogout';
 import { resolveApiAssetUrl } from '@/lib/api/client';
@@ -24,9 +24,6 @@ import {
 import { cn } from '@/lib/utils';
 import { dashboardHrefForAppRole, readActiveAppRoleFromStorage } from '@/lib/auth/rbac';
 import { useDashboardHeaderReader } from '@/components/layouts/dashboard-header-context';
-import { useVisualQaStore } from '@/features/visual-qa/store/visual-qa-store';
-import { clearSessionPrefillImages } from '@/components/student/VisualQaSessionHistorySidebar';
-import { appToast } from '@/lib/api/errors';
 
 function notificationDtoToAppItem(d: NotificationDto): AppNotificationItem {
   const route =
@@ -131,16 +128,6 @@ export function UnifiedDashboardHeader({
     }
   };
 
-  const handleResetVisualQaState = () => {
-    clearSessionPrefillImages();
-    useVisualQaStore.getState().resetSession();
-    useVisualQaStore.persist.clearStorage();
-    appToast.success('Visual QA session state cleared.');
-    if (pathname?.startsWith('/student/visual-qa/workspace')) {
-      router.replace('/student/visual-qa/workspace');
-    }
-  };
-
   return (
     <header
       className={cn(
@@ -172,6 +159,7 @@ export function UnifiedDashboardHeader({
             serverItems={mergedNotifications}
             connectionLive={connectionStatus === 'connected'}
             role={role}
+            onItemsUpdated={(items) => setServerNotifications(items)}
           />
 
           <button
@@ -229,17 +217,6 @@ export function UnifiedDashboardHeader({
                   <Settings className="h-4 w-4 text-muted-foreground" />
                   Settings
                 </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                destructive
-                className="cursor-pointer"
-                onSelect={(e) => {
-                  e.preventDefault();
-                  handleResetVisualQaState();
-                }}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset Session Context
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

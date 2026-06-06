@@ -312,14 +312,18 @@ export interface ExpertCategory {
   name: string;
 }
 
-async function getExpertListPayload(primaryPath: string, fallbackPath: string): Promise<unknown> {
-  try {
-    const { data } = await http.get<any>(primaryPath);
-    return data;
-  } catch {
-    const { data } = await http.get<any>(fallbackPath);
-    return data;
+async function getExpertListPayload(primaryPath: string, ...fallbackPaths: string[]): Promise<unknown> {
+  const paths = [primaryPath, ...fallbackPaths];
+  let lastError: unknown;
+  for (const path of paths) {
+    try {
+      const { data } = await http.get<unknown>(path, { skipApiToast: true });
+      return data;
+    } catch (e) {
+      lastError = e;
+    }
   }
+  throw lastError;
 }
 
 export async function fetchExpertCategories(): Promise<ExpertCategory[]> {
@@ -579,9 +583,10 @@ export interface ExpertTag {
 
 export async function fetchExpertTags(pageIndex = 1, pageSize = 100): Promise<ExpertTag[]> {
   try {
+    // Prefer singular `/api/expert/tag` — some BE builds only register DELETE on `/api/expert/tags` (GET → 405).
     const data = await getExpertListPayload(
-      `/api/expert/tags?pageIndex=${pageIndex}&pageSize=${pageSize}`,
       `/api/expert/tag?pageIndex=${pageIndex}&pageSize=${pageSize}`,
+      `/api/expert/tags?pageIndex=${pageIndex}&pageSize=${pageSize}`,
     );
     const listRaw = (data as any)?.items ?? (data as any)?.result?.items ?? data;
     const list = Array.isArray(listRaw) ? listRaw : [];
@@ -682,6 +687,7 @@ export async function fetchExpertAnnotations(pageIndex = 1, pageSize = 10, image
 }
 
 export type ExpertCaseDicomUploadResult = {
+  caseId: string | null;
   id: string;
   imageUrl: string;
   modality: string;
@@ -690,22 +696,37 @@ export type ExpertCaseDicomUploadResult = {
   dicomMetadata: VisualQaDicomMetadata | null;
 };
 
+export type ExpertCaseDicomUploadOptions = {
+  caseId?: string;
+  modality?: string;
+  diagnosisText?: string;
+};
+
 /**
  * Ingest DICOM archive for an expert case — `POST /api/expert/cases/upload-dicom`.
+ * BE creates the library case via Python ingest and returns `caseId` + `dicomMetadata`.
  */
 export async function uploadExpertCaseDicomArchive(
-  caseId: string,
   file: File,
-  modality?: string,
+  options?: ExpertCaseDicomUploadOptions,
 ): Promise<ExpertCaseDicomUploadResult> {
   const form = new FormData();
-  form.append('caseId', caseId);
-  form.append('CaseId', caseId);
   form.append('file', file);
   form.append('File', file);
-  if (modality?.trim()) {
-    form.append('modality', modality.trim());
-    form.append('Modality', modality.trim());
+  const caseId = options?.caseId?.trim();
+  if (caseId) {
+    form.append('caseId', caseId);
+    form.append('CaseId', caseId);
+  }
+  const modality = options?.modality?.trim();
+  if (modality) {
+    form.append('modality', modality);
+    form.append('Modality', modality);
+  }
+  const diagnosisText = options?.diagnosisText?.trim();
+  if (diagnosisText) {
+    form.append('diagnosisText', diagnosisText);
+    form.append('DiagnosisText', diagnosisText);
   }
 
   try {
@@ -724,12 +745,16 @@ export async function uploadExpertCaseDicomArchive(
       }
       return undefined;
     };
+    const catalogImageId = String(pick(['catalogImageId', 'CatalogImageId']) ?? '').trim() || null;
+    const resolvedCaseId =
+      String(pick(['caseId', 'CaseId']) ?? '').trim() || null;
     return {
-      id: String(pick(['id', 'Id', 'catalogImageId', 'CatalogImageId']) ?? '').trim(),
+      caseId: resolvedCaseId,
+      id: String(pick(['id', 'Id']) ?? catalogImageId ?? '').trim(),
       imageUrl: String(pick(['previewImageUrl', 'PreviewImageUrl', 'imageUrl', 'ImageUrl']) ?? '').trim(),
       modality: String(pick(['modality', 'Modality']) ?? modality ?? '').trim(),
       mediaId: String(pick(['mediaId', 'MediaId']) ?? '').trim() || null,
-      catalogImageId: String(pick(['catalogImageId', 'CatalogImageId']) ?? '').trim() || null,
+      catalogImageId,
       dicomMetadata: normalizeDicomMetadata(pick(['dicomMetadata', 'dicom_metadata', 'DicomMetadata'])),
     };
   } catch (e) {

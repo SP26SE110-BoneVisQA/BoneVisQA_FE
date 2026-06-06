@@ -172,6 +172,29 @@ export interface TagOption {
   name: string;
 }
 
+/** Tier-1 RAG metadata assigned at admin document upload. */
+export const DOCUMENT_MODALITIES = ['X-Ray', 'CT', 'MRI', 'Ultrasound'] as const;
+export type DocumentModality = (typeof DOCUMENT_MODALITIES)[number];
+
+export const DOCUMENT_DEFAULT_PATHOLOGY_GROUPS = [
+  'Trauma',
+  'Degenerative',
+  'Infection',
+  'Tumor',
+  'Congenital',
+  'Other',
+] as const;
+export type DocumentDefaultPathologyGroup = (typeof DOCUMENT_DEFAULT_PATHOLOGY_GROUPS)[number];
+
+/** Metadata payload for POST /api/admin/documents/upload (excluding the file binary). */
+export interface DocumentUploadRequest {
+  title?: string;
+  categoryId: string;
+  tagIds: string[];
+  modality: DocumentModality;
+  defaultPathologyGroup?: DocumentDefaultPathologyGroup;
+}
+
 export interface DocumentUploadResponse {
   documentId?: string;
   indexingStatus?: DocumentIndexingStatus | string;

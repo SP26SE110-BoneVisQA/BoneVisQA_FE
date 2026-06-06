@@ -6,6 +6,7 @@ import { RectangleAnnotationOverlay } from '@/components/shared/RectangleAnnotat
 import { Button } from '@/components/ui/button';
 import type { NormalizedImageBoundingBox } from '@/lib/api/types';
 import {
+  computeObjectContainContentRect,
   cornersNormalizedToBox,
   cornersNormalizedToDraftBox,
   isValidNormalizedBoundingBox,
@@ -44,7 +45,12 @@ function MedicalImageViewerInner({
   );
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null);
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [imageContentRect, setImageContentRect] = useState({
+    offsetX: 0,
+    offsetY: 0,
+    width: 0,
+    height: 0,
+  });
 
   const drag = useRef(false);
   const start = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
@@ -148,12 +154,57 @@ function MedicalImageViewerInner({
     if (readOnly) setIsDrawMode(false);
   }, [readOnly]);
 
-  const getNormalizedPoint = useCallback((clientX: number, clientY: number) => {
-    const rect =
-      imageStageRef.current?.getBoundingClientRect() ?? drawLayerRef.current?.getBoundingClientRect();
-    if (!rect?.width || !rect?.height) return null;
-    return normalizeClientPointFromRect(clientX, clientY, rect);
+  const syncImageContentRect = useCallback(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    const layoutWidth = img.clientWidth;
+    const layoutHeight = img.clientHeight;
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+    if (!layoutWidth || !layoutHeight || !naturalWidth || !naturalHeight) return;
+    const content = computeObjectContainContentRect(
+      layoutWidth,
+      layoutHeight,
+      naturalWidth,
+      naturalHeight,
+    );
+    setImageContentRect({
+      offsetX: content.left,
+      offsetY: content.top,
+      width: content.width,
+      height: content.height,
+    });
   }, []);
+
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    syncImageContentRect();
+    const observer = new ResizeObserver(() => syncImageContentRect());
+    observer.observe(img);
+    return () => observer.disconnect();
+  }, [src, syncImageContentRect]);
+
+  const getNormalizedPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const stage = imageStageRef.current;
+      if (!stage) return null;
+      const stageRect = stage.getBoundingClientRect();
+      const { offsetX, offsetY, width, height } = imageContentRect;
+      if (!width || !height) {
+        const fallback = drawLayerRef.current?.getBoundingClientRect() ?? stageRect;
+        return normalizeClientPointFromRect(clientX, clientY, fallback);
+      }
+      const contentRect = {
+        left: stageRect.left + offsetX,
+        top: stageRect.top + offsetY,
+        width,
+        height,
+      };
+      return normalizeClientPointFromRect(clientX, clientY, contentRect);
+    },
+    [imageContentRect],
+  );
 
   const draftBox =
     drawStart && drawCurrent ? cornersNormalizedToDraftBox(drawStart, drawCurrent) : null;
@@ -286,14 +337,7 @@ function MedicalImageViewerInner({
           onPointerUp={handlePanPointerUp}
           onPointerCancel={handlePanPointerUp}
         >
-          <div
-            ref={imageStageRef}
-            className="relative inline-block max-h-full max-w-full"
-            style={{
-              width: imageSize.width ? `${imageSize.width}px` : undefined,
-              height: imageSize.height ? `${imageSize.height}px` : undefined,
-            }}
-          >
+          <div ref={imageStageRef} className="relative inline-block max-h-full max-w-full">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               ref={imgRef}
@@ -301,36 +345,50 @@ function MedicalImageViewerInner({
               alt={alt}
               className="max-h-full max-w-full select-none object-contain"
               draggable={false}
-              onLoad={() => {
-                if (!imgRef.current) return;
-                setImageSize({
-                  width: imgRef.current.clientWidth,
-                  height: imgRef.current.clientHeight,
-                });
-              }}
+              onLoad={syncImageContentRect}
             />
-            <RectangleAnnotationOverlay
-              closed={closedBox}
-              draft={draftBox}
-              label="LESION ROI"
-              className="z-[10]"
-            />
-            {expertAnnotation && isValidNormalizedBoundingBox(expertAnnotation) ? (
-              <RectangleAnnotationOverlay
-                tone="expert"
-                closed={expertAnnotation}
-                draft={null}
-                label="EXPERT ROI"
-                className="z-[12]"
-              />
+            {imageContentRect.width > 0 && imageContentRect.height > 0 ? (
+              <div
+                className="pointer-events-none absolute z-[10]"
+                style={{
+                  left: imageContentRect.offsetX,
+                  top: imageContentRect.offsetY,
+                  width: imageContentRect.width,
+                  height: imageContentRect.height,
+                }}
+              >
+                <RectangleAnnotationOverlay
+                  closed={closedBox}
+                  draft={draftBox}
+                  label="LESION ROI"
+                  className="h-full w-full"
+                />
+                {expertAnnotation && isValidNormalizedBoundingBox(expertAnnotation) ? (
+                  <RectangleAnnotationOverlay
+                    tone="expert"
+                    closed={expertAnnotation}
+                    draft={null}
+                    label="EXPERT ROI"
+                    className="h-full w-full"
+                  />
+                ) : null}
+                {extraOverlay ? (
+                  <div className="pointer-events-none absolute inset-0 z-[15]">{extraOverlay}</div>
+                ) : null}
+              </div>
             ) : null}
-            {extraOverlay ? <div className="pointer-events-none absolute inset-0 z-[15]">{extraOverlay}</div> : null}
             {isDrawMode && !readOnly ? (
               <div
                 ref={drawLayerRef}
                 role="presentation"
-                className="absolute inset-0 z-20 cursor-crosshair bg-transparent"
+                className="absolute z-20 cursor-crosshair bg-transparent"
                 aria-hidden
+                style={{
+                  left: imageContentRect.offsetX,
+                  top: imageContentRect.offsetY,
+                  width: imageContentRect.width || '100%',
+                  height: imageContentRect.height || '100%',
+                }}
                 onPointerDown={handleDrawPointerDown}
               />
             ) : null}

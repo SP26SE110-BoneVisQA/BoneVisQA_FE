@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ListPageLayout } from '@/components/layouts';
@@ -20,7 +19,6 @@ import {
   approveExpertReview,
   deleteExpertReviewDraft,
   fetchExpertReviewDetail,
-  flagRagChunk,
   hasExpertReviewSelectedPairMismatch,
   putExpertReviewDraft,
   REVIEW_WORKFLOW_CONFLICT,
@@ -36,7 +34,7 @@ import { toast as sonnerToast } from 'sonner';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import { deriveExpertCaseFormPrefillFromDicom } from '@/features/expert/lib/apply-dicom-metadata-to-form';
-import { CheckCircle, ChevronDown, ChevronRight, Clock, Flag, Inbox, RefreshCw, User, XCircle } from 'lucide-react';
+import { CheckCircle, ChevronDown, ChevronRight, Clock, Inbox, RefreshCw, User, XCircle } from 'lucide-react';
 
 function clearServerReviewDraft(sessionId: string) {
   void deleteExpertReviewDraft(sessionId).catch(() => {});
@@ -219,12 +217,8 @@ export function ExpertReviewsPage() {
   const [keyImagingEdit, setKeyImagingEdit] = useState('');
   const [reflectiveEdit, setReflectiveEdit] = useState('');
   const [saving, setSaving] = useState(false);
-  const [flaggingChunkId, setFlaggingChunkId] = useState<string | null>(null);
-  const [flagReason, setFlagReason] = useState('');
-  const [submittingFlag, setSubmittingFlag] = useState(false);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [roiClearEpochBySession, setRoiClearEpochBySession] = useState<Record<string, number>>({});
-  const [locallyApprovedSessionIds, setLocallyApprovedSessionIds] = useState<Set<string>>(() => new Set());
   const [rejectModalItem, setRejectModalItem] = useState<ExpertReviewItem | null>(null);
   const [rejectModalNote, setRejectModalNote] = useState('');
   const openedFocusRef = useRef<string | null>(null);
@@ -235,10 +229,6 @@ export function ExpertReviewsPage() {
   const [libraryTagsCsv, setLibraryTagsCsv] = useState('');
   const [libraryAnatomySite, setLibraryAnatomySite] = useState('');
   const [libraryModality, setLibraryModality] = useState('');
-  const flagChunkMutation = useMutation({
-    mutationFn: ({ chunkId, reason }: { chunkId: string; reason: string }) =>
-      flagRagChunk(chunkId, { reason }),
-  });
 
   const categoriesQuery = useQuery({
     queryKey: queryKeys.expert.caseMeta(),
@@ -338,46 +328,6 @@ export function ExpertReviewsPage() {
     }
   }, [items, searchParams, openEdit]);
 
-  const openFlagModal = (chunkId: string) => {
-    setFlaggingChunkId(chunkId);
-    setFlagReason('');
-  };
-
-  const closeFlagModal = () => {
-    setFlaggingChunkId(null);
-    setFlagReason('');
-  };
-
-  const submitFlag = async () => {
-    if (!flaggingChunkId) return;
-    const reason = flagReason.trim();
-    if (!reason) {
-      toast.error('Please provide a reason before flagging this chunk.');
-      return;
-    }
-
-    setSubmittingFlag(true);
-    try {
-      await flagChunkMutation.mutateAsync({ chunkId: flaggingChunkId, reason });
-      setItems((prev) =>
-        prev.map((item) => ({
-          ...item,
-          citations: item.citations?.map((citation) =>
-            citation.chunkId === flaggingChunkId
-              ? { ...citation, flagged: true }
-              : citation,
-          ),
-        })),
-      );
-      toast.success('Chunk flagged for data quality review.');
-      closeFlagModal();
-    } catch (error) {
-      toast.error(toWorkflowFriendlyError(error, 'Failed to flag RAG chunk.'));
-    } finally {
-      setSubmittingFlag(false);
-    }
-  };
-
   const saveDraftForItem = async (item: ExpertReviewItem, roi?: number[] | null) => {
     if (hasExpertReviewSelectedPairMismatch(item)) {
       toast.error('Selected pair mismatch. Refresh the queue and open this case again.');
@@ -398,35 +348,9 @@ export function ExpertReviewsPage() {
     }
   };
 
-  const approveOnlyForItem = async (item: ExpertReviewItem, roi?: number[] | null) => {
+  const approveAndPromoteForItem = async (item: ExpertReviewItem, roi?: number[] | null) => {
     if (hasExpertReviewSelectedPairMismatch(item)) {
       toast.error('Selected pair mismatch. Refresh the queue before approving.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const note = replyDrafts[item.sessionId]?.trim();
-      await putExpertReviewDraft(item.sessionId, {
-        ...(note ? { reviewNote: note } : {}),
-        ...(Array.isArray(roi) && roi.length >= 4 ? { correctedRoiBoundingBox: roi.slice(0, 4) } : {}),
-      });
-      await approveExpertReview(item.sessionId);
-      setLocallyApprovedSessionIds((prev) => new Set(prev).add(item.sessionId));
-      sonnerToast.success('Review approved. You can publish to the library when ready.', { duration: 5000 });
-    } catch (e) {
-      toast.error(toWorkflowFriendlyError(e, 'Approve failed'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const promoteToLibraryForItem = async (item: ExpertReviewItem) => {
-    if (hasExpertReviewSelectedPairMismatch(item)) {
-      toast.error('Selected pair mismatch. Refresh the queue before promoting.');
-      return;
-    }
-    if (!locallyApprovedSessionIds.has(item.sessionId)) {
-      toast.error('Approve this review before adding it to the library.');
       return;
     }
     const derived = deriveExpertCaseFormPrefillFromDicom(item.dicomMetadata);
@@ -476,17 +400,18 @@ export function ExpertReviewsPage() {
     }
     setSaving(true);
     try {
+      const note = replyDrafts[item.sessionId]?.trim();
+      await putExpertReviewDraft(item.sessionId, {
+        ...(note ? { reviewNote: note } : {}),
+        ...(Array.isArray(roi) && roi.length >= 4 ? { correctedRoiBoundingBox: roi.slice(0, 4) } : {}),
+      });
+      await approveExpertReview(item.sessionId);
       await promoteExpertReview(item.sessionId, promotePayload);
       clearServerReviewDraft(item.sessionId);
       setRoiClearEpochBySession((prev) => ({
         ...prev,
         [item.sessionId]: (prev[item.sessionId] ?? 0) + 1,
       }));
-      setLocallyApprovedSessionIds((prev) => {
-        const next = new Set(prev);
-        next.delete(item.sessionId);
-        return next;
-      });
       setReplyDrafts((prev) => {
         const next = { ...prev };
         delete next[item.sessionId];
@@ -496,9 +421,9 @@ export function ExpertReviewsPage() {
       setItems((prev) => prev.filter((i) => i.id !== rid));
       setExpanded((e) => (e === rid ? null : e));
       if (active?.id === rid) setActive(null);
-      sonnerToast.success('Session published to the case library.', { duration: 6000 });
+      sonnerToast.success('Review approved and published to the case library.', { duration: 6000 });
     } catch (error) {
-      toast.error(toWorkflowFriendlyError(error, 'Failed to promote this case.'));
+      toast.error(toWorkflowFriendlyError(error, 'Approve and promote failed.'));
     } finally {
       setSaving(false);
     }
@@ -548,11 +473,6 @@ export function ExpertReviewsPage() {
         ...prev,
         [item.sessionId]: (prev[item.sessionId] ?? 0) + 1,
       }));
-      setLocallyApprovedSessionIds((prev) => {
-        const next = new Set(prev);
-        next.delete(item.sessionId);
-        return next;
-      });
       const jid = item.id;
       setItems((prev) => prev.filter((i) => i.id !== jid));
       setExpanded((e) => (e === jid ? null : e));
@@ -605,12 +525,9 @@ export function ExpertReviewsPage() {
       roiClearEpoch={roiClearEpochBySession[item.sessionId] ?? 0}
       onOpenEdit={() => openEdit(item)}
       onSaveDraft={(roi) => void saveDraftForItem(item, roi)}
-      onApprove={(roi) => void approveOnlyForItem(item, roi)}
-      onPromote={() => void promoteToLibraryForItem(item)}
+      onApproveAndPromote={(roi) => void approveAndPromoteForItem(item, roi)}
       onRejectRequest={() => openRejectModal(item)}
-      canPromote={locallyApprovedSessionIds.has(item.sessionId)}
       saving={saving}
-      onFlagCitation={openFlagModal}
       libraryTitle={libraryTitle}
       libraryCategoryId={libraryCategoryId}
       libraryDifficulty={libraryDifficulty}
@@ -837,60 +754,7 @@ export function ExpertReviewsPage() {
         isLoading={saving}
         onConfirm={() => void submitRejectModal()}
       />
-      <FlagChunkModal
-        open={Boolean(flaggingChunkId)}
-        reason={flagReason}
-        submitting={submittingFlag}
-        onReasonChange={setFlagReason}
-        onClose={closeFlagModal}
-        onSubmit={() => void submitFlag()}
-      />
     </>
-  );
-}
-
-function FlagChunkModal({
-  open,
-  reason,
-  submitting,
-  onReasonChange,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  reason: string;
-  submitting: boolean;
-  onReasonChange: (value: string) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-lg rounded-2xl border border-border-color bg-surface p-5 shadow-panel">
-        <h3 className="text-lg font-semibold text-text-main">Flag evidence chunk</h3>
-        <p className="mt-2 text-sm text-text-muted">
-          Explain why this citation is low quality or not relevant to the reviewed case.
-        </p>
-        <textarea
-          value={reason}
-          onChange={(e) => onReasonChange(e.target.value)}
-          rows={5}
-          placeholder="Examples: outdated information, irrelevant chunk, truncated context, mismatched anatomy..."
-          className="mt-4 w-full rounded-xl border border-border-color bg-background px-4 py-3 text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-cyan-accent/70"
-        />
-        <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="outline" disabled={submitting} onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" variant="destructive" isLoading={submitting} onClick={onSubmit}>
-            <Flag className="h-4 w-4" />
-            Submit Flag
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }
 

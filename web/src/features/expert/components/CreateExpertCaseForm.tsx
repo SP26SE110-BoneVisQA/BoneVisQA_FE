@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { DicomMetadataSummary } from '@/components/shared/DicomMetadataSummary';
 import {
   expertCaseFormSchema,
   type ExpertCaseFormValues,
@@ -31,11 +32,17 @@ import {
   resolveExpertCategoryIdForSubmit,
 } from '@/features/expert/lib/expert-ontology';
 import { sanitizeGuidList } from '@/lib/api/sanitize-guids';
-import { useCreateExpertCase, useExpertCaseMeta } from '@/features/expert/queries/use-expert-cases';
+import {
+  useCreateExpertCase,
+  useExpertCaseMeta,
+  useUpdateExpertCase,
+} from '@/features/expert/queries/use-expert-cases';
+import { useExpertProfile } from '@/features/expert/queries/use-expert-profile';
 import { uploadExpertCaseDicomArchive } from '@/lib/api/expert-cases';
 import { applyDicomMetadataToExpertForm } from '@/features/expert/lib/apply-dicom-metadata-to-form';
 import { appToast } from '@/lib/api/errors/app-toast';
 import type { CreateExpertCaseJsonInput } from '@/lib/api/expert-cases';
+import type { VisualQaDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 import { Loader2 } from 'lucide-react';
 
 const MAX_DICOM_BYTES = 500 * 1024 * 1024;
@@ -47,9 +54,15 @@ type Props = {
 
 export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
   const metaQuery = useExpertCaseMeta();
+  const profileQuery = useExpertProfile();
   const createMutation = useCreateExpertCase();
+  const updateMutation = useUpdateExpertCase();
   const [dicomArchive, setDicomArchive] = useState<File | null>(null);
+  const [extractedMetadata, setExtractedMetadata] = useState<VisualQaDicomMetadata | null>(null);
+  const [ingestCaseId, setIngestCaseId] = useState<string | null>(null);
+  const [dicomIngestBusy, setDicomIngestBusy] = useState(false);
   const [busy, setBusy] = useState(false);
+  const ingestRequestId = useRef(0);
 
   const categories = metaQuery.data?.categories ?? [];
   const tags = metaQuery.data?.tags ?? [];
@@ -76,6 +89,48 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
     }
   }, [categories, form]);
 
+  useEffect(() => {
+    if (!extractedMetadata) return;
+    applyDicomMetadataToExpertForm(form.setValue, extractedMetadata, categories);
+  }, [extractedMetadata, categories, form]);
+
+  const ingestDicomArchive = async (file: File) => {
+    const requestId = ++ingestRequestId.current;
+    setDicomIngestBusy(true);
+    setExtractedMetadata(null);
+    setIngestCaseId(null);
+
+    try {
+      const ingestPromise = uploadExpertCaseDicomArchive(file, {
+        modality: form.getValues('modality'),
+        diagnosisText: form.getValues('description') || undefined,
+      });
+      void appToast.promise(ingestPromise, {
+        loading: 'Extracting DICOM metadata…',
+        success: 'DICOM metadata extracted — form fields updated.',
+        error: 'DICOM ingest failed.',
+      });
+      const ingest = await ingestPromise;
+
+      if (requestId !== ingestRequestId.current) return;
+
+      if (ingest.dicomMetadata) {
+        setExtractedMetadata(ingest.dicomMetadata);
+      }
+      if (ingest.caseId) {
+        setIngestCaseId(ingest.caseId);
+      }
+    } catch {
+      if (requestId === ingestRequestId.current) {
+        setDicomArchive(null);
+      }
+    } finally {
+      if (requestId === ingestRequestId.current) {
+        setDicomIngestBusy(false);
+      }
+    }
+  };
+
   const onDicomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = '';
@@ -90,6 +145,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
       return;
     }
     setDicomArchive(f);
+    void ingestDicomArchive(f);
   };
 
   const buildPayload = async (): Promise<{ payload: CreateExpertCaseJsonInput; caseId?: string }> => {
@@ -115,20 +171,37 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
       medicalImages: null,
     };
 
+    const expertId = profileQuery.data?.id?.trim();
+    const existingCaseId = ingestCaseId?.trim();
+
+    if (existingCaseId && expertId) {
+      await updateMutation.mutateAsync({
+        caseId: existingCaseId,
+        body: {
+          title: payload.title,
+          createdByExpertId: expertId,
+          description: payload.description ?? '',
+          difficulty: values.difficulty,
+          isApproved: false,
+          isActive: true,
+          categoryId: categoryId ?? '',
+          suggestedDiagnosis: payload.suggestedDiagnosis ?? '',
+          reflectiveQuestions: payload.reflectiveQuestions ?? '',
+          keyFindings: payload.keyFindings ?? '',
+          tagIds: tagIds.length > 0 ? tagIds : null,
+        },
+      });
+      return { payload, caseId: existingCaseId };
+    }
+
     const caseId = await createMutation.mutateAsync(payload);
 
-    if (dicomArchive && caseId) {
-      const uploadPromise = uploadExpertCaseDicomArchive(caseId, dicomArchive, values.modality);
-      void appToast.promise(uploadPromise, {
-        loading: 'Ingesting DICOM archive…',
-        success: 'DICOM archive uploaded and processing started.',
-        error: 'DICOM archive upload failed.',
+    if (dicomArchive && caseId && !existingCaseId) {
+      await uploadExpertCaseDicomArchive(dicomArchive, {
+        caseId,
+        modality: values.modality,
+        diagnosisText: values.description || undefined,
       });
-      const ingest = await uploadPromise;
-      if (ingest.dicomMetadata) {
-        applyDicomMetadataToExpertForm(form.setValue, ingest.dicomMetadata);
-        appToast.success('Form auto-filled from DICOM metadata.');
-      }
     }
 
     return { payload, caseId };
@@ -144,7 +217,11 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
           createdId = result.caseId;
         })(),
         {
-          loading: dicomArchive ? 'Creating case and ingesting DICOM…' : 'Creating teaching case…',
+          loading: ingestCaseId
+            ? 'Saving teaching case…'
+            : dicomArchive
+              ? 'Creating case and ingesting DICOM…'
+              : 'Creating teaching case…',
           success: 'Case created successfully.',
           error: 'Failed to create case.',
         },
@@ -164,6 +241,8 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
       : [...current, tagId];
     form.setValue('tagIds', next, { shouldDirty: true });
   };
+
+  const formDisabled = busy || dicomIngestBusy;
 
   if (metaQuery.isPending) {
     return (
@@ -186,7 +265,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                 <FormItem>
                   <FormLabel>Case title</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="e.g. Distal radius fracture" disabled={busy} />
+                    <Input {...field} placeholder="e.g. Distal radius fracture" disabled={formDisabled} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -200,7 +279,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Anatomy site</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange} disabled={busy}>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={formDisabled}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select site" />
@@ -224,7 +303,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Pathology group</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange} disabled={busy}>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={formDisabled}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select category" />
@@ -251,7 +330,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Modality</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange} disabled={busy}>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={formDisabled}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue />
@@ -275,7 +354,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Difficulty</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange} disabled={busy}>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={formDisabled}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue />
@@ -305,7 +384,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                     <textarea
                       {...field}
                       rows={4}
-                      disabled={busy}
+                      disabled={formDisabled}
                       className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm"
                       placeholder="Summary for learners"
                     />
@@ -317,14 +396,24 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
 
             <FormItem>
               <FormLabel>DICOM archive (.zip / .rar)</FormLabel>
-              <Input type="file" accept=".zip,.rar" disabled={busy} onChange={onDicomChange} />
-              {dicomArchive ? (
+              <Input type="file" accept=".zip,.rar" disabled={formDisabled} onChange={onDicomChange} />
+              {dicomIngestBusy ? (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Ingesting archive and extracting metadata…
+                </p>
+              ) : dicomArchive ? (
                 <p className="text-xs text-muted-foreground">{dicomArchive.name}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Required for imaging — preview is extracted automatically after ingest.
+                  Required for imaging — metadata auto-fills anatomy and modality after ingest.
                 </p>
               )}
+              {extractedMetadata ? (
+                <div className="mt-2">
+                  <DicomMetadataSummary metadata={extractedMetadata} compact />
+                </div>
+              ) : null}
             </FormItem>
           </div>
 
@@ -336,7 +425,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                 <FormItem>
                   <FormLabel>Suggested diagnosis</FormLabel>
                   <FormControl>
-                    <Input {...field} disabled={busy} />
+                    <Input {...field} disabled={formDisabled} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -349,7 +438,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                 <FormItem>
                   <FormLabel>Key findings</FormLabel>
                   <FormControl>
-                    <textarea {...field} rows={3} disabled={busy} className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm" />
+                    <textarea {...field} rows={3} disabled={formDisabled} className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -362,7 +451,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                 <FormItem>
                   <FormLabel>Reflective questions</FormLabel>
                   <FormControl>
-                    <textarea {...field} rows={3} disabled={busy} className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm" />
+                    <textarea {...field} rows={3} disabled={formDisabled} className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -379,7 +468,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
                       <button
                         key={t.id}
                         type="button"
-                        disabled={busy}
+                        disabled={formDisabled}
                         onClick={() => toggleTag(t.id)}
                         className={`rounded-md border px-2 py-1 text-xs font-medium ${
                           selected
@@ -398,10 +487,10 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
         </div>
 
         <div className="flex gap-3">
-          <Button type="button" variant="outline" className="flex-1" disabled={busy} onClick={onCancel}>
+          <Button type="button" variant="outline" className="flex-1" disabled={formDisabled} onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="submit" className="flex-1" isLoading={busy} disabled={busy}>
+          <Button type="submit" className="flex-1" isLoading={busy} disabled={formDisabled}>
             Create case
           </Button>
         </div>

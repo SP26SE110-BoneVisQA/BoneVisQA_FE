@@ -5,20 +5,50 @@ import {
   type VisualQaDicomMetadata,
 } from '@/lib/api/visual-qa/dicom-metadata';
 import type { ExpertCaseFormValues } from '@/features/expert/schemas/expert-case-form-schema';
+import {
+  EXPERT_PATHOLOGY_GROUPS,
+  pathologyGroupToCategoryId,
+} from '@/features/expert/lib/expert-ontology';
+import type { ExpertCategory } from '@/lib/api/expert-cases';
 
 /** Auto-fill expert case form fields from ingest metadata (unknown values → Other). */
 export function applyDicomMetadataToExpertForm(
   setValue: UseFormSetValue<ExpertCaseFormValues>,
   metadata: VisualQaDicomMetadata,
+  categories: ExpertCategory[] = [],
 ): void {
   setValue('modality', mapDicomModalityToExpert(metadata.modality ?? null), {
     shouldDirty: true,
+    shouldValidate: true,
   });
   setValue(
     'anatomySite',
     mapDicomAnatomyToExpert(metadata.anatomySite ?? null, metadata.bodyPartExamined ?? null),
-    { shouldDirty: true },
+    { shouldDirty: true, shouldValidate: true },
   );
+
+  const categoryId = resolvePathologyCategoryFromMetadata(metadata, categories);
+  if (categoryId) {
+    setValue('categoryId', categoryId, { shouldDirty: true, shouldValidate: true });
+  }
+}
+
+function resolvePathologyCategoryFromMetadata(
+  metadata: VisualQaDicomMetadata,
+  categories: ExpertCategory[],
+): string | null {
+  const haystack = [metadata.anatomySite, metadata.bodyPartExamined, metadata.modality]
+    .map((v) => String(v ?? '').toLowerCase())
+    .join(' ');
+  if (!haystack.trim()) return null;
+
+  for (const group of EXPERT_PATHOLOGY_GROUPS) {
+    if (haystack.includes(group.toLowerCase())) {
+      const match = categories.find((c) => c.name.toLowerCase() === group.toLowerCase());
+      return match?.id ?? pathologyGroupToCategoryId(group);
+    }
+  }
+  return null;
 }
 
 /**

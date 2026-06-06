@@ -143,6 +143,7 @@ export default function UploadDocumentDialog({
         file,
         title: title.trim(),
         categoryId: '',
+        modality: 'X-Ray',
         tagIds: [],
         onUploadProgress: (pct) => setUploadProgress(Math.min(100, Math.max(0, pct))),
       });

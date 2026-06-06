@@ -5,7 +5,13 @@ import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { uploadDocument } from '@/lib/api/admin-documents';
-import type { CategoryOption, TagOption } from '@/lib/api/types';
+import type {
+  CategoryOption,
+  DocumentDefaultPathologyGroup,
+  DocumentModality,
+  TagOption,
+} from '@/lib/api/types';
+import { DOCUMENT_DEFAULT_PATHOLOGY_GROUPS, DOCUMENT_MODALITIES } from '@/lib/api/types';
 import { AlertCircle, FileText, Loader2, Upload, X } from 'lucide-react';
 
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -38,6 +44,10 @@ export default function AdminDocumentsUploadModal({
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [modality, setModality] = useState<DocumentModality | ''>('');
+  const [defaultPathologyGroup, setDefaultPathologyGroup] = useState<
+    DocumentDefaultPathologyGroup | ''
+  >('');
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +57,8 @@ export default function AdminDocumentsUploadModal({
     setFile(null);
     setTitle('');
     setCategoryId('');
+    setModality('');
+    setDefaultPathologyGroup('');
     setTagIds([]);
     setUploadProgress(0);
     setFormError(null);
@@ -78,6 +90,10 @@ export default function AdminDocumentsUploadModal({
       setFormError('Please select a category.');
       return;
     }
+    if (!modality) {
+      setFormError('Please select a modality.');
+      return;
+    }
 
     setSubmitting(true);
     setUploadProgress(0);
@@ -86,6 +102,8 @@ export default function AdminDocumentsUploadModal({
         file,
         title: title.trim(),
         categoryId: categoryId.trim(),
+        modality,
+        defaultPathologyGroup: defaultPathologyGroup || undefined,
         tagIds,
         onUploadProgress: (pct) => setUploadProgress(Math.min(100, Math.max(0, pct))),
       });
@@ -204,6 +222,57 @@ export default function AdminDocumentsUploadModal({
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="adm-doc-modality" className="text-sm font-medium text-card-foreground">
+              Modality <span className="text-destructive">*</span>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Default imaging modality applied to all chunks in this document.
+            </p>
+            <select
+              id="adm-doc-modality"
+              value={modality}
+              disabled={submitting}
+              onChange={(e) => setModality(e.target.value as DocumentModality | '')}
+              className="mt-1.5 w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Select modality</option>
+              {DOCUMENT_MODALITIES.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="adm-doc-pathology-group"
+              className="text-sm font-medium text-card-foreground"
+            >
+              Default pathology group
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Optional fallback when chunk-level pathology cannot be inferred automatically.
+            </p>
+            <select
+              id="adm-doc-pathology-group"
+              value={defaultPathologyGroup}
+              disabled={submitting}
+              onChange={(e) =>
+                setDefaultPathologyGroup(e.target.value as DocumentDefaultPathologyGroup | '')
+              }
+              className="mt-1.5 w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">None (auto-detect)</option>
+              {DOCUMENT_DEFAULT_PATHOLOGY_GROUPS.map((g) => (
+                <option key={g} value={g}>
+                  {g}
                 </option>
               ))}
             </select>
