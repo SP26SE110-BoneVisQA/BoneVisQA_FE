@@ -282,6 +282,7 @@ export function WorkspacePageClient() {
         uploadedAt: prev?.uploadedAt,
       }));
       bootKeyRef.current = `${sid}||personal`;
+      useVisualQaStore.getState().beginSessionLoad(sid);
       router.replace(
         `/student/visual-qa/workspace?sessionId=${encodeURIComponent(sid)}&flow=personal`,
       );
@@ -331,15 +332,18 @@ export function WorkspacePageClient() {
     isUploading || (!effectiveCaseId && !effectiveSessionId) || bootLoading || Boolean(bootError);
 
   const imagePanel = (
-    <>
-      <WorkspaceImagePanel
-        imageUrl={displayImageUrl}
-        imageAlt={title}
-        loading={isUploading || (isCatalogFlow && bootLoading && !displayImageUrl)}
-        readOnly={readOnlyImage}
-        catalogMode={isCatalogFlow}
-      />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="relative min-h-0 flex-1">
+        <WorkspaceImagePanel
+          imageUrl={displayImageUrl}
+          imageAlt={title}
+          loading={isUploading || (isCatalogFlow && bootLoading && !displayImageUrl)}
+          readOnly={readOnlyImage}
+          catalogMode={isCatalogFlow}
+        />
+      </div>
       <WorkspaceContextPanel
+        layout="docked"
         flow={flow === 'catalog' ? 'catalog' : flow === 'personal' ? 'personal' : null}
         caseDetail={flow === 'catalog' ? caseDetail : null}
         personalMeta={{
@@ -348,7 +352,7 @@ export function WorkspacePageClient() {
         }}
         onResetPersonal={flow === 'personal' ? handleNewSession : undefined}
       />
-    </>
+    </div>
   );
 
   if (bootLoading && turns.length === 0) {

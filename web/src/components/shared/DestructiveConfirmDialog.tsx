@@ -22,6 +22,7 @@ type DestructiveConfirmDialogProps = {
   onConfirm: () => void;
   isLoading?: boolean;
   destructive?: boolean;
+  children?: React.ReactNode;
 };
 
 export function DestructiveConfirmDialog({
@@ -34,6 +35,7 @@ export function DestructiveConfirmDialog({
   onConfirm,
   isLoading = false,
   destructive = true,
+  children,
 }: DestructiveConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -42,6 +44,7 @@ export function DestructiveConfirmDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
         </AlertDialogHeader>
+        {children}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction

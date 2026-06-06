@@ -28,6 +28,7 @@ type WorkspaceContextPanelProps = {
   caseDetail: StudentCaseCatalogDetail | null;
   personalMeta?: PersonalMeta | null;
   onResetPersonal?: () => void;
+  layout?: 'overlay' | 'docked';
   className?: string;
 };
 
@@ -49,38 +50,62 @@ export function WorkspaceContextPanel({
   caseDetail,
   personalMeta,
   onResetPersonal,
+  layout = 'overlay',
   className,
 }: WorkspaceContextPanelProps) {
   if (flow !== 'catalog' && flow !== 'personal') return null;
 
+  const isDocked = layout === 'docked';
+
   return (
     <div
       className={cn(
-        'pointer-events-auto absolute bottom-4 left-4 right-4 z-20 max-h-[min(42vh,360px)] overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/78 shadow-[0_24px_64px_rgba(2,6,23,0.34)] backdrop-blur-xl lg:max-w-md',
+        isDocked
+          ? 'shrink-0 border-t border-slate-200/80 bg-white'
+          : 'pointer-events-auto absolute bottom-4 left-4 right-4 z-20 max-h-[min(42vh,360px)] overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/78 shadow-[0_24px_64px_rgba(2,6,23,0.34)] backdrop-blur-xl lg:max-w-md',
         className,
       )}
     >
-      <Accordion type="single" collapsible defaultValue="" className="border-0 bg-transparent shadow-none">
+      <Accordion
+        type="single"
+        collapsible
+        defaultValue={isDocked ? '' : ''}
+        className={cn('border-0 bg-transparent shadow-none', isDocked ? 'rounded-none' : undefined)}
+      >
         <AccordionItem value="context" className="border-0 bg-transparent shadow-none">
-          <AccordionTrigger className="px-5 py-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-100 hover:bg-white/5 hover:no-underline">
+          <AccordionTrigger
+            className={cn(
+              'px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] hover:no-underline',
+              isDocked
+                ? 'text-slate-700 hover:bg-slate-50'
+                : 'text-slate-100 hover:bg-white/5',
+            )}
+          >
             <span className="flex items-center gap-2">
               {flow === 'catalog' ? (
-                <BookOpen className="h-4 w-4 text-sky-300" />
+                <BookOpen className={cn('h-4 w-4', isDocked ? 'text-sky-600' : 'text-sky-300')} />
               ) : (
-                <Archive className="h-4 w-4 text-slate-300" />
+                <Archive className={cn('h-4 w-4', isDocked ? 'text-slate-600' : 'text-slate-300')} />
               )}
               {flow === 'catalog' ? 'Case context' : 'Study details'}
             </span>
           </AccordionTrigger>
-          <AccordionContent className="max-h-[272px] overflow-y-auto px-5 pb-5 text-slate-200">
+          <AccordionContent
+            className={cn(
+              'max-h-[240px] overflow-y-auto px-5 pb-4',
+              isDocked ? 'text-slate-700' : 'text-slate-200',
+            )}
+          >
             {flow === 'catalog' && caseDetail ? (
-              <CatalogContextBody detail={caseDetail} />
+              <CatalogContextBody detail={caseDetail} docked={isDocked} />
             ) : null}
             {flow === 'personal' ? (
-              <PersonalContextBody meta={personalMeta} onReset={onResetPersonal} />
+              <PersonalContextBody meta={personalMeta} onReset={onResetPersonal} docked={isDocked} />
             ) : null}
             {flow === 'catalog' && !caseDetail ? (
-              <p className="text-xs text-slate-400">Loading case metadata…</p>
+              <p className={cn('text-xs', isDocked ? 'text-slate-500' : 'text-slate-400')}>
+                Loading case metadata…
+              </p>
             ) : null}
           </AccordionContent>
         </AccordionItem>
@@ -89,7 +114,7 @@ export function WorkspaceContextPanel({
   );
 }
 
-function CatalogContextBody({ detail }: { detail: StudentCaseCatalogDetail }) {
+function CatalogContextBody({ detail, docked = false }: { detail: StudentCaseCatalogDetail; docked?: boolean }) {
   const annotations =
     detail.images?.flatMap((img, idx) =>
       (img.roiBoundingBox ? [{ idx, roi: img.roiBoundingBox }] : []),
@@ -98,9 +123,9 @@ function CatalogContextBody({ detail }: { detail: StudentCaseCatalogDetail }) {
   return (
     <div className="space-y-3 text-xs">
       <div>
-        <p className="text-sm font-semibold text-slate-100">{detail.title}</p>
+        <p className={cn('text-sm font-semibold', docked ? 'text-slate-900' : 'text-slate-100')}>{detail.title}</p>
         {detail.description ? (
-          <p className="mt-1 line-clamp-4 text-slate-400">{detail.description}</p>
+          <p className={cn('mt-1 line-clamp-4', docked ? 'text-slate-600' : 'text-slate-400')}>{detail.description}</p>
         ) : null}
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -139,30 +164,48 @@ function CatalogContextBody({ detail }: { detail: StudentCaseCatalogDetail }) {
 function PersonalContextBody({
   meta,
   onReset,
+  docked = false,
 }: {
   meta?: PersonalMeta | null;
   onReset?: () => void;
+  docked?: boolean;
 }) {
   const dicomRows = dicomMetadataToDisplayRows(meta?.dicomMetadata);
 
   return (
     <div className="space-y-3 text-xs">
       {meta?.fileName ? (
-        <p className="truncate text-sm font-medium text-slate-100">{meta.fileName}</p>
+        <p className={cn('truncate text-sm font-medium', docked ? 'text-slate-900' : 'text-slate-100')}>
+          {meta.fileName}
+        </p>
       ) : null}
       {meta?.uploadedAt ? (
-        <p className="text-slate-400">Uploaded {formatUploadedAt(meta.uploadedAt)}</p>
+        <p className={docked ? 'text-slate-600' : 'text-slate-400'}>Uploaded {formatUploadedAt(meta.uploadedAt)}</p>
       ) : null}
       {dicomRows.length > 0 ? (
-        <div className="rounded-2xl border border-slate-700/70 bg-slate-900/55 p-3.5">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        <div
+          className={cn(
+            'rounded-2xl border p-3.5',
+            docked ? 'border-slate-200 bg-slate-50' : 'border-slate-700/70 bg-slate-900/55',
+          )}
+        >
+          <p
+            className={cn(
+              'mb-2 text-[10px] font-semibold uppercase tracking-wide',
+              docked ? 'text-slate-500' : 'text-slate-400',
+            )}
+          >
             DICOM metadata
           </p>
           <dl className="space-y-1.5">
             {dicomRows.map((row) => (
               <div key={row.label} className="flex gap-2">
-                <dt className="w-24 shrink-0 text-slate-500">{row.label}</dt>
-                <dd className="min-w-0 font-medium text-slate-100">{row.value}</dd>
+                <dt className={cn('w-24 shrink-0', docked ? 'text-slate-500' : 'text-slate-500')}>
+                  {row.label}
+                </dt>
+                <dd className={cn('min-w-0 font-medium', docked ? 'text-slate-900' : 'text-slate-100')}>
+                  {row.value}
+                </dd>
               </div>
             ))}
           </dl>
@@ -173,7 +216,12 @@ function PersonalContextBody({
           type="button"
           variant="outline"
           size="sm"
-          className="w-full rounded-2xl border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+          className={cn(
+            'w-full rounded-2xl',
+            docked
+              ? 'border-slate-300 text-slate-800 hover:bg-slate-100'
+              : 'border-slate-600 bg-transparent text-slate-100 hover:bg-white/10',
+          )}
           onClick={onReset}
         >
           <RotateCcw className="mr-2 h-3.5 w-3.5" />

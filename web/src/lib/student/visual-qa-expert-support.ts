@@ -1,7 +1,6 @@
 import type { VisualQaSessionReport, VisualQaTurn } from '@/lib/api/types';
-import {
-  formatReviewFeedbackDisplay,
-} from '@/lib/student/visual-qa-feedback';
+import { looksLikeAiStructuredLeak } from '@/lib/student/educator-feedback';
+import { formatReviewFeedbackDisplay } from '@/lib/student/visual-qa-feedback';
 import { normalizeWorkflowStatus } from '@/lib/visual-qa-workflow';
 
 export type ExpertSupportUiState =
@@ -81,7 +80,7 @@ export function collectReviewFeedbackByAssistantId(turns: VisualQaTurn[]): Map<s
     const target = resolveReviewUpdateTarget(t, sorted);
     if (!target) continue;
     const text = t.answerText?.trim() ?? '';
-    if (!text || isInternalReasonToken(text)) continue;
+    if (!text || isInternalReasonToken(text) || looksLikeAiStructuredLeak(text)) continue;
     const id = target.assistantMessageId?.trim();
     if (!id) continue;
     map.set(id, text);

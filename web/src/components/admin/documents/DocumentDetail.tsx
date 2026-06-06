@@ -67,16 +67,39 @@ export default function DocumentDetail({ id }: { id: string }) {
   const applyIngestionSnapshot = useCallback(
     (next: Omit<IngestionSnapshot, 'source'> & { source: IngestionSnapshot['source'] }) => {
       setLiveStatus((prev) => {
-        if (!prev) return next;
+        const nextNorm = normalizeIndexingStatus(next.status);
+        const prevNorm = prev ? normalizeIndexingStatus(prev.status) : null;
+
+        if (!prev) {
+          if (nextNorm === 'completed') {
+            return {
+              ...next,
+              currentOperation: undefined,
+              errorMessage: undefined,
+              progressPercentage: next.progressPercentage ?? 100,
+            };
+          }
+          return next;
+        }
+
         const prevCur = asNonNegInt(prev.currentPageIndexing) ?? 0;
         const nextCur = asNonNegInt(next.currentPageIndexing) ?? 0;
 
         if (next.source === 'rest' && prev.source === 'signalr' && prevCur > nextCur) {
-          return {
+          const merged = {
             ...next,
             currentPageIndexing: prev.currentPageIndexing,
             source: prev.source,
           };
+          if (nextNorm === 'completed') {
+            return {
+              ...merged,
+              currentOperation: undefined,
+              errorMessage: undefined,
+              progressPercentage: next.progressPercentage ?? 100,
+            };
+          }
+          return merged;
         }
 
         if (next.source === 'signalr' && nextCur < prevCur) {
@@ -86,7 +109,19 @@ export default function DocumentDetail({ id }: { id: string }) {
           };
         }
 
-        const nextNorm = normalizeIndexingStatus(next.status);
+        if (nextNorm === 'completed') {
+          return {
+            ...next,
+            currentOperation: undefined,
+            errorMessage: undefined,
+            progressPercentage: next.progressPercentage ?? 100,
+          };
+        }
+
+        if (prevNorm === 'completed' && nextNorm !== 'failed' && next.source === 'signalr') {
+          return prev;
+        }
+
         const mergedError =
           nextNorm === 'failed'
             ? next.errorMessage ?? prev.errorMessage
@@ -135,12 +170,27 @@ export default function DocumentDetail({ id }: { id: string }) {
     };
   }, [applyIngestionSnapshot, id]);
 
-  const effectiveStatus = liveStatus?.status ?? doc?.indexingStatus;
+  const effectiveStatus = useMemo(() => {
+    const live = liveStatus?.status ?? doc?.indexingStatus;
+    const docNorm = normalizeIndexingStatus(doc?.indexingStatus);
+    const liveNorm = normalizeIndexingStatus(live);
+    if (docNorm === 'completed' && liveNorm === 'failed') return doc?.indexingStatus;
+    if (docNorm === 'failed' && liveNorm === 'completed') return doc?.indexingStatus;
+    return live;
+  }, [doc?.indexingStatus, liveStatus?.status]);
   const isReindexingStatus = (effectiveStatus ?? '').toLowerCase().includes('reindex');
   const normalizedStatus: NormalizedIndexingStatus = useMemo(
     () => normalizeIndexingStatus(effectiveStatus),
     [effectiveStatus],
   );
+
+  const displayCurrentOperation = useMemo(() => {
+    if (normalizedStatus === 'completed' || normalizedStatus === 'failed') return null;
+    const op = liveStatus?.currentOperation?.trim();
+    if (!op) return null;
+    if (op.toLowerCase() === 'failed.' || op.toLowerCase() === 'failed') return null;
+    return op;
+  }, [liveStatus?.currentOperation, normalizedStatus]);
 
   useEffect(() => {
     if (!doc || (normalizedStatus !== 'pending' && normalizedStatus !== 'processing')) return;
@@ -484,10 +534,14 @@ export default function DocumentDetail({ id }: { id: string }) {
                     </div>
                   ))}
 
-                  {liveStatus?.currentOperation?.trim() ? (
+                  {displayCurrentOperation ? (
                     <p className="rounded-lg border border-sky-100 bg-white/80 px-3 py-2 text-xs text-muted-foreground">
                       <span className="font-semibold text-foreground">Current operation: </span>
-                      {liveStatus.currentOperation}
+                      {displayCurrentOperation}
+                    </p>
+                  ) : normalizedStatus === 'completed' ? (
+                    <p className="rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 py-2 text-xs text-emerald-900">
+                      Indexing completed successfully.
                     </p>
                   ) : (
                     <p className="rounded-lg border border-transparent px-3 py-2 text-xs text-muted-foreground opacity-70">

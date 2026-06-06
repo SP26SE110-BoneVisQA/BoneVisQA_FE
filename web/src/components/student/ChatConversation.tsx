@@ -11,6 +11,12 @@ import { VISUAL_QA_MESSAGE_IN } from '@/components/student/visualQaMessageClasse
 import type { ExpertSupportInline } from '@/components/student/AiMessageBubble';
 import type { WorkspaceAnswerVariant } from '@/features/visual-qa/components/WorkspaceStructuredAnswer';
 import type { VisualQaSessionReport, VisualQaTurn } from '@/lib/api/types';
+import {
+  extractEducatorFeedbackForTurn,
+  looksLikeAiStructuredLeak,
+  shouldShowEducatorFeedback,
+  type EducatorFeedbackEntry,
+} from '@/lib/student/educator-feedback';
 import { formatReviewFeedbackDisplay } from '@/lib/student/visual-qa-feedback';
 
 type OptimisticMessage = {
@@ -113,9 +119,11 @@ function buildReviewFeedbackMap(messages: VisualQaTurn[]): Map<string, string> {
     const target = resolveReviewUpdateTarget(t, sorted);
     if (!target) continue;
     const text = t.answerText?.trim() ?? '';
-    if (!text) continue;
+    if (!text || looksLikeAiStructuredLeak(text)) continue;
+    const formatted = formatReviewFeedbackDisplay(text);
+    if (!formatted || looksLikeAiStructuredLeak(formatted)) continue;
     const key = target.turnId ?? String(target.turnIndex);
-    map.set(key, text);
+    map.set(key, formatted);
   }
   return map;
 }
@@ -346,25 +354,10 @@ export function ChatConversation({
                   ) => {
                     const systemNoticeLabel = formatSystemNoticeCodeLabel(turnSystemNoticeCode);
                     const turnKey = turn.turnId ?? String(turn.turnIndex);
-                    const inlineReviewRaw = reviewFeedbackByTargetKey.get(turnKey) ?? null;
-                    const educatorFromNotes = reviewerNotes.map((message) => message.content.trim()).filter(Boolean).join('\n\n');
-                    const inlineReviewMarkdown =
-                      (inlineReviewRaw ? formatReviewFeedbackDisplay(inlineReviewRaw) : '') ||
-                      educatorFromNotes ||
-                      null;
-                    const isLastTurn = idx === renderedTurns.length - 1;
-                    const deferLatestNonAnalysisWhileBusy =
-                      isLoading &&
-                      isLastTurn &&
-                      (responseKind === 'clarification' || responseKind === 'refusal');
-                    const awaitingAssistant =
-                      deferLatestNonAnalysisWhileBusy ||
-                      (turn.awaitingAssistant === true &&
-                        !assistantText &&
-                        responseKind === 'analysis');
                     const turnMenuKey = turn.turnId ?? String(turn.turnIndex);
                     const assistantKey = turn.assistantMessageId?.trim() ?? '';
                     const rawSupport = assistantKey ? expertSupportByAssistantId[assistantKey] : undefined;
+                    const inlineReviewRaw = reviewFeedbackByTargetKey.get(turnKey) ?? null;
                     const expertSupportInline: ExpertSupportInline | null =
                       rawSupport?.phase === 'awaiting'
                         ? { kind: 'awaiting' }
@@ -377,6 +370,30 @@ export function ChatConversation({
                                 rawSupport.message,
                             }
                           : null;
+                    const educatorFeedbackEntries: EducatorFeedbackEntry[] =
+                      expertSupportInline?.kind === 'awaiting'
+                        ? []
+                        : extractEducatorFeedbackForTurn(
+                            reviewerNotes,
+                            inlineReviewRaw,
+                            expertSupportInline?.kind === 'resolved'
+                              ? expertSupportInline.text
+                              : null,
+                          );
+                    const showEducatorFeedback = shouldShowEducatorFeedback(
+                      expertSupportInline?.kind === 'awaiting',
+                      educatorFeedbackEntries,
+                    );
+                    const isLastTurn = idx === renderedTurns.length - 1;
+                    const deferLatestNonAnalysisWhileBusy =
+                      isLoading &&
+                      isLastTurn &&
+                      (responseKind === 'clarification' || responseKind === 'refusal');
+                    const awaitingAssistant =
+                      deferLatestNonAnalysisWhileBusy ||
+                      (turn.awaitingAssistant === true &&
+                        !assistantText &&
+                        responseKind === 'analysis');
                     return (
                   <motion.div
                     key={turn.turnId ?? turn.clientRequestId ?? `${turn.turnIndex}-${turn.createdAt ?? ''}`}
@@ -400,7 +417,7 @@ export function ChatConversation({
                         awaitingAssistant={awaitingAssistant}
                         chatRequestPhase={chatRequestPhase}
                         systemNoticeLabel={systemNoticeLabel}
-                        inlineReviewFeedbackMarkdown={inlineReviewMarkdown}
+                        educatorFeedbackEntries={showEducatorFeedback ? educatorFeedbackEntries : []}
                         canRequestReview={canRequestReview}
                         requestingExpertSupport={requestingExpertSupport}
                         activeMenuTurnKey={activeAiMenuKey}

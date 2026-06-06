@@ -10,6 +10,7 @@ import { WorkspaceRagSources } from '@/features/visual-qa/components/WorkspaceRa
 import type { Components } from 'react-markdown';
 import { markdownExternalLinkComponents } from '@/components/shared/markdownExternalLinks';
 import type { VisualQaTurn } from '@/lib/api/types';
+import type { EducatorFeedbackEntry } from '@/lib/student/educator-feedback';
 import { cn } from '@/lib/utils';
 import { VISUAL_QA_MESSAGE_IN } from '@/components/student/visualQaMessageClasses';
 import {
@@ -108,7 +109,7 @@ export type AiMessageBubbleProps = {
   awaitingAssistant: boolean;
   chatRequestPhase: 'idle' | 'upload' | 'analyzing';
   systemNoticeLabel: string | null;
-  inlineReviewFeedbackMarkdown: string | null;
+  educatorFeedbackEntries?: EducatorFeedbackEntry[];
   canRequestReview: boolean;
   requestingExpertSupport: boolean;
   activeMenuTurnKey: string | null;
@@ -127,7 +128,7 @@ export function AiMessageBubble({
   awaitingAssistant,
   chatRequestPhase,
   systemNoticeLabel,
-  inlineReviewFeedbackMarkdown,
+  educatorFeedbackEntries = [],
   canRequestReview,
   requestingExpertSupport,
   activeMenuTurnKey,
@@ -174,11 +175,6 @@ export function AiMessageBubble({
     turn.keyImagingFindings?.trim() ||
     'The assistant returned a response.';
 
-  const educatorFeedback =
-    inlineReviewFeedbackMarkdown?.trim() ||
-    (expertSupportInline?.kind === 'resolved' ? expertSupportInline.text.trim() : '') ||
-    null;
-
   const structuredAnswer = (
     <ErrorBoundary
       fallbackRender={() => (
@@ -198,7 +194,7 @@ export function AiMessageBubble({
         differentialDiagnoses={turn.differentialDiagnoses}
         reflectiveQuestions={turn.reflectiveQuestions}
         citations={turn.citations ?? []}
-        educatorFeedback={educatorFeedback}
+        educatorFeedbackEntries={educatorFeedbackEntries}
         variant={answerVariant}
       />
     </ErrorBoundary>

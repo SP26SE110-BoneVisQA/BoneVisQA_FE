@@ -154,7 +154,7 @@ export function useVisualQA() {
     if (!softRefresh) state.setIsAsking(true);
     try {
       const thread = await fetchVisualQaThread(id);
-      useVisualQaStore.getState().hydrateThread(thread);
+      useVisualQaStore.getState().hydrateThread(thread, { replace: !softRefresh });
       return thread;
     } catch (err) {
       if (axios.isAxiosError(err)) {

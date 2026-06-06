@@ -49,7 +49,8 @@ export type VisualQaStoreState = VisualQaPersistedSlice & {
   setIsAsking: (value: boolean) => void;
   setIsUploading: (value: boolean) => void;
   appendFromAskJson: (response: VisualQaAskJsonResponse) => void;
-  hydrateThread: (thread: VisualQaThreadResponse) => void;
+  hydrateThread: (thread: VisualQaThreadResponse, options?: { replace?: boolean }) => void;
+  beginSessionLoad: (sessionId: string) => void;
   resetSession: () => void;
 };
 
@@ -203,15 +204,33 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
         }));
       },
 
-      hydrateThread: (thread) => {
+      beginSessionLoad: (sessionId) => {
+        const id = sessionId.trim();
+        if (!id) return;
+        set({
+          sessionId: id,
+          turns: [],
+          reviewFeedback: null,
+          sessionStatus: null,
+          lastSystemNotice: null,
+          capabilities: null,
+          coordinates: null,
+        });
+      },
+
+      hydrateThread: (thread, options) => {
         const sessionFields = resolveSessionFields(thread);
         const sessionId = thread.sessionId?.trim() || get().sessionId;
         const preview = thread.sessionImageUrl?.trim() || get().previewImageUrl;
 
         set((state) => {
           const incomingTurns = dedupeAskJsonTurnBatch(thread.turns ?? []);
-          const mergedTurns =
-            incomingTurns.length > 0
+          const replace =
+            options?.replace === true ||
+            Boolean(sessionId && state.sessionId?.trim() && sessionId !== state.sessionId.trim());
+          const mergedTurns = replace
+            ? incomingTurns
+            : incomingTurns.length > 0
               ? mergeIncomingTurns(state.turns, incomingTurns)
               : state.turns;
           const hydratedCoordinates = resolveThreadCoordinates(thread, mergedTurns);
@@ -224,13 +243,18 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
             dicomMetadata: thread.dicomMetadata ?? state.dicomMetadata,
             capabilities: thread.capabilities ?? state.capabilities,
             turns: mergedTurns,
-            coordinates: hydratedCoordinates ?? state.coordinates,
-            sessionStatus: sessionFields.sessionStatus ?? state.sessionStatus,
-            reviewFeedback: sessionFields.reviewFeedback ?? state.reviewFeedback,
-            lastSystemNotice:
-              thread.systemNotice?.trim() ||
-              thread.blockingNotice?.trim() ||
-              state.lastSystemNotice,
+            coordinates: hydratedCoordinates ?? (replace ? null : state.coordinates),
+            sessionStatus: replace
+              ? sessionFields.sessionStatus
+              : sessionFields.sessionStatus ?? state.sessionStatus,
+            reviewFeedback: replace
+              ? sessionFields.reviewFeedback
+              : sessionFields.reviewFeedback ?? state.reviewFeedback,
+            lastSystemNotice: replace
+              ? thread.systemNotice?.trim() || thread.blockingNotice?.trim() || null
+              : thread.systemNotice?.trim() ||
+                thread.blockingNotice?.trim() ||
+                state.lastSystemNotice,
           };
         });
       },

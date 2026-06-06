@@ -520,8 +520,6 @@ export function ExpertReviewsPage() {
       onKeyTextChange={setKeyText}
       onKeyImagingChange={setKeyImagingEdit}
       onReflectiveChange={setReflectiveEdit}
-      replyDraft={replyDrafts[item.sessionId] ?? ''}
-      onReplyDraftChange={(v) => setReplyDrafts((prev) => ({ ...prev, [item.sessionId]: v }))}
       roiClearEpoch={roiClearEpochBySession[item.sessionId] ?? 0}
       onOpenEdit={() => openEdit(item)}
       onSaveDraft={(roi) => void saveDraftForItem(item, roi)}
@@ -729,31 +727,28 @@ export function ExpertReviewsPage() {
         )}
       </ListPageLayout>
 
-      {rejectModalItem ? (
-        <div className="mx-auto max-w-lg px-4 pb-6">
-          <label htmlFor="reject-note" className="text-sm font-medium text-foreground">
-            Rejection reason (required)
-          </label>
-          <textarea
-            id="reject-note"
-            value={rejectModalNote}
-            onChange={(e) => setRejectModalNote(e.target.value)}
-            rows={4}
-            placeholder="Explain why this escalation is rejected or how the student should proceed…"
-            className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            disabled={saving}
-          />
-        </div>
-      ) : null}
-
       <DestructiveConfirmDialog
         open={Boolean(rejectModalItem)}
         onOpenChange={(open) => !open && closeRejectModal()}
         title="Reject this review?"
+        description="Provide a clear reason so the student and lecturer understand why this escalation was rejected."
         confirmLabel="Submit rejection"
         isLoading={saving}
         onConfirm={() => void submitRejectModal()}
-      />
+      >
+        <label htmlFor="reject-note" className="text-sm font-medium text-foreground">
+          Rejection reason (required)
+        </label>
+        <textarea
+          id="reject-note"
+          value={rejectModalNote}
+          onChange={(e) => setRejectModalNote(e.target.value)}
+          rows={4}
+          placeholder="Explain why this escalation is rejected or how the student should proceed…"
+          className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+          disabled={saving}
+        />
+      </DestructiveConfirmDialog>
     </>
   );
 }

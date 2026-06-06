@@ -384,8 +384,6 @@ export type ExpertReviewWorkspaceProps = {
   onKeyTextChange: (v: string) => void;
   onKeyImagingChange: (v: string) => void;
   onReflectiveChange: (v: string) => void;
-  replyDraft: string;
-  onReplyDraftChange: (v: string) => void;
   roiClearEpoch?: number;
   onOpenEdit: () => void;
   onSaveDraft: (correctedRoiBoundingBox?: number[] | null) => void;
@@ -420,8 +418,6 @@ export function ExpertReviewWorkspace({
   onKeyTextChange,
   onKeyImagingChange,
   onReflectiveChange,
-  replyDraft,
-  onReplyDraftChange,
   roiClearEpoch,
   onOpenEdit,
   onSaveDraft,
@@ -446,20 +442,18 @@ export function ExpertReviewWorkspace({
     if (pairMismatch) return;
     const sid = item.sessionId;
     const hasRoi = correctedRoi !== null && isValidNormalizedBoundingBox(correctedRoi);
-    const hasNote = replyDraft.trim().length > 0;
-    if (!hasNote && !hasRoi) return;
+    if (!hasRoi) return;
     const timer = window.setTimeout(() => {
       const roiPayload =
         correctedRoi !== null && isValidNormalizedBoundingBox(correctedRoi)
           ? [correctedRoi.x, correctedRoi.y, correctedRoi.width, correctedRoi.height]
           : undefined;
       void putExpertReviewDraft(sid, {
-        ...(hasNote ? { reviewNote: replyDraft } : {}),
         ...(roiPayload ? { correctedRoiBoundingBox: roiPayload } : {}),
       }).catch(() => {});
     }, 1600);
     return () => window.clearTimeout(timer);
-  }, [replyDraft, correctedRoi, item.sessionId, pairMismatch]);
+  }, [correctedRoi, item.sessionId, pairMismatch]);
 
   const statusMeta = getWorkflowStatusMeta(item.status);
   const catalogCase = item.caseId != null && String(item.caseId).trim() !== '';
@@ -538,13 +532,12 @@ export function ExpertReviewWorkspace({
         </CardHeader>
       </Card>
 
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(260px,0.88fr)] xl:gap-5">
-        <section className="space-y-4">
-          <Card className="overflow-hidden border-border/50 shadow-sm shadow-black/[0.04]">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-muted-foreground">Medical imaging</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 xl:gap-5">
+        <Card className="overflow-hidden border-border/50 shadow-sm shadow-black/[0.04]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-muted-foreground">Medical imaging</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
             <div className="max-h-[500px] overflow-hidden rounded-xl border border-border/50 bg-slate-50 shadow-sm">
               {resolvedImageSrc ? (
                 <MedicalImageViewer
@@ -565,15 +558,14 @@ export function ExpertReviewWorkspace({
                 </div>
               )}
             </div>
-            </CardContent>
-          </Card>
-          <DicomMetadataSummary
-            metadata={item.dicomMetadata}
-            title="DICOM metadata"
-            description="Use modality, anatomy, and acquisition context before approving or publishing."
-            emptyLabel="No DICOM metadata was returned for this escalated review."
-          />
-        </section>
+          </CardContent>
+        </Card>
+        <DicomMetadataSummary
+          metadata={item.dicomMetadata}
+          title="DICOM metadata"
+          description="Use modality, anatomy, and acquisition context before approving or publishing."
+          emptyLabel="No DICOM metadata was returned for this escalated review."
+        />
       </div>
 
       <div className="mt-6 space-y-4">
@@ -702,15 +694,7 @@ export function ExpertReviewWorkspace({
       ) : null}
 
       {!isTerminal(item.status) && (
-        <div className="sticky bottom-0 z-10 mt-8 space-y-3 border-t border-border bg-card p-4 shadow-lg">
-          <textarea
-            value={replyDraft}
-            onChange={(e) => onReplyDraftChange(e.target.value)}
-            rows={3}
-            disabled={pairMismatch}
-            placeholder="Review note (saved with draft; optional for approve unless your workflow requires it)"
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-          />
+        <div className="sticky bottom-0 z-10 mt-8 border-t border-border bg-card p-4 shadow-lg">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex max-w-[min(520px,92vw)] items-start gap-2 text-sm font-semibold text-slate-900">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-700" />

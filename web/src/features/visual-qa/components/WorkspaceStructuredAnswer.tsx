@@ -12,6 +12,7 @@ import {
   shouldSuppressLeakedMedicalJsonMarkdown,
 } from '@/components/student/VisualQaRichAnswer';
 import { WorkspaceRagSources } from '@/features/visual-qa/components/WorkspaceRagSources';
+import type { EducatorFeedbackEntry } from '@/lib/student/educator-feedback';
 import { cn } from '@/lib/utils';
 
 export type WorkspaceAnswerVariant = 'full' | 'catalog';
@@ -25,8 +26,8 @@ export type WorkspaceStructuredAnswerProps = {
   differentialDiagnoses?: string[];
   reflectiveQuestions?: string[];
   citations?: VisualQaCitation[];
-  /** Lecturer / expert review text — shown once in the educator section (not as a separate colored banner). */
-  educatorFeedback?: string | null;
+  /** Lecturer / expert review entries — shown in the educator section only. */
+  educatorFeedbackEntries?: EducatorFeedbackEntry[];
   variant?: WorkspaceAnswerVariant;
   className?: string;
 };
@@ -48,13 +49,19 @@ function uniqueLines(values: string[]): string[] {
   });
 }
 
-function stripDuplicateEducatorText(narrative: string | undefined, educatorFeedback: string | null | undefined): string {
-  const feedback = educatorFeedback?.trim();
-  const body = narrative?.trim() ?? '';
-  if (!feedback || !body) return body;
-  if (body === feedback) return '';
-  if (body.includes(feedback)) {
-    return body.replace(feedback, '').trim();
+function stripEducatorDuplicateText(
+  narrative: string | undefined,
+  educatorEntries: EducatorFeedbackEntry[],
+): string {
+  let body = narrative?.trim() ?? '';
+  if (!body || educatorEntries.length === 0) return body;
+  for (const entry of educatorEntries) {
+    const feedback = entry.content.trim();
+    if (!feedback) continue;
+    if (body === feedback) return '';
+    if (body.includes(feedback)) {
+      body = body.replace(feedback, '').trim();
+    }
   }
   return body;
 }
@@ -104,12 +111,11 @@ export function WorkspaceStructuredAnswer({
   differentialDiagnoses = [],
   reflectiveQuestions = [],
   citations = [],
-  educatorFeedback,
+  educatorFeedbackEntries = [],
   variant = 'full',
   className,
 }: WorkspaceStructuredAnswerProps) {
   const isCatalog = variant === 'catalog';
-  const educatorText = educatorFeedback?.trim() || '';
 
   const displayDiagnosis = useMemo(
     () => mergeDiagnosisForDisplay(diagnosis, structuredDiagnosis),
@@ -117,7 +123,7 @@ export function WorkspaceStructuredAnswer({
   );
 
   const narrativeMarkdown = dedupeNarrativeAgainstClinicalFields(
-    stripDuplicateEducatorText(markdown, educatorText),
+    stripEducatorDuplicateText(markdown, educatorFeedbackEntries),
     displayDiagnosis || null,
     findings,
     differentialDiagnoses,
@@ -171,8 +177,8 @@ export function WorkspaceStructuredAnswer({
           </div>
         ) : null}
 
-        {educatorText ? (
-          <EducatorFeedbackSection markdown={educatorText} />
+        {educatorFeedbackEntries.length > 0 ? (
+          <EducatorFeedbackSection entries={educatorFeedbackEntries} />
         ) : null}
 
         {citations.length > 0 ? (
@@ -242,16 +248,9 @@ export function WorkspaceStructuredAnswer({
         />
       </div>
 
-      {showNarrative ? (
-        <div className="rounded-[1.1rem] border border-slate-200/80 bg-white px-4 py-3 text-sm leading-relaxed text-slate-950 break-words [&_a]:break-all">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-700">Clinical explanation</p>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownExternalLinkComponents}>
-            {narrativeMarkdown}
-          </ReactMarkdown>
-        </div>
+      {educatorFeedbackEntries.length > 0 ? (
+        <EducatorFeedbackSection entries={educatorFeedbackEntries} />
       ) : null}
-
-      {educatorText ? <EducatorFeedbackSection markdown={educatorText} /> : null}
 
       {citations.length > 0 ? (
         <div className="rounded-[1.1rem] border border-emerald-200/70 bg-emerald-50/70 px-3 py-3 shadow-sm">
@@ -268,20 +267,32 @@ export function WorkspaceStructuredAnswer({
   );
 }
 
-function EducatorFeedbackSection({ markdown }: { markdown: string }) {
+function EducatorFeedbackSection({ entries }: { entries: EducatorFeedbackEntry[] }) {
   return (
     <section className="rounded-[1.1rem] border border-indigo-200/90 bg-indigo-50/80 px-4 py-3 shadow-sm">
       <div className="mb-2 flex items-center gap-2">
         <GraduationCap className="h-4 w-4 text-indigo-800" aria-hidden />
         <p className="text-xs font-bold uppercase tracking-wide text-indigo-950">Educator feedback</p>
       </div>
-      <p className="mb-2 text-[11px] text-indigo-900/80">
-        Response from your lecturer or clinical expert on this question.
+      <p className="mb-3 text-[11px] text-indigo-900/80">
+        Responses from your lecturer or clinical expert on this question.
       </p>
-      <div className="text-sm leading-relaxed text-indigo-950 break-words [&_a]:break-all">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownExternalLinkComponents}>
-          {markdown}
-        </ReactMarkdown>
+      <div className="space-y-3">
+        {entries.map((entry, index) => (
+          <div
+            key={`${entry.role}-${index}`}
+            className="rounded-lg border border-indigo-200/70 bg-white/70 px-3 py-2.5"
+          >
+            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-indigo-800">
+              {entry.role === 'expert' ? 'Clinical expert' : 'Lecturer'}
+            </p>
+            <div className="text-sm leading-relaxed text-indigo-950 break-words [&_a]:break-all">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownExternalLinkComponents}>
+                {entry.content}
+              </ReactMarkdown>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );

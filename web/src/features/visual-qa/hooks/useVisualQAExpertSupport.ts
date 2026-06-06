@@ -43,17 +43,11 @@ export function useVisualQAExpertSupport(sessionId: string | null, turns: Visual
       setExpertSupportByAssistantId({});
       return;
     }
-    if (turns.length === 0) return;
-    setExpertSupportByAssistantId((prev) => {
-      const fromSession = buildExpertSupportMapFromSession(sessionSnapshotFromStore(sid, turns));
-      const merged = { ...fromSession };
-      for (const [aid, state] of Object.entries(prev)) {
-        if (state.phase === 'awaiting' && !merged[aid]) {
-          merged[aid] = state;
-        }
-      }
-      return merged;
-    });
+    setExpertSupportByAssistantId(
+      turns.length === 0
+        ? {}
+        : buildExpertSupportMapFromSession(sessionSnapshotFromStore(sid, turns)),
+    );
   }, [sid, turns]);
 
   const requestExpertSupport = useCallback(
