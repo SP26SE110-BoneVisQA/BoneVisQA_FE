@@ -284,13 +284,13 @@ export function ExpertCaseEditPage() {
                               type="button"
                               onClick={() => setDeleteImageId(img.id!)}
                               disabled={busy || deleteImageId === img.id}
-                              className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-destructive/90 text-white opacity-0 transition-opacity hover:bg-destructive disabled:opacity-50 group-hover:opacity-100"
+                              className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-lg bg-destructive/90 text-white opacity-0 shadow-sm transition-opacity hover:bg-destructive disabled:opacity-50 group-hover:opacity-100"
                               aria-label="Delete image"
                             >
                               {deleteImageId === img.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
+                                <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
-                                <X className="h-4 w-4" />
+                                <X className="h-5 w-5" />
                               )}
                             </button>
                           )}

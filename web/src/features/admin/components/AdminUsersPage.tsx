@@ -33,8 +33,8 @@ import type { CreateUserPayload } from '@/lib/api/admin-users';
 import { getQueryErrorMessage } from '@/lib/query-utils';
 import { ChevronDown, Filter, Plus, Search, Upload, Users } from 'lucide-react';
 
-const directoryRoleTabs = ['Student', 'Lecturer', 'Expert'] as const satisfies readonly UserRole[];
-const roleFilterOptions = ['All', 'Pending', 'Unassigned', 'Student', 'Lecturer', 'Expert', 'Admin'] as const;
+const directoryRoleTabs = ['Student', 'Lecturer', 'Expert', 'Admin'] as const satisfies readonly UserRole[];
+const roleFilterOptions = ['All', 'Unassigned', 'Student', 'Lecturer', 'Expert'] as const;
 type RoleTab = UserRole | 'Pending' | 'Unassigned' | 'All';
 type RoleFilter = (typeof roleFilterOptions)[number];
 
@@ -124,6 +124,7 @@ export function AdminUsersPage() {
       Student: users.filter((u) => u.role === 'Student').length,
       Lecturer: users.filter((u) => u.role === 'Lecturer').length,
       Expert: users.filter((u) => u.role === 'Expert').length,
+      Admin: users.filter((u) => u.role === 'Admin').length,
     }),
     [users],
   );
@@ -198,20 +199,22 @@ export function AdminUsersPage() {
           <div className="space-y-4">
             <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1">
               <TabButton label="All" count={users.length} active={activeTab === 'All'} onClick={() => handleTabChange('All')} />
-              <TabButton
-                label="Pending"
-                count={countsByTab.Pending}
-                active={activeTab === 'Pending'}
-                onClick={() => handleTabChange('Pending')}
-                highlight
-              />
+              {countsByTab.Pending > 0 ? (
+                <TabButton
+                  label="Pending"
+                  count={countsByTab.Pending}
+                  active={activeTab === 'Pending'}
+                  onClick={() => handleTabChange('Pending')}
+                  highlight
+                />
+              ) : null}
               <TabButton
                 label="Unassigned"
                 count={countsByTab.Unassigned}
                 active={activeTab === 'Unassigned'}
                 onClick={() => handleTabChange('Unassigned')}
               />
-              {directoryRoleTabs.map((role) => (
+              {directoryRoleTabs.filter((role) => role !== 'Admin' || countsByTab.Admin > 0).map((role) => (
                 <TabButton
                   key={role}
                   label={role}
