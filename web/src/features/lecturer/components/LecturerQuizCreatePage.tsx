@@ -73,7 +73,6 @@ import type { ParsedQuestion } from '@/components/lecturer/quizzes/QuestionImpor
 import QuestionCard from '@/components/lecturer/quizzes/QuestionCard';
 
 const QUESTIONS_PER_PAGE = 3;
-const TOPIC_ROTATION = ['Trauma', 'Imaging', 'Joints'] as const;
 const POINTS_ROTATION = [10, 15, 5] as const;
 
 const CLASSIFICATION_OPTIONS = [
