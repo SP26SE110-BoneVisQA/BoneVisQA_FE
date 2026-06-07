@@ -48,6 +48,7 @@ import {
   deleteExpertCaseImage,
   type ExpertCase,
 } from '@/lib/api/expert-cases';
+import { getPublicApiOrigin } from '@/lib/api/client';
 import { appToast } from '@/lib/api/errors/app-toast';
 import { queryKeys } from '@/lib/query-keys';
 import { uploadExpertWorkbenchImage } from '@/lib/supabase/upload-medical-case-image';
@@ -55,15 +56,7 @@ import { Loader2, X, ImagePlus, Upload } from 'lucide-react';
 
 const MAX_IMAGE_BYTES = 100 * 1024 * 1024;
 
-// Backend API base URL (from env or default)
-const getBackendBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    // Try to get from environment variable
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5046';
-    return backendUrl.replace(/\/+$/, ''); // Remove trailing slash
-  }
-  return 'http://localhost:5046';
-};
+const getBackendBaseUrl = () => getPublicApiOrigin() || 'http://localhost:5046';
 
 // Convert image URL to absolute if relative
 const normalizeImageUrl = (url: string): string => {

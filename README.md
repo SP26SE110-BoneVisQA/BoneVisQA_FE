@@ -12,6 +12,19 @@ npm run dev
 
 Mở [http://localhost:3000](http://localhost:3000). Cấu hình API: `web/.env.local` — `NEXT_PUBLIC_API_URL` (origin backend, ví dụ `http://localhost:5046`).
 
+## Deploy (Vercel)
+
+1. **Root Directory:** `web` (Project Settings → General).
+2. **Node.js:** `20.x` (Next.js 16 yêu cầu ≥ 20.9; repo khai báo `"engines": { "node": "20.x" }` trong `web/package.json`).
+3. **Biến môi trường (Production + Preview)** — bắt buộc trước khi build:
+   - `NEXT_PUBLIC_API_URL` — origin backend, **không** có suffix `/api` (vd. `https://bonevisqa.onrender.com`)
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (nếu dùng Google Sign-In)
+4. Redeploy sau khi đổi env (client bundle nhúng `NEXT_PUBLIC_*` lúc build).
+
+Mẫu: `web/.env.example`.
+
 ## Làm việc với Cursor & Backend
 
 - **Hai repo GitHub (FE / BE)** là bình thường: mở **hai cửa sổ Cursor** — một workspace repo FE này, một workspace repo Backend — để code và đối chiếu contract song song.

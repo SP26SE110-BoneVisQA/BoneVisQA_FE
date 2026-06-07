@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const projectDir = path.dirname(fileURLToPath(import.meta.url));
 
 function getSupabaseHostnameFromEnv(): string | null {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -25,6 +29,9 @@ const authPagesCoopHeaders = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: projectDir,
+  },
   images: {
     remotePatterns: supabaseHostname
       ? [
