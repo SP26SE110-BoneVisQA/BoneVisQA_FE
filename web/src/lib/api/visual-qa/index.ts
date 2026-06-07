@@ -14,6 +14,7 @@ export {
 
 export {
   postVisualQaUploadPersonal,
+  postVisualQaUploadPersonal as uploadPersonalStudy,
   validatePersonalStudyArchive,
   MAX_STUDY_ARCHIVE_BYTES,
 } from '@/lib/api/visual-qa/upload-personal';

@@ -5,11 +5,14 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { DetailPageLayout } from '@/components/layouts';
+import { DicomMetadataSummary } from '@/components/shared/DicomMetadataSummary';
+import { RectangleAnnotationOverlay } from '@/components/shared/RectangleAnnotationOverlay';
 import { SkeletonBlock } from '@/components/shared/DashboardSkeletons';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { fetchExpertCase, formatCaseDateForDisplay, type CaseStatus } from '@/lib/api/expert-cases';
 import { getApiProblemDetails, resolveApiAssetUrl } from '@/lib/api/client';
+import { parseNormalizedBoundingBox } from '@/lib/utils/annotations';
 import {
   Pencil,
   CheckCircle,
@@ -212,6 +215,9 @@ export default function ExpertCaseDetailPage() {
                     <div className="grid grid-cols-1 gap-4">
                       {caseRow.medicalImages.map((img, idx) => {
                         const src = resolveApiAssetUrl(img.imageUrl);
+                        const roiFromAnnotations = (img.annotations ?? [])
+                          .map((a) => parseNormalizedBoundingBox(a.coordinates))
+                          .find(Boolean) ?? null;
                         return (
                           <div key={`${img.imageUrl}-${idx}`} className="rounded-lg border border-border bg-muted/5 p-4">
                             <div className="flex items-center justify-between mb-3">
@@ -222,12 +228,22 @@ export default function ExpertCaseDetailPage() {
                               <span className="text-xs text-muted-foreground">Image {idx + 1}</span>
                             </div>
                             {src ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={src}
-                                alt=""
-                                className="max-h-[min(550px,65vh)] w-full rounded-lg border border-border bg-background object-contain mx-auto"
-                              />
+                              <div className="relative mx-auto w-full">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={src}
+                                  alt=""
+                                  className="max-h-[min(550px,65vh)] w-full rounded-lg border border-border bg-background object-contain"
+                                />
+                                {roiFromAnnotations ? (
+                                  <RectangleAnnotationOverlay
+                                    closed={roiFromAnnotations}
+                                    draft={null}
+                                    tone="expert"
+                                    className="pointer-events-none absolute inset-0 rounded-lg"
+                                  />
+                                ) : null}
+                              </div>
                             ) : (
                               <div className="flex h-72 items-center justify-center rounded-lg border border-border bg-muted/20 text-sm text-muted-foreground">
                                 Image not available
@@ -331,6 +347,14 @@ export default function ExpertCaseDetailPage() {
                 </p>
               </AccordionSection>
             )}
+
+            {caseRow.dicomMetadata ? (
+              <DicomMetadataSummary
+                metadata={caseRow.dicomMetadata}
+                title="DICOM study metadata"
+                compact
+              />
+            ) : null}
           </div>
         </div>
       </div>

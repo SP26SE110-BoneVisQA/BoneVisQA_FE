@@ -197,7 +197,7 @@ export function WorkspacePageClient() {
       } catch (err) {
         if (cancelled) return;
         if (isSessionBoot) {
-          setSessionLoadError('Không tải được phiên Visual QA.');
+          setSessionLoadError('Could not load this Visual QA session.');
           if (axios.isAxiosError(err)) {
             showApiErrorToast(err);
           }
@@ -291,6 +291,8 @@ export function WorkspacePageClient() {
       setAwaitingNewSession(false);
       setEmptyLandingHistoryOpen(false);
       setSessionLoadError(null);
+      setIsSessionLoading(true);
+      bootKeyRef.current = null;
       const prefill = readAndClearSessionPrefillImage(sid);
       useVisualQaStore.getState().beginSessionLoad(sid);
       const resolvedPrefill = resolveStudyImageSrc(prefill);
@@ -320,7 +322,7 @@ export function WorkspacePageClient() {
     try {
       await hydrateSession(sid);
     } catch {
-      setSessionLoadError('Không tải được phiên Visual QA.');
+      setSessionLoadError('Could not load this Visual QA session.');
     } finally {
       setIsSessionLoading(false);
     }
@@ -366,10 +368,13 @@ export function WorkspacePageClient() {
   const composerDisabled =
     isUploading ||
     isSessionLoading ||
+    isAsking ||
     (!effectiveCaseId && !effectiveSessionId) ||
     bootLoading ||
     Boolean(bootError) ||
-    Boolean(sessionLoadError);
+    Boolean(sessionLoadError) ||
+    capabilities?.isReadOnly === true ||
+    capabilities?.canAskNext === false;
 
   const imagePanel = (
     <div className="flex h-full min-h-0 flex-col">
@@ -402,7 +407,7 @@ export function WorkspacePageClient() {
   if (bootLoading && turns.length === 0 && !querySessionId) {
     return (
       <PageLoadingSkeleton className="min-h-full p-8">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">Opening workspace…</p>
       </PageLoadingSkeleton>
     );
   }
@@ -487,7 +492,7 @@ export function WorkspacePageClient() {
                 onClick={handleRetrySessionLoad}
                 className="shrink-0 rounded-lg border border-destructive/40 bg-white px-3 py-1 text-xs font-medium hover:bg-destructive/5"
               >
-                Thử lại
+                Retry
               </button>
             </div>
           ) : null}

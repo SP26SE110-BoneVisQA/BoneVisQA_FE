@@ -40,22 +40,14 @@ export function WorkspaceChatPanel({
   const composerLocked = composerDisabled;
 
   const sessionCapabilities = useMemo(
-    () =>
-      capabilities
-        ? {
-            canAskNext: true,
-            canRequestReview: true,
-            isReadOnly: false,
-            turnsUsed: capabilities.turnsUsed,
-            turnLimit: capabilities.turnLimit,
-            reason: null,
-          }
-        : {
-            canAskNext: true,
-            canRequestReview: true,
-            isReadOnly: false,
-            reason: null,
-          },
+    () => ({
+      canAskNext: capabilities?.canAskNext ?? true,
+      canRequestReview: capabilities?.canRequestReview ?? false,
+      isReadOnly: capabilities?.isReadOnly ?? false,
+      turnsUsed: capabilities?.turnsUsed,
+      turnLimit: capabilities?.turnLimit ?? undefined,
+      reason: capabilities?.reason ?? capabilities?.blockingReason ?? undefined,
+    }),
     [capabilities],
   );
 
@@ -86,7 +78,7 @@ export function WorkspaceChatPanel({
         isLoading={isAsking}
         chatRequestPhase={isAsking ? 'analyzing' : 'idle'}
         blockingNotice={lastSystemNotice}
-        canRequestReview
+        canRequestReview={sessionCapabilities.canRequestReview}
         requestingExpertSupportForAssistantId={requestingExpertSupportForAssistantId}
         expertSupportByAssistantId={expertSupportByAssistantId}
         onRequestExpertSupport={(turn) => void onRequestExpertSupport?.(turn)}

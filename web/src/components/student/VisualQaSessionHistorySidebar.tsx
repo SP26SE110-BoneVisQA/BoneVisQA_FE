@@ -106,7 +106,7 @@ export function VisualQaSessionHistorySidebar({
       const res = await fetchVisualQaPersonalHistory({ limit: 20, offset: 0 });
       setItems(res.items);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Không tải được lịch sử phiên.');
+      setError(e instanceof Error ? e.message : 'Could not load session history.');
     } finally {
       setLoading(false);
     }
@@ -146,7 +146,7 @@ export function VisualQaSessionHistorySidebar({
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Đang tải…
+            Loading…
           </div>
         ) : error ? (
           <div className="px-3 py-4 text-center">
@@ -159,18 +159,18 @@ export function VisualQaSessionHistorySidebar({
               onClick={() => void loadHistory()}
             >
               <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-              Thử lại
+              Retry
             </Button>
           </div>
         ) : sorted.length === 0 ? (
           <p className="px-3 py-6 text-center text-xs text-slate-500">
-            Chưa có phiên nào. Upload study DICOM hoặc mở case từ thư viện.
+            No sessions yet. Upload a DICOM study or open a case from the library.
           </p>
         ) : (
           <ul className="space-y-2">
             {sorted.map((row) => {
               const sid = row.sessionId.trim();
-              const title = row.questionSnippet?.trim() || 'Phiên học';
+              const title = row.questionSnippet?.trim() || 'Study session';
               const rel = formatRelativeTime(row.updatedAt ?? null);
               const active = selectedSessionId?.trim() === sid;
               return (

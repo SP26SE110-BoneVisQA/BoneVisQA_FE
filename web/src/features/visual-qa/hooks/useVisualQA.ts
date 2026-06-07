@@ -13,6 +13,7 @@ import {
   fetchVisualQaThread,
   postVisualQaAskJson,
   postVisualQaUploadPersonal,
+  formatVisualQaUploadError,
   type VisualQaAskJsonResponse,
   type VisualQaUploadPersonalOptions,
 } from '@/lib/api/visual-qa';
@@ -142,10 +143,8 @@ export function useVisualQA() {
         useVisualQaStore.getState().setFromUpload(result);
         return result;
       } catch (err) {
-        if (axios.isAxiosError(err)) {
-          showApiErrorToast(err);
-        } else {
-          appToast.error(err instanceof Error ? err.message : 'Upload failed.');
+        if (!options?.skipApiToast) {
+          appToast.error(formatVisualQaUploadError(err));
         }
         throw err;
       } finally {

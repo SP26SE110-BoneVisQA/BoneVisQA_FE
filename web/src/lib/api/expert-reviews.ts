@@ -657,7 +657,9 @@ export async function putExpertReviewDraft(
     body.correctedRoiBoundingBox = roi.slice(0, 4);
   }
   try {
-    await http.put(`/api/expert/reviews/${encodeURIComponent(id)}/draft`, body);
+    await http.put(`/api/expert/reviews/${encodeURIComponent(id)}/draft`, body, {
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }
@@ -679,7 +681,9 @@ export async function resolveExpertReview(
 ): Promise<void> {
   const body = reviewSubmitBody(payload);
   try {
-    await http.post(`/api/expert/reviews/${sessionId}/resolve`, body);
+    await http.post(`/api/expert/reviews/${sessionId}/resolve`, body, {
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (e) {
     if (axios.isAxiosError(e) && (e.response?.status === 409 || e.response?.status === 412)) {
       throw new Error(REVIEW_WORKFLOW_CONFLICT);
@@ -703,7 +707,9 @@ export async function postExpertResponse(
     body.correctedRoiBoundingBox = roi.slice(0, 4);
   }
   try {
-    await http.post(`/api/expert/reviews/${encodeURIComponent(id)}/respond`, body);
+    await http.post(`/api/expert/reviews/${encodeURIComponent(id)}/respond`, body, {
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (e) {
     if (axios.isAxiosError(e) && (e.response?.status === 409 || e.response?.status === 412)) {
       throw new Error(REVIEW_WORKFLOW_CONFLICT);
@@ -716,7 +722,9 @@ export async function approveExpertReview(sessionId: string): Promise<void> {
   const id = String(sessionId ?? '').trim();
   if (!id) throw new Error('Session id is required.');
   try {
-    await http.post(`/api/expert/reviews/${encodeURIComponent(id)}/approve`);
+    await http.post(`/api/expert/reviews/${encodeURIComponent(id)}/approve`, {}, {
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (e) {
     if (axios.isAxiosError(e) && (e.response?.status === 409 || e.response?.status === 412)) {
       throw new Error(REVIEW_WORKFLOW_CONFLICT);
@@ -777,7 +785,9 @@ export async function promoteExpertReview(
     throw new Error('AI-mapped case fields (description, differential, findings, reflective questions) are required.');
   }
   try {
-    const { data } = await http.post<unknown>(`/api/expert/reviews/${encodeURIComponent(id)}/promote`, body);
+    const { data } = await http.post<unknown>(`/api/expert/reviews/${encodeURIComponent(id)}/promote`, body, {
+      headers: { 'Content-Type': 'application/json' },
+    });
     if (!data || typeof data !== 'object') return null;
     const record = data as Record<string, unknown>;
     const direct =

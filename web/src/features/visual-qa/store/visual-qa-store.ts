@@ -12,6 +12,7 @@ import {
   dedupeTurnsSameIndexPreferServer,
   mergeTurnsByIdentity,
 } from '@/lib/student/visual-qa-chat-turns';
+import { isBrokenLegacyImageUrl } from '@/lib/api/visual-qa/image-url';
 import { resolveVisualQaStoredCoordinates } from '@/lib/utils/annotations';
 
 export type VisualQaFlow = 'catalog' | 'personal' | null;
@@ -107,6 +108,24 @@ function turnsFromAskJsonResponse(response: VisualQaAskJsonResponse): VisualQaTu
   return batch;
 }
 
+function sanitizePersistedImageUrl(url: string | null | undefined): string | null {
+  const trimmed = url?.trim() || null;
+  if (!trimmed || isBrokenLegacyImageUrl(trimmed)) return null;
+  return trimmed;
+}
+
+function resolveThreadPreviewUrl(
+  thread: VisualQaAskJsonResponse | VisualQaThreadResponse,
+  fallback: string | null,
+): string | null {
+  const raw =
+    thread.studyImageUrl?.trim() ||
+    thread.sessionImageUrl?.trim() ||
+    thread.imageUrl?.trim() ||
+    fallback;
+  return sanitizePersistedImageUrl(raw);
+}
+
 function resolveThreadCoordinates(
   thread: VisualQaAskJsonResponse | VisualQaThreadResponse,
   turns: VisualQaTurn[],
@@ -135,7 +154,7 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
       setCaseContext: (caseId, previewImageUrl, imageId = null) =>
         set({
           caseId: caseId.trim() || null,
-          previewImageUrl: previewImageUrl?.trim() || null,
+          previewImageUrl: sanitizePersistedImageUrl(previewImageUrl),
           imageId: imageId?.trim() || null,
           flow: get().flow ?? 'catalog',
         }),
@@ -145,7 +164,7 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
           flow: 'personal',
           sessionId: response.sessionId?.trim() || null,
           caseId: response.caseId?.trim() || null,
-          previewImageUrl: response.previewImageUrl?.trim() || null,
+          previewImageUrl: sanitizePersistedImageUrl(response.previewImageUrl),
           imageId:
             response.catalogImageId?.trim() ||
             response.mediaId?.trim() ||
@@ -167,11 +186,13 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
                 isReadOnly: capabilities.isReadOnly,
                 turnsUsed: capabilities.turnsUsed,
                 turnLimit: capabilities.turnLimit,
-                reason: capabilities.reason ?? null,
+                reviewRoute: capabilities.reviewRoute,
+                blockingReason: capabilities.blockingReason ?? null,
+                reason: capabilities.reason ?? capabilities.blockingReason ?? null,
               }
             : null,
         }),
-      setPreviewImageUrl: (url) => set({ previewImageUrl: url?.trim() || null }),
+      setPreviewImageUrl: (url) => set({ previewImageUrl: sanitizePersistedImageUrl(url) }),
       setTurns: (turns) => set({ turns }),
       appendOptimisticQuestionTurn: (question, clientRequestId) =>
         set((state) => ({
@@ -184,9 +205,7 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
         const sessionFields = resolveSessionFields(response);
         const sessionId = response.sessionId?.trim() || get().sessionId;
         const caseId = response.caseId?.trim() || get().caseId;
-        const imageUrl =
-          response.sessionImageUrl?.trim() ||
-          get().previewImageUrl;
+        const imageUrl = resolveThreadPreviewUrl(response, get().previewImageUrl);
         const dicomMetadata = response.dicomMetadata ?? get().dicomMetadata;
 
         set((state) => ({
@@ -227,11 +246,7 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
       hydrateThread: (thread, options) => {
         const sessionFields = resolveSessionFields(thread);
         const sessionId = thread.sessionId?.trim() || get().sessionId;
-        const preview =
-          thread.studyImageUrl?.trim() ||
-          thread.sessionImageUrl?.trim() ||
-          thread.imageUrl?.trim() ||
-          get().previewImageUrl;
+        const preview = resolveThreadPreviewUrl(thread, get().previewImageUrl);
 
         set((state) => {
           const incomingTurns = dedupeAskJsonTurnBatch(thread.turns ?? []);
@@ -288,11 +303,18 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
         flow: state.flow,
         sessionId: state.sessionId,
         caseId: state.caseId,
-        previewImageUrl: state.previewImageUrl,
+        previewImageUrl: sanitizePersistedImageUrl(state.previewImageUrl),
         imageId: state.imageId,
         dicomMetadata: state.dicomMetadata,
         locale: state.locale,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        const sanitized = sanitizePersistedImageUrl(state.previewImageUrl);
+        if (sanitized !== state.previewImageUrl) {
+          useVisualQaStore.setState({ previewImageUrl: sanitized });
+        }
+      },
     },
   ),
 );

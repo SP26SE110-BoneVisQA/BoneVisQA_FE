@@ -365,7 +365,7 @@ export async function requestStudentVisualQaReview(
       try {
         const { data } = await http.post<unknown>(
           `/api/student/visual-qa/turns/${encodeURIComponent(turnId.trim())}/request-review`,
-          undefined,
+          null,
           { params: { sessionId: id }, clearSessionOn401: false },
         );
         const payload = unwrapVisualQaPayload(data);
@@ -379,7 +379,7 @@ export async function requestStudentVisualQaReview(
 
     const { data } = await http.post<unknown>(
       `/api/student/visual-qa/${encodeURIComponent(id)}/request-review`,
-      undefined,
+      null,
       { clearSessionOn401: false },
     );
     const payload = unwrapVisualQaPayload(data);

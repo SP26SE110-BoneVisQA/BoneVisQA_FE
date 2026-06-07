@@ -86,7 +86,6 @@ export function WorkspacePersonalUpload({ onUploaded, className }: Props) {
       void appToast.promise(uploadPromise, {
         loading: 'Extracting DICOM…',
         success: 'Study uploaded — opening Visual QA workspace.',
-        error: 'Failed to upload or extract DICOM.',
       });
       const result = await uploadPromise;
       onUploaded(result, selectedFile);

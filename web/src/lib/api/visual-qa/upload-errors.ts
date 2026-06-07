@@ -1,21 +1,21 @@
 import axios from 'axios';
 
-const UPLOAD_MESSAGE_VI: Record<string, string> = {
+const UPLOAD_MESSAGE_EN: Record<string, string> = {
   'File is larger than 209715200 bytes':
-    'File vượt 200 MB. Hãy nén study nhỏ hơn 200 MB.',
+    'File exceeds the 200 MB limit. Compress the study below 200 MB and try again.',
   'File size exceeds 200 MB limit.':
-    'File vượt 200 MB. Hãy nén study nhỏ hơn 200 MB.',
+    'File exceeds the 200 MB limit. Compress the study below 200 MB and try again.',
   'Only .zip or .rar study archives are allowed.':
-    'Chỉ upload file .zip hoặc .rar.',
+    'Only .zip or .rar study archives are allowed.',
   'No valid DICOM images were found in this archive.':
-    'Không tìm thấy file DICOM hợp lệ trong archive.',
+    'No valid DICOM images were found in this archive.',
   'Study archive could not be read after upload.':
-    'Hệ thống chưa đọc được archive (thử lại sau hoặc liên hệ admin).',
+    'The archive could not be read after upload. Try again later or contact an administrator.',
 };
 
 function mapUploadMessage(message: string): string {
   const trimmed = message.trim();
-  return UPLOAD_MESSAGE_VI[trimmed] ?? trimmed;
+  return UPLOAD_MESSAGE_EN[trimmed] ?? trimmed;
 }
 
 /** User-facing upload failure copy (ingestError / message / detail). */
@@ -37,5 +37,5 @@ export function formatVisualQaUploadError(err: unknown): string {
   if (err instanceof Error && err.message.trim()) {
     return mapUploadMessage(err.message);
   }
-  return 'Upload thất bại. Vui lòng thử lại.';
+  return 'Upload failed. Please try again.';
 }

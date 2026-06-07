@@ -4,6 +4,7 @@ import {
   normalizeDicomMetadata,
   type VisualQaDicomMetadata,
 } from '@/lib/api/visual-qa/dicom-metadata';
+import { parseNormalizedBoundingBox } from '@/lib/utils/annotations';
 import { http, getApiErrorMessage } from './client';
 
 export type CaseDifficulty = 'Easy' | 'Medium' | 'Hard';
@@ -43,6 +44,8 @@ export interface ExpertCase {
   tags?: ExpertCaseTag[];
   /** Direct thumbnail URL from backend (list view) */
   thumbnailUrl?: string;
+  /** Study-level DICOM tags returned on GET /api/expert/cases/{id} (promoted / ingested cases). */
+  dicomMetadata?: VisualQaDicomMetadata | null;
 }
 
 export function formatCaseDateForDisplay(raw: string | undefined | null): string {
@@ -130,6 +133,22 @@ function mapTags(raw: unknown): ExpertCaseTag[] | undefined {
   return out.length ? out : undefined;
 }
 
+function mapAnnotationRow(a: unknown): ExpertCaseMedicalImageAnnotationJson | null {
+  if (!a || typeof a !== 'object') return null;
+  const ar = a as Record<string, unknown>;
+  const lab = String(ar.label ?? ar.Label ?? ar.findingText ?? ar.FindingText ?? '').trim();
+  const coordsRaw = ar.coordinates ?? ar.Coordinates ?? ar.roiBoundingBox ?? ar.RoiBoundingBox;
+  let coordinates = String(coordsRaw ?? '').trim();
+  if (!coordinates && coordsRaw != null) {
+    const parsed = parseNormalizedBoundingBox(coordsRaw);
+    if (parsed) {
+      coordinates = JSON.stringify(parsed);
+    }
+  }
+  if (!coordinates) return null;
+  return lab ? { label: lab, coordinates } : { coordinates };
+}
+
 function mapMedicalImagesRaw(raw: unknown): ExpertCaseMedicalImageJson[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out: ExpertCaseMedicalImageJson[] = [];
@@ -150,16 +169,7 @@ function mapMedicalImagesRaw(raw: unknown): ExpertCaseMedicalImageJson[] | undef
     let annotations: ExpertCaseMedicalImageAnnotationJson[] | null = null;
     if (Array.isArray(annRaw)) {
       annotations = annRaw
-        .map((a) => {
-          if (!a || typeof a !== 'object') return null;
-          const ar = a as Record<string, unknown>;
-          const lab = String(ar.label ?? ar.Label ?? '').trim();
-          const coordinates = String(ar.coordinates ?? ar.Coordinates ?? '{}');
-          const ann: ExpertCaseMedicalImageAnnotationJson = lab
-            ? { label: lab, coordinates }
-            : { coordinates };
-          return ann;
-        })
+        .map(mapAnnotationRow)
         .filter((x): x is ExpertCaseMedicalImageAnnotationJson => x != null);
     }
     out.push({
@@ -171,6 +181,46 @@ function mapMedicalImagesRaw(raw: unknown): ExpertCaseMedicalImageJson[] | undef
     });
   }
   return out.length ? out : undefined;
+}
+
+/** Case-level `annotations[]` from GET /api/expert/cases/{id} — attach to matching image or first image. */
+function mergeCaseLevelAnnotations(
+  medicalImages: ExpertCaseMedicalImageJson[] | undefined,
+  caseAnnotationsRaw: unknown,
+): ExpertCaseMedicalImageJson[] | undefined {
+  if (!Array.isArray(caseAnnotationsRaw) || caseAnnotationsRaw.length === 0) {
+    return medicalImages;
+  }
+  const caseAnnotations = caseAnnotationsRaw
+    .map(mapAnnotationRow)
+    .filter((x): x is ExpertCaseMedicalImageAnnotationJson => x != null);
+  if (caseAnnotations.length === 0) return medicalImages;
+
+  if (!medicalImages || medicalImages.length === 0) {
+    return medicalImages;
+  }
+
+  return medicalImages.map((img, idx) => {
+    const existing = img.annotations ?? [];
+    if (idx === 0 && existing.length === 0) {
+      return { ...img, annotations: caseAnnotations };
+    }
+    return img;
+  });
+}
+
+function extractCaseDicomMetadata(record: Record<string, unknown>): VisualQaDicomMetadata | null {
+  for (const key of [
+    'dicomMetadata',
+    'dicom_metadata',
+    'DicomMetadata',
+    'metadata',
+    'Metadata',
+  ]) {
+    const normalized = normalizeDicomMetadata(record[key]);
+    if (normalized) return normalized;
+  }
+  return null;
 }
 
 /** Maps BE medical case DTOs (expert list/detail, admin list/detail) to `ExpertCase`. */
@@ -260,12 +310,16 @@ export function mapCase(row: unknown): ExpertCase | null {
     item.createdAt ?? item.created_at ?? record.CreatedAt ?? record.createdAt ?? record.addedDate ?? '',
   );
 
-  const medicalImages = mapMedicalImagesRaw(
-    item.medicalImages ?? item.MedicalImages ?? 
-    record.medicalImages ?? record.MedicalImages ??
-    record.images ?? record.Images ?? record.Image ?? record.image
+  const medicalImages = mergeCaseLevelAnnotations(
+    mapMedicalImagesRaw(
+      item.medicalImages ?? item.MedicalImages ??
+      record.medicalImages ?? record.MedicalImages ??
+      record.images ?? record.Images ?? record.Image ?? record.image
+    ),
+    record.annotations ?? record.Annotations,
   );
   const tags = mapTags(item.tags ?? item.Tags ?? record.tags ?? record.Tags);
+  const dicomMetadata = extractCaseDicomMetadata(record);
   
   // Get thumbnail URL directly (for list view)
   const thumbnailUrlRaw = String(
@@ -297,6 +351,7 @@ export function mapCase(row: unknown): ExpertCase | null {
     medicalImages,
     tags,
     thumbnailUrl: thumbnailUrlRaw || undefined,
+    dicomMetadata,
   };
 }
 

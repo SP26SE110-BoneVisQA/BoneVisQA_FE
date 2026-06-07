@@ -13,7 +13,9 @@ export interface VisualQaCapabilities {
   canRequestReview?: boolean;
   isReadOnly?: boolean;
   turnsUsed?: number;
-  turnLimit?: number;
+  turnLimit?: number | null;
+  reviewRoute?: 'lecturer' | 'none' | string;
+  blockingReason?: string | null;
   reason?: string | null;
 }
 
@@ -56,6 +58,8 @@ export type VisualQaAskJsonResponse = VisualQaSessionReport & {
   citations?: VisualQaCitation[];
   capabilities?: VisualQaCapabilities;
   latestTurn?: VisualQaTurn | null;
+  studyImageUrl?: string | null;
+  imageUrl?: string | null;
 };
 
 /** `GET /api/student/visual-qa/history/personal` list row (`VisualQaSessionHistoryItemDto`). */

@@ -507,6 +507,16 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
               ? (capabilitiesRaw as { turnLimit?: number }).turnLimit
               : undefined,
           reason: asString((capabilitiesRaw as { reason?: unknown }).reason).trim() || null,
+          blockingReason:
+            asString(
+              (capabilitiesRaw as { blockingReason?: unknown }).blockingReason ??
+                (capabilitiesRaw as { blocking_reason?: unknown }).blocking_reason,
+            ).trim() || null,
+          reviewRoute:
+            asString(
+              (capabilitiesRaw as { reviewRoute?: unknown }).reviewRoute ??
+                (capabilitiesRaw as { review_route?: unknown }).review_route,
+            ).trim() || undefined,
         }
       : undefined;
   const systemNoticeRaw = pick(o, ['systemNotice', 'system_notice']);

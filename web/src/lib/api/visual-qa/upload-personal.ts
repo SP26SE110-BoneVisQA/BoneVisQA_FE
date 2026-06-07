@@ -20,13 +20,13 @@ function extensionOf(fileName: string): string {
 export function validatePersonalStudyArchive(file: File): string | null {
   const ext = extensionOf(file.name);
   if (!ALLOWED_EXTENSIONS.includes(ext as (typeof ALLOWED_EXTENSIONS)[number])) {
-    return 'Chỉ chấp nhận file .zip hoặc .rar chứa study DICOM.';
+    return 'Only .zip or .rar DICOM study archives are allowed.';
   }
   if (file.size > MAX_ARCHIVE_BYTES) {
-    return 'File tối đa 200 MB. Vui lòng nén lại study trước khi upload.';
+    return 'File exceeds the 200 MB limit. Compress the study and try again.';
   }
   if (file.size <= 0) {
-    return 'File rỗng.';
+    return 'File is empty.';
   }
   return null;
 }
@@ -111,7 +111,7 @@ export async function postVisualQaUploadPersonal(
     }
 
     if (!result.sessionId?.trim() || !result.caseId?.trim()) {
-      throw new Error('Phản hồi upload thiếu sessionId hoặc caseId.');
+      throw new Error('Upload response is missing sessionId or caseId.');
     }
 
     return result;

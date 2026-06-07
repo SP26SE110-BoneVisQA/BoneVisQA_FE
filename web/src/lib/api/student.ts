@@ -22,7 +22,7 @@ import type {
   StudentSubmitQuestionDto,
   StudentTopicStat,
 } from './types';
-import { isValidNormalizedBoundingBox } from '@/lib/utils/annotations';
+import { isValidNormalizedBoundingBox, parseNormalizedBoundingBox } from '@/lib/utils/annotations';
 
 function normalizeDifficulty(raw: unknown): StudentCaseHistoryItem['difficulty'] {
   const value = String(raw ?? '').toLowerCase();
@@ -357,8 +357,24 @@ function parseCatalogDetailImages(item: Record<string, unknown>): StudentCatalog
       r.boundingBox ??
       r.normalizedBoundingBox ??
       r.NormalizedBoundingBox;
-    let roiBoundingBox: StudentCatalogCaseImage['roiBoundingBox'] = null;
-    if (boxRaw && typeof boxRaw === 'object') {
+    let roiBoundingBox = parseNormalizedBoundingBox(boxRaw);
+    if (!roiBoundingBox) {
+      const annRaw = r.annotations ?? r.Annotations;
+      if (Array.isArray(annRaw)) {
+        for (const ann of annRaw) {
+          if (!ann || typeof ann !== 'object') continue;
+          const ar = ann as Record<string, unknown>;
+          const parsed = parseNormalizedBoundingBox(
+            ar.coordinates ?? ar.Coordinates ?? ar.roiBoundingBox ?? ar.RoiBoundingBox,
+          );
+          if (parsed) {
+            roiBoundingBox = parsed;
+            break;
+          }
+        }
+      }
+    }
+    if (boxRaw && typeof boxRaw === 'object' && !roiBoundingBox) {
       const b = boxRaw as Record<string, unknown>;
       const cand = {
         x: Number(b.x ?? b.X),
