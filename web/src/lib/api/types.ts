@@ -224,7 +224,7 @@ export interface DocumentIngestionStatus {
   chunksProcessed: number;
 }
 
-/** REST response from GET /api/admin/documents/{id}/ingestion-status */
+/** REST response from GET /api/admin/documents/{id}/status (alias: …/ingestion-status) */
 export type DocumentStatusResponse = DocumentIngestionStatus;
 
 /** Real-time ingestion update payload from SignalR `DocumentIndexingProgressUpdated`. */

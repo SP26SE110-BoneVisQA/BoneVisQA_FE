@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { http, getApiErrorMessage } from './client';
 import type {
   CategoryOption,
@@ -376,9 +377,28 @@ function mapDocumentStatus(row: unknown): DocumentStatusResponse {
   };
 }
 
+const DOCUMENT_STATUS_POLL_CONFIG = { skipApiToast: true as const };
+
+/** BE may expose `/status` (current Render) or `/ingestion-status` (newer pipeline). */
+async function getDocumentStatusPayload(id: string): Promise<unknown> {
+  const paths = [`${ADMIN_DOCUMENTS}/${id}/status`, `${ADMIN_DOCUMENTS}/${id}/ingestion-status`];
+  let lastError: unknown;
+  for (const url of paths) {
+    try {
+      const { data } = await http.get<unknown>(url, DOCUMENT_STATUS_POLL_CONFIG);
+      return data;
+    } catch (e) {
+      lastError = e;
+      if (axios.isAxiosError(e) && e.response?.status === 404) continue;
+      throw e;
+    }
+  }
+  throw lastError ?? new Error('Document indexing status endpoint was not found.');
+}
+
 export async function fetchDocumentStatus(id: string): Promise<DocumentStatusResponse> {
   try {
-    const { data } = await http.get<unknown>(`${ADMIN_DOCUMENTS}/${id}/ingestion-status`);
+    const data = await getDocumentStatusPayload(id);
     return mapDocumentStatus(data);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
