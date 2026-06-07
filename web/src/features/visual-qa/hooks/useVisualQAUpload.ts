@@ -44,6 +44,7 @@ export function useVisualQAUpload() {
               setPhase('ingesting');
             }
           },
+          onIngestPolling: () => setPhase('ingesting'),
         });
 
         useVisualQaStore.getState().setFromUpload(result);

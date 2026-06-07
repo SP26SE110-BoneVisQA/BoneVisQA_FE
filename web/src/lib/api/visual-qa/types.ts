@@ -96,6 +96,8 @@ export interface VisualQaUploadPersonalResponse {
 export interface VisualQaUploadPersonalOptions {
   diagnosisText?: string | null;
   onUploadProgress?: (percent: number) => void;
+  /** Called when upload finished and background ingest polling begins (202 flow). */
+  onIngestPolling?: () => void;
   skipApiToast?: boolean;
 }
 
