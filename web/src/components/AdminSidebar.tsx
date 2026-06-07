@@ -9,7 +9,6 @@ import LanguageSwitcher from '@/components/common/LanguageSwitcher';
 import {
   LayoutDashboard,
   Users,
-  FileText,
   BrainCircuit,
   Settings,
   LogOut,
@@ -38,15 +37,14 @@ export default function AdminSidebar() {
 
   const adminMenuItems = [
     { icon: LayoutDashboard, label: t('nav.dashboard', 'Dashboard'), href: '/admin/dashboard' },
-    { icon: Users, label: t('nav.users', 'Users'), href: '/admin/users' },
     {
       icon: BadgeCheck,
       label: t('nav.medicalVerifications', 'Medical Verifications'),
       href: '/admin/verifications',
     },
+    { icon: Users, label: t('nav.users', 'Users'), href: '/admin/users' },
     { icon: BookOpen, label: t('nav.classes', 'Classes'), href: '/admin/classes' },
     { icon: Database, label: t('nav.documents', 'Documents'), href: '/admin/documents' },
-    { icon: FileText, label: t('nav.cases', 'Cases'), href: '/admin/cases' },
     { icon: BrainCircuit, label: t('nav.aiConfig', 'AI Config'), href: '/admin/ai-config' },
     { icon: Settings, label: t('nav.settings', 'Settings'), href: '/admin/settings' },
   ];

@@ -159,7 +159,7 @@ export function AdminClassesPage() {
                 <Input
                   value={newClassName}
                   onChange={(e) => setNewClassName(e.target.value)}
-                  placeholder="e.g. Radiology 2026-A"
+                  placeholder="e.g. radioly"
                 />
               </div>
               <div>

@@ -182,12 +182,12 @@ export function CreateUserDialog({ onCancel, onConfirm }: CreateUserDialogProps)
           {/* Cohort + Role row */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Cohort / Class</label>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Cohort</label>
               <input
                 type="text"
                 value={cohort}
                 onChange={(e) => setCohort(e.target.value)}
-                placeholder="e.g. Class 2025-A"
+                placeholder="e.g. VNU"
                 className="h-11 w-full rounded-xl border border-border bg-white px-4 text-sm text-slate-800 shadow-sm transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
@@ -317,12 +317,12 @@ export function EditUserDialog({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Cohort / Class</label>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Cohort</label>
             <input
               type="text"
               value={cohort}
               onChange={(e) => setCohort(e.target.value)}
-              placeholder="e.g. Class 2025-A"
+              placeholder="e.g. VNU"
               className="h-11 w-full rounded-xl border border-border bg-white px-4 text-sm text-slate-800 shadow-sm transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
