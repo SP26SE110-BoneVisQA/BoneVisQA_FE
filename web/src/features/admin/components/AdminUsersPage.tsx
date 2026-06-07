@@ -28,6 +28,8 @@ import {
   useToggleAdminUserStatus,
   useUpdateAdminUser,
 } from '@/features/admin/queries/use-admin-users';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
 import { appToast } from '@/lib/api/errors/app-toast';
 import type { CreateUserPayload } from '@/lib/api/admin-users';
 import { getQueryErrorMessage } from '@/lib/query-utils';
@@ -39,6 +41,7 @@ type RoleTab = UserRole | 'Pending' | 'Unassigned' | 'All';
 type RoleFilter = (typeof roleFilterOptions)[number];
 
 export function AdminUsersPage() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<RoleTab>('All');
   const [filterStatus, setFilterStatus] = useState<UserStatus | 'All'>('All');
@@ -299,7 +302,12 @@ export function AdminUsersPage() {
       ) : null}
 
       {importOpen ? (
-        <ImportUsersDialog onCancel={() => setImportOpen(false)} onSuccess={() => setImportOpen(false)} />
+        <ImportUsersDialog
+          onCancel={() => setImportOpen(false)}
+          onSuccess={() => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.admin.users() });
+          }}
+        />
       ) : null}
 
       {editTarget ? (

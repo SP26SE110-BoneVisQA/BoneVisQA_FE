@@ -7,6 +7,7 @@ import { DetailPageLayout } from '@/components/layouts';
 import { DestructiveConfirmDialog } from '@/components/shared/DestructiveConfirmDialog';
 import { appToast } from '@/lib/api/errors/app-toast';
 import { deleteAdminCase, fetchAdminCaseDetail, updateAdminCase } from '@/lib/api/admin-cases';
+import { resolveApiAssetUrl } from '@/lib/api/client';
 import type { ExpertCase, SaveExpertCaseInput } from '@/lib/api/expert-cases';
 import {
   expertCaseToAdminDetailView,
@@ -584,11 +585,20 @@ export function AdminCaseDetailPage({ caseId }: { caseId: string }) {
                         img.anonymized ? 'border-border' : 'border-destructive/30 bg-destructive/5'
                       }`}
                     >
-                      {/* Placeholder */}
-                      <div className={`w-16 h-16 rounded-lg flex items-center justify-center shrink-0 ${
+                      {/* Thumbnail / Placeholder */}
+                      <div className={`w-16 h-16 rounded-lg overflow-hidden flex items-center justify-center shrink-0 ${
                         img.anonymized ? 'bg-muted' : 'bg-destructive/10'
                       }`}>
-                        {img.anonymized ? (
+                        {img.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={resolveApiAssetUrl(img.imageUrl)}
+                            alt={img.filename}
+                            title="Click to view full image"
+                            className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => window.open(resolveApiAssetUrl(img.imageUrl), '_blank')}
+                          />
+                        ) : img.anonymized ? (
                           <FileImage className="w-6 h-6 text-muted-foreground" />
                         ) : (
                           <ImageOff className="w-6 h-6 text-destructive" />

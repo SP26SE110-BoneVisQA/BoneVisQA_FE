@@ -37,15 +37,23 @@ export function AdminDocumentsPage() {
   const [openingReplaceId, setOpeningReplaceId] = useState<string | null>(null);
 
   const metaQuery = useAdminDocumentMeta();
-  const documentsQuery = useAdminDocuments({
-    search: search.trim() || undefined,
-    categoryId: categoryFilter || undefined,
-    indexingStatus: statusFilter || undefined,
-  });
+  const documentsQuery = useAdminDocuments({});
 
   const documents = documentsQuery.data ?? [];
   const categories = metaQuery.data?.categories ?? [];
   const tags = metaQuery.data?.tags ?? [];
+
+  const filtered = useMemo(() => {
+    return documents.filter((doc) => {
+      const matchSearch =
+        !search.trim() || doc.title.toLowerCase().includes(search.toLowerCase().trim());
+      const matchCategory = !categoryFilter || doc.categoryId === categoryFilter;
+      const matchStatus =
+        !statusFilter ||
+        normalizeIndexingStatus(doc.indexingStatus) === normalizeIndexingStatus(statusFilter);
+      return matchSearch && matchCategory && matchStatus;
+    });
+  }, [documents, search, categoryFilter, statusFilter]);
 
   useEffect(() => {
     const onIndexing = (event: Event) => {
@@ -231,7 +239,7 @@ export function AdminDocumentsPage() {
       >
         <DataTable
           columns={columns}
-          data={documents}
+          data={filtered}
           pageSize={12}
           isLoading={documentsQuery.isPending}
           emptyIcon={<FileText className="h-6 w-6 text-primary" />}
