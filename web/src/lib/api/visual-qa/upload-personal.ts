@@ -8,7 +8,11 @@ import { normalizeDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 import { unwrapVisualQaPayload } from '@/lib/api/visual-qa/unwrap';
 import {
   extractIngestJobId,
+  isIngestJobFailed,
+  isIngestJobProcessing,
+  isIngestJobSuccessful,
   isIngestJobTerminal,
+  MISSING_INGEST_JOB_ID_MESSAGE,
   normalizeIngestJobStatus,
   pollUntilIngestComplete,
 } from '@/lib/api/ingest-job-poll';
@@ -81,9 +85,6 @@ type VisualQaIngestJobSnapshot = VisualQaUploadPersonalResponse & { status: stri
 function normalizeVisualQaIngestJob(raw: unknown): VisualQaIngestJobSnapshot {
   const response = normalizeUploadResponse(raw);
   const status = normalizeIngestJobStatus(raw);
-  if (status === 'completed' && !response.ingestOk) {
-    return { ...response, ingestOk: true, status };
-  }
   if (status === 'failed') {
     return { ...response, ingestOk: false, status };
   }
@@ -113,29 +114,33 @@ function throwUploadFailure(
 
 async function resolveVisualQaUpload(
   payload: unknown,
-  httpStatus: number,
   options: VisualQaUploadPersonalOptions = {},
 ): Promise<VisualQaUploadPersonalResponse> {
   const ingestJobId = extractIngestJobId(payload);
-  if (ingestJobId || httpStatus === 202) {
-    if (!ingestJobId) {
-      throw new Error('Upload accepted but ingestJobId is missing.');
-    }
+  const initialStatus = normalizeIngestJobStatus(payload);
 
+  if (ingestJobId) {
     const finalJob = await pollUntilIngestComplete(
       () => fetchVisualQaIngestJob(ingestJobId, options.skipApiToast),
-      (job) => isIngestJobTerminal(job.status, job.ingestOk, job.ingestError),
+      (job) => isIngestJobTerminal(job.status),
       { onPoll: options.onIngestPolling },
     );
 
     const result = normalizeUploadResponse(finalJob);
-    if (finalJob.status === 'failed' || !result.ingestOk) {
+    if (isIngestJobFailed(finalJob.status)) {
       throwUploadFailure(result, 'Unable to process the DICOM archive.');
+    }
+    if (!isIngestJobSuccessful(finalJob.status, result.ingestOk)) {
+      throwUploadFailure(result, 'DICOM ingest did not complete successfully.');
     }
     if (!result.sessionId?.trim() || !result.caseId?.trim()) {
       throw new Error('Upload response is missing sessionId or caseId.');
     }
     return result;
+  }
+
+  if (isIngestJobProcessing(initialStatus)) {
+    throw new Error(MISSING_INGEST_JOB_ID_MESSAGE);
   }
 
   const result = normalizeUploadResponse(payload);
@@ -150,7 +155,7 @@ async function resolveVisualQaUpload(
 
 /**
  * `POST /api/student/visual-qa/upload-personal` (multipart).
- * BE returns 202 + `ingestJobId`; poll until ingest completes.
+ * BE returns 200 + `ingestJobId`; poll until ingest completes.
  */
 export async function postVisualQaUploadPersonal(
   file: File,
@@ -167,7 +172,7 @@ export async function postVisualQaUploadPersonal(
   if (note) form.append('diagnosisText', note);
 
   try {
-    const { data, status: httpStatus } = await http.post<unknown>(
+    const { data } = await http.post<unknown>(
       '/api/student/visual-qa/upload-personal',
       form,
       {
@@ -182,12 +187,16 @@ export async function postVisualQaUploadPersonal(
     );
 
     const payload = unwrapVisualQaPayload(data);
-    return await resolveVisualQaUpload(payload, httpStatus, options);
+    return await resolveVisualQaUpload(payload, options);
   } catch (e) {
     if (axios.isAxiosError(e) && e.response?.data) {
       const payload = unwrapVisualQaPayload(e.response.data);
+      const status = normalizeIngestJobStatus(payload);
+      if (isIngestJobProcessing(status)) {
+        throw e;
+      }
       const result = normalizeUploadResponse(payload);
-      if (!result.ingestOk) {
+      if (isIngestJobFailed(status) || (status === 'completed' && !result.ingestOk)) {
         throwUploadFailure(result, 'Unable to process the DICOM archive.');
       }
     }

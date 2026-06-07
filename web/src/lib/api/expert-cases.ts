@@ -7,7 +7,11 @@ import {
 import { parseNormalizedBoundingBox } from '@/lib/utils/annotations';
 import {
   extractIngestJobId,
+  isIngestJobFailed,
+  isIngestJobProcessing,
+  isIngestJobSuccessful,
   isIngestJobTerminal,
+  MISSING_INGEST_JOB_ID_MESSAGE,
   normalizeIngestJobStatus,
   pollUntilIngestComplete,
 } from '@/lib/api/ingest-job-poll';
@@ -903,9 +907,6 @@ type ExpertIngestJobSnapshot = ExpertDicomStudyUploadResponse & { status: string
 function normalizeExpertIngestJob(raw: unknown): ExpertIngestJobSnapshot {
   const response = normalizeExpertDicomUploadResponse(raw);
   const status = normalizeIngestJobStatus(raw);
-  if (status === 'completed' && !response.ingestOk) {
-    return { ...response, ingestOk: true, status };
-  }
   if (status === 'failed') {
     return { ...response, ingestOk: false, status };
   }
@@ -924,29 +925,36 @@ async function fetchExpertIngestJob(
 
 async function resolveExpertDicomUpload(
   payload: unknown,
-  httpStatus: number,
   options?: ExpertCaseDicomUploadOptions,
 ): Promise<ExpertCaseDicomUploadResult> {
   const ingestJobId = extractIngestJobId(payload);
-  if (ingestJobId || httpStatus === 202) {
-    if (!ingestJobId) {
-      throw new Error('Upload accepted but ingestJobId is missing.');
-    }
+  const initialStatus = normalizeIngestJobStatus(payload);
 
+  if (ingestJobId) {
     const finalJob = await pollUntilIngestComplete(
       () => fetchExpertIngestJob(ingestJobId, options?.skipApiToast),
-      (job) => isIngestJobTerminal(job.status, job.ingestOk, job.ingestError),
+      (job) => isIngestJobTerminal(job.status),
       { onPoll: options?.onIngestPolling },
     );
 
     const result = toExpertCaseDicomUploadResult(finalJob);
-    if (finalJob.status === 'failed' || !result.ingestOk) {
+    if (isIngestJobFailed(finalJob.status)) {
       const msg = result.ingestError?.trim() || 'Unable to process the DICOM archive.';
       const err = new Error(msg) as Error & { uploadResult?: ExpertCaseDicomUploadResult };
       err.uploadResult = result;
       throw err;
     }
+    if (!isIngestJobSuccessful(finalJob.status, result.ingestOk)) {
+      const msg = result.ingestError?.trim() || 'DICOM ingest did not complete successfully.';
+      const err = new Error(msg) as Error & { uploadResult?: ExpertCaseDicomUploadResult };
+      err.uploadResult = result;
+      throw err;
+    }
     return result;
+  }
+
+  if (isIngestJobProcessing(initialStatus)) {
+    throw new Error(MISSING_INGEST_JOB_ID_MESSAGE);
   }
 
   const response = normalizeExpertDicomUploadResponse(payload);
@@ -985,7 +993,7 @@ export async function uploadExpertCaseDicomArchive(
   }
 
   try {
-    const { data, status: httpStatus } = await http.post<unknown>('/api/expert/cases/upload-dicom', form, {
+    const { data } = await http.post<unknown>('/api/expert/cases/upload-dicom', form, {
       skipApiToast: options?.skipApiToast,
       timeout: 15 * 60 * 1000,
       onUploadProgress: (ev) => {
@@ -996,13 +1004,17 @@ export async function uploadExpertCaseDicomArchive(
     });
 
     const payload = unwrapExpertDicomPayload(data);
-    return await resolveExpertDicomUpload(payload, httpStatus, options);
+    return await resolveExpertDicomUpload(payload, options);
   } catch (e) {
     if (axios.isAxiosError(e) && e.response?.data) {
       const payload = unwrapExpertDicomPayload(e.response.data);
+      const status = normalizeIngestJobStatus(payload);
+      if (isIngestJobProcessing(status)) {
+        throw e;
+      }
       const response = normalizeExpertDicomUploadResponse(payload);
       const result = toExpertCaseDicomUploadResult(response);
-      if (!result.ingestOk) {
+      if (isIngestJobFailed(status) || (status === 'completed' && !result.ingestOk)) {
         const msg = result.ingestError?.trim() || 'Unable to process the DICOM archive.';
         const err = new Error(msg) as Error & { uploadResult?: ExpertCaseDicomUploadResult };
         err.uploadResult = result;

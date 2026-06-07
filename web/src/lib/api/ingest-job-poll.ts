@@ -1,8 +1,14 @@
-/** Poll interval for async DICOM ingest jobs (BE returns 202 + job id). */
+/** Poll interval for async DICOM ingest jobs (BE returns 200 + ingestJobId). */
 export const INGEST_JOB_POLL_INTERVAL_MS = 4000;
 
-/** Max wait for Railway cold-start + embedding (first ingest can take several minutes). */
-export const INGEST_JOB_MAX_WAIT_MS = 10 * 60 * 1000;
+/** ~5 minutes — matches BE guidance (75 × 4s). First Railway cold-start may need retry. */
+export const INGEST_JOB_MAX_POLL_ATTEMPTS = 75;
+
+export const INGEST_JOB_MAX_WAIT_MS =
+  INGEST_JOB_POLL_INTERVAL_MS * INGEST_JOB_MAX_POLL_ATTEMPTS;
+
+export const MISSING_INGEST_JOB_ID_MESSAGE =
+  'Missing ingestJobId — redeploy Render API';
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,11 +38,21 @@ export function normalizeIngestJobStatus(raw: unknown): string {
     .toLowerCase();
 }
 
-export function isIngestJobTerminal(status: string, ingestOk?: boolean, ingestError?: string | null): boolean {
-  if (status === 'completed' || status === 'failed') return true;
-  if (ingestOk) return true;
-  if (ingestError && status !== 'processing') return true;
-  return false;
+/** Job still running — `ingestOk: false` here is expected, not an error. */
+export function isIngestJobProcessing(status: string): boolean {
+  return status === 'processing' || status === '';
+}
+
+export function isIngestJobTerminal(status: string): boolean {
+  return status === 'completed' || status === 'failed';
+}
+
+export function isIngestJobSuccessful(status: string, ingestOk: boolean): boolean {
+  return status === 'completed' && ingestOk;
+}
+
+export function isIngestJobFailed(status: string): boolean {
+  return status === 'failed';
 }
 
 export async function pollUntilIngestComplete<T>(
@@ -61,7 +77,7 @@ export async function pollUntilIngestComplete<T>(
       throw new Error('Upload cancelled.');
     }
     if (Date.now() - start > maxWaitMs) {
-      throw new Error('DICOM processing timed out. Please try again in a few minutes.');
+      throw new Error('DICOM ingest timed out. Please try again in a few minutes.');
     }
     await sleep(intervalMs);
   }
