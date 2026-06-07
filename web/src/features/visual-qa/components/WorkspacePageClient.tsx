@@ -100,11 +100,17 @@ export function WorkspacePageClient() {
     }
   }, [queryCaseId, querySessionId]);
 
+  const handleReviewRequested = useCallback(() => {
+    setHistoryRefreshNonce((n) => n + 1);
+  }, []);
+
   const {
     expertSupportByAssistantId,
     requestingExpertSupportForAssistantId,
     requestExpertSupport,
-  } = useVisualQAExpertSupport(effectiveSessionId || sessionId, turns);
+  } = useVisualQAExpertSupport(effectiveSessionId || sessionId, turns, {
+    onReviewRequested: handleReviewRequested,
+  });
 
   const headerTitle =
     caseDetail?.title?.trim() || (flow === 'personal' ? 'Personal study' : 'Visual QA');

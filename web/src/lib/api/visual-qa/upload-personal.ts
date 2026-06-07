@@ -33,7 +33,7 @@ export function validatePersonalStudyArchive(file: File): string | null {
     return 'Only .zip or .rar DICOM study archives are allowed.';
   }
   if (file.size > MAX_ARCHIVE_BYTES) {
-    return 'File exceeds the 200 MB limit. Compress the study and try again.';
+    return 'File exceeds the 200 MB limit. Please compress the study before uploading.';
   }
   if (file.size <= 0) {
     return 'File is empty.';
@@ -176,7 +176,7 @@ export async function postVisualQaUploadPersonal(
       '/api/student/visual-qa/upload-personal',
       form,
       {
-        timeout: 15 * 60 * 1000,
+        timeout: 30 * 60 * 1000,
         skipApiToast: options.skipApiToast,
         onUploadProgress: (ev) => {
           if (!options.onUploadProgress || !ev.total) return;

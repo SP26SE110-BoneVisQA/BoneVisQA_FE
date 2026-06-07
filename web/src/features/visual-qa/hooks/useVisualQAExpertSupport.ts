@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { requestStudentVisualQaReview } from '@/lib/api/student-visual-qa';
+import { requestVisualQaReview } from '@/lib/api/visual-qa';
 import { appToast } from '@/lib/api/errors/app-toast';
 import { parseApiErrorBody } from '@/lib/api/errors';
 import { showApiErrorToast } from '@/lib/api/errors/show-api-error-toast';
@@ -40,7 +40,11 @@ function sessionSnapshotFromStore(
   };
 }
 
-export function useVisualQAExpertSupport(sessionId: string | null, turns: VisualQaTurn[]) {
+export function useVisualQAExpertSupport(
+  sessionId: string | null,
+  turns: VisualQaTurn[],
+  options?: { onReviewRequested?: () => void },
+) {
   const [expertSupportByAssistantId, setExpertSupportByAssistantId] = useState<
     Record<string, ExpertSupportUiState>
   >({});
@@ -83,17 +87,16 @@ export function useVisualQAExpertSupport(sessionId: string | null, turns: Visual
       }));
 
       try {
-        const updated = await requestStudentVisualQaReview(sid, turnIdForReview);
+        const updated = await requestVisualQaReview(sid, turnIdForReview);
         const store = useVisualQaStore.getState();
         if ((updated.turns?.length ?? 0) > 0) {
           store.hydrateThread(updated, { replace: true });
         } else {
           store.setCapabilities(updated.capabilities);
-          if (updated.sessionStatus || updated.status) {
-            useVisualQaStore.setState({
-              sessionStatus: updated.sessionStatus?.trim() || updated.status?.trim() || null,
-            });
-          }
+          useVisualQaStore.setState({
+            sessionStatus:
+              updated.sessionStatus?.trim() || updated.status?.trim() || store.sessionStatus,
+          });
         }
         setExpertSupportByAssistantId((prev) => ({
           ...buildExpertSupportMapFromSession(
@@ -103,8 +106,9 @@ export function useVisualQAExpertSupport(sessionId: string | null, turns: Visual
           ),
           [uiKey]: { phase: 'awaiting' },
         }));
+        options?.onReviewRequested?.();
         appToast.success(
-          'Your request was sent to the lecturer triage queue. An expert will review after escalation.',
+          'Review request sent to your lecturer. An expert will review only after lecturer escalation.',
         );
       } catch (err) {
         setExpertSupportByAssistantId((prev) => {
@@ -128,7 +132,7 @@ export function useVisualQAExpertSupport(sessionId: string | null, turns: Visual
         setRequestingExpertSupportForAssistantId(null);
       }
     },
-    [sid],
+    [sid, options?.onReviewRequested],
   );
 
   return {

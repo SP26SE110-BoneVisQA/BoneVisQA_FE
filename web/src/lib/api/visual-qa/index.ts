@@ -32,6 +32,8 @@ export {
   fetchVisualQaPersonalHistory,
 } from '@/lib/api/visual-qa/history';
 
+export { requestVisualQaReview } from '@/lib/api/visual-qa/request-review';
+
 export type {
   VisualQaCapabilities,
   VisualQaAskJsonRequest,

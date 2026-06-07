@@ -93,7 +93,7 @@ export function WorkspaceChatPanel({
           onChange={setDraft}
           onSubmit={() => void handleSubmit()}
           disabled={composerLocked}
-          isLoading={false}
+          isLoading={isAsking}
           placeholder={
             answerVariant === 'catalog'
               ? 'Ask a short question about this teaching case…'
