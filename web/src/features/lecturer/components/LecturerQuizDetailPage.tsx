@@ -45,7 +45,6 @@ import { getClassStats } from '@/lib/api/lecturer';
 import type { QuizDto, QuizQuestionDto, ClassItem, ClassStats } from '@/lib/api/types';
 
 const QUESTIONS_PER_PAGE = 3;
-const TOPIC_ROTATION = ['Trauma', 'Imaging', 'Joints'] as const;
 const POINTS_ROTATION = [10, 15, 5] as const;
 
 const CLASSIFICATION_OPTIONS = [
@@ -890,7 +889,6 @@ export function LecturerQuizDetailPage() {
                         key={q.id}
                         question={q}
                         variant="curated"
-                        topicCategory={TOPIC_ROTATION[idx % TOPIC_ROTATION.length]}
                         points={POINTS_ROTATION[idx % POINTS_ROTATION.length]}
                         onEdit={isSelectMode ? undefined : handleEditQuestion}
                         onDelete={isSelectMode ? undefined : openDeleteQuestionDialog}

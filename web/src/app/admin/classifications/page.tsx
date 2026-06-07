@@ -488,21 +488,22 @@ export default function AdminClassificationsPage() {
                   onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}
                   className="w-full h-10 px-3 rounded-lg border border-border bg-input text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
-                  <option value="" className="font-semibold text-muted-foreground">-- Root (No Parent) --</option>
+                  <option value="" className="font-semibold text-muted-foreground">📁 -- Root (No Parent) --</option>
                   {flatBoneSpecialties
                     .filter((s) => s.id !== editingId)
                     .map((s) => {
                       const level = s.level ?? 0;
                       const isParent = s.children && s.children.length > 0;
+                      const isFolder = level === 0 || isParent;
                       const indent = level > 0 ? '\u00A0\u00A0'.repeat(level) + '└─ ' : '';
-                      const prefix = isParent ? '📁 ' : '📄 ';
+                      const prefix = isFolder ? '📁 ' : '📄 ';
                       return (
                         <option
                           key={s.id}
                           value={s.id}
-                          className={isParent ? 'font-bold bg-muted/60 text-primary' : 'text-foreground'}
+                          className={isFolder ? 'font-bold bg-muted/60 text-primary' : 'text-foreground'}
                           style={{
-                            fontWeight: isParent ? 'bold' : 'normal',
+                            fontWeight: isFolder ? 'bold' : 'normal',
                           }}
                         >
                           {indent}{prefix}{s.name} ({s.code})

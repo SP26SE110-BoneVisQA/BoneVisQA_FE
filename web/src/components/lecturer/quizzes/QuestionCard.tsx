@@ -26,8 +26,6 @@ interface QuestionCardProps {
   points?: number;
   /** Rich layout for quiz detail / Question Manager */
   variant?: 'default' | 'manager' | 'curated';
-  /** Topic pill for curated variant (e.g. Trauma, Imaging) */
-  topicCategory?: string;
   /** Selection mode for bulk operations */
   selectable?: boolean;
   isSelected?: boolean;
@@ -102,7 +100,6 @@ export default function QuestionCard({
   onDelete,
   points = 10,
   variant = 'default',
-  topicCategory = 'Trauma',
   selectable = false,
   isSelected = false,
   onSelect,
@@ -112,13 +109,6 @@ export default function QuestionCard({
     question.type?.toLowerCase() === 'truefalse' || question.type?.toLowerCase() === 'true/false';
 
   if (variant === 'curated') {
-    const topic = topicCategory;
-    const topicClass =
-      topic === 'Imaging'
-        ? 'bg-orange-100 text-orange-950'
-        : topic === 'Joints'
-          ? 'bg-teal-100 text-teal-950'
-          : 'bg-emerald-100 text-emerald-950';
     const subtitle =
       question.caseTitle ||
       [question.optionA, question.optionB].filter(Boolean).join(' · ') ||
@@ -155,9 +145,9 @@ export default function QuestionCard({
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span
-                  className={`rounded-full px-4 py-1.5 text-xs font-extrabold uppercase ${topicClass}`}
+                  className="rounded-full bg-emerald-100 px-4 py-1.5 text-xs font-extrabold uppercase text-emerald-950"
                 >
-                  {topic}
+                  Question
                 </span>
                 <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${typeStyle.badgeClass}`}>
                   {typeStyle.label}

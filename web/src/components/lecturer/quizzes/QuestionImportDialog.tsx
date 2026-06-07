@@ -429,7 +429,7 @@ export default function QuestionImportDialog({ open, onClose, onImport }: Questi
               Import Questions
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Import from Excel (.xlsx/.xls), CSV, JSON, or paste text directly.
+              Import from TXT (.txt), CSV, JSON, or paste text directly.
             </p>
           </div>
           <button
@@ -450,7 +450,7 @@ export default function QuestionImportDialog({ open, onClose, onImport }: Questi
             {(
               [
                 { key: 'paste', label: 'Paste Text', icon: ClipboardPaste },
-                { key: 'csv', label: 'CSV / Excel', icon: FileText },
+                { key: 'csv', label: 'CSV / TXT', icon: FileText },
                 { key: 'json', label: 'JSON File', icon: FileText },
               ] as const
             ).map(({ key, label, icon: Icon }) => (
@@ -488,7 +488,7 @@ export default function QuestionImportDialog({ open, onClose, onImport }: Questi
               TXT
             </button>
             <span className="text-muted-foreground ml-2">
-              (Use CSV/JSON samples for Excel import — columns: questionText, type, optionA, optionB, optionC, optionD, correctAnswer)
+              (Use CSV/JSON/TXT samples for import — columns: questionText, type, optionA, optionB, optionC, optionD, correctAnswer)
             </span>
           </div>
 

@@ -399,7 +399,7 @@ export default function ExpertQuestionImportDialog({ open, onClose, onImport }: 
                 Import Questions
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Import from Excel (.xlsx/.xls), CSV, JSON files or paste directly.
+                Import from TXT (.txt), CSV, JSON files or paste directly.
               </p>
             </div>
             <button
@@ -417,7 +417,7 @@ export default function ExpertQuestionImportDialog({ open, onClose, onImport }: 
               {(
                 [
                   { key: 'paste', label: 'Paste Text', icon: ClipboardPaste },
-                  { key: 'csv', label: 'CSV / Excel', icon: FileText },
+                  { key: 'csv', label: 'CSV / TXT', icon: FileText },
                   { key: 'json', label: 'JSON File', icon: FileText },
                 ] as const
               ).map(({ key, label, icon: Icon }) => (
