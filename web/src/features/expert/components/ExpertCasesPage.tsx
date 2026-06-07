@@ -19,11 +19,12 @@ import { FolderOpen, Plus, Search, ChevronLeft, ChevronRight } from 'lucide-reac
 type OriginTab = 'all' | ExpertCaseOrigin;
 
 const ITEMS_PER_PAGE = 6;
+const EXPERT_CASES_PAGE_SIZE = 20;
 
 export function ExpertCasesPage() {
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
-  const casesQuery = useExpertCaseLibrary({ pageIndex: 1, pageSize: 1000 });
+  const casesQuery = useExpertCaseLibrary({ pageIndex: 1, pageSize: EXPERT_CASES_PAGE_SIZE });
   const [activeTab, setActiveTab] = useState<OriginTab>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [assetsCaseId, setAssetsCaseId] = useState<string | null>(null);
@@ -167,10 +168,8 @@ export function ExpertCasesPage() {
                         : 'basic'
                   }
                   caseOrigin={item.caseOrigin}
-                  addedBy={item.addedBy}
+                  addedBy={item.addedBy || item.expertName || ''}
                   addedDate={item.addedDate}
-                  viewCount={0}
-                  usageCount={0}
                   thumbnailUrl={item.thumbnailUrl}
                 />
               ))}

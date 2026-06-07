@@ -76,8 +76,12 @@ export interface VisualQaTurn {
   expertCorrectedRoiBoundingBox?: NormalizedImageBoundingBox | null;
   /** Assistant structured diagnosis (JSON string or plain text) from triage / thread DTOs. */
   structuredDiagnosis?: string | null;
+  /** Alias from BE triage DTO — preferred label: Suggested main diagnosis. */
+  suggestedMainDiagnosis?: string | null;
   /** Assistant key imaging line (string or JSON) from triage DTOs. */
   keyImagingFindings?: string | null;
+  /** Formatted references block from BE triage DTO. */
+  referencesAndCitations?: string | null;
   diagnosis?: string;
   findings?: string[];
   reflectiveQuestions?: string[];
@@ -865,6 +869,17 @@ export interface StudentCaseCatalogDetail extends StudentCaseCatalogItem {
   images?: StudentCatalogCaseImage[];
   /** true = chỉ tham khảo, không mở Visual QA “Ask AI”. */
   communityReferenceOnly?: boolean;
+  /** Expert who created or validated this case. */
+  expertName?: string;
+  /** Main diagnosis from expert / AI structured output. */
+  suggestedDiagnosis?: string;
+  reflectiveQuestions?: string[];
+  /** Full clinical narrative (promoted cases). */
+  clinicalDescription?: string;
+  /** Original student question when promoted from community request. */
+  studentQuestion?: string;
+  differentialDiagnoses?: string[];
+  referencesAndCitations?: string;
 }
 
 /** Real-time payload from SignalR `ReceiveNotification` (aligned with backend hub). */

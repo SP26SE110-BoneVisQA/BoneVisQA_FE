@@ -270,6 +270,91 @@ function MetricCard({
   );
 }
 
+function parseBulletLines(raw: string | null | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(/[\n•;]/g)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function formatTriageReferences(turn: VisualQaTurn | null, row: LectStudentQuestionDto): string {
+  const fromTurn = turn?.referencesAndCitations?.trim();
+  if (fromTurn) return fromTurn;
+  const citations = turn?.citations ?? [];
+  if (citations.length === 0) return '';
+  return citations
+    .map((c) => {
+      const label = c.displayLabel?.trim() || c.href?.trim() || 'Reference';
+      const snippet = c.snippet?.trim();
+      const page = c.pageLabel?.trim();
+      const parts = [label];
+      if (page) parts.push(`(${page})`);
+      if (snippet) parts.push(`— ${snippet}`);
+      return parts.join(' ');
+    })
+    .join('\n');
+}
+
+function TriageStructuredField({
+  title,
+  text,
+  items,
+}: {
+  title: string;
+  text?: string | null;
+  items?: string[];
+}) {
+  const lines = items && items.length > 0 ? items : parseBulletLines(text);
+  const body = lines.length > 0 ? lines : text?.trim() ? [text.trim()] : [];
+  if (body.length === 0) return null;
+  return (
+    <div className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      {body.length === 1 ? (
+        <p className="mt-2 text-sm leading-relaxed text-slate-900">{body[0]}</p>
+      ) : (
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-slate-900">
+          {body.map((line, index) => (
+            <li key={`${title}-${index}`}>{line}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function TriageStructuredAnswerPanel({
+  turn,
+  row,
+}: {
+  turn: VisualQaTurn | null;
+  row: LectStudentQuestionDto;
+}) {
+  const mainDiagnosis =
+    turn?.suggestedMainDiagnosis?.trim() ||
+    turn?.structuredDiagnosis?.trim() ||
+    turn?.diagnosis?.trim() ||
+    '';
+  const differential =
+    turn?.differentialDiagnoses?.filter((item) => item.trim()) ??
+    parseBulletLines(row.answerText);
+  const keyImaging = turn?.keyImagingFindings?.trim() ?? '';
+  const reflective =
+    turn?.reflectiveQuestions?.filter((item) => item.trim()).join('\n') ?? '';
+  const references = formatTriageReferences(turn, row);
+
+  return (
+    <div className="mt-4 space-y-3">
+      <TriageStructuredField title="Suggested main diagnosis" text={mainDiagnosis} />
+      <TriageStructuredField title="Differential diagnoses" items={differential} />
+      <TriageStructuredField title="Key imaging findings" text={keyImaging} />
+      <TriageStructuredField title="Reflective questions" text={reflective} />
+      <TriageStructuredField title="References & citations" text={references} />
+    </div>
+  );
+}
+
 export function LecturerQaTriagePage() {
   const searchParams = useSearchParams();
   const classesQuery = useLecturerTriageClasses();
@@ -870,33 +955,15 @@ export function LecturerQaTriagePage() {
                         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                           Review target (single Q to A)
                         </p>
-                        <p className="mt-2 text-sm text-slate-500">
-                          This is the pair the student submitted for lecturer review, not the full chat history.
-                          {selectedQuestion.turns && selectedQuestion.turns.length > 1 ? (
-                            <span className="block pt-1">
-                              Session has {selectedQuestion.turns.length} turn(s); triage uses turn{' '}
-                              <span className="font-mono">{selectedTurn.turnIndex}</span> only.
-                            </span>
-                          ) : null}
-                        </p>
-                        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                          <div className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                              Question
-                            </p>
-                            <p className="mt-2 text-sm leading-relaxed text-slate-900">
-                              {selectedTurn.questionText?.trim() || '—'}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                              Assistant answer
-                            </p>
-                            <p className="mt-2 text-sm leading-relaxed text-slate-900">
-                              {selectedTurn.answerText?.trim() || '—'}
-                            </p>
-                          </div>
+                        <div className="mt-4 rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            Question
+                          </p>
+                          <p className="mt-2 text-sm leading-relaxed text-slate-900">
+                            {selectedTurn.questionText?.trim() || '—'}
+                          </p>
                         </div>
+                        <TriageStructuredAnswerPanel turn={selectedTurn} row={selectedQuestion} />
                       </article>
                     ) : (
                       <article className={innerCardClass}>
@@ -906,58 +973,17 @@ export function LecturerQaTriagePage() {
                         <p className="mt-2 text-sm text-slate-500">
                           The API did not return turn history; showing the row-level question and answer only.
                         </p>
-                        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                          <div className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                              Question
-                            </p>
-                            <p className="mt-2 text-sm font-medium text-slate-900">
-                              {selectedQuestion.questionText}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                              Assistant answer
-                            </p>
-                            <p className="mt-2 text-sm leading-relaxed text-slate-900">
-                              {(selectedQuestion.answerText || '').trim() || 'No generated answer available.'}
-                            </p>
-                          </div>
+                        <div className="mt-4 rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            Question
+                          </p>
+                          <p className="mt-2 text-sm font-medium text-slate-900">
+                            {selectedQuestion.questionText}
+                          </p>
                         </div>
+                        <TriageStructuredAnswerPanel turn={null} row={selectedQuestion} />
                       </article>
                     )}
-
-                    {selectedTurn &&
-                    (selectedTurn.structuredDiagnosis?.trim() ||
-                      selectedTurn.keyImagingFindings?.trim()) ? (
-                      <article className={innerCardClass}>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                          Structured assistant fields (selected turn)
-                        </p>
-                        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                          {selectedTurn.structuredDiagnosis?.trim() ? (
-                            <div className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                Structured diagnosis
-                              </p>
-                              <p className="mt-2 text-sm leading-relaxed text-slate-900">
-                                {selectedTurn.structuredDiagnosis.trim()}
-                              </p>
-                            </div>
-                          ) : null}
-                          {selectedTurn.keyImagingFindings?.trim() ? (
-                            <div className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                Key imaging findings
-                              </p>
-                              <p className="mt-2 text-sm leading-relaxed text-slate-900">
-                                {selectedTurn.keyImagingFindings.trim()}
-                              </p>
-                            </div>
-                          ) : null}
-                        </div>
-                      </article>
-                    ) : null}
 
                     {isHistoryTab && selectedHistoryFeedback ? (
                       <article

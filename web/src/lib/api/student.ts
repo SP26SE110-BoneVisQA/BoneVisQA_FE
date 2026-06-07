@@ -298,11 +298,10 @@ function mapStudentCaseCatalog(row: unknown): StudentCaseCatalogItem | null {
   const categoryName =
     pickStringAny(item, ['categoryName', 'CategoryName', 'category', 'Category']) ?? '';
   const boneLocation =
-    pickStringAny(item, ['location', 'boneLocation', 'regionName', 'bone_location']) ?? '';
+    pickStringAny(item, ['boneLocation', 'BoneLocation', 'location', 'regionName', 'bone_location']) ?? '';
   const lesionType =
-    pickStringAny(item, ['lesionType', 'lesion_type', 'caseType']) ??
-    (categoryName || 'Unknown lesion');
-  const location = boneLocation || categoryName || 'Unknown location';
+    pickStringAny(item, ['lesionType', 'LesionType', 'lesion_type', 'caseType']) ?? categoryName;
+  const location = boneLocation || categoryName;
   const { tier, label: difficultyLabel } = normalizeCatalogDifficultyLabel(
     item.difficulty ?? item.level ?? item.Difficulty,
   );
@@ -389,6 +388,21 @@ function parseCatalogDetailImages(item: Record<string, unknown>): StudentCatalog
   return out;
 }
 
+function parseStringListField(raw: unknown): string[] | undefined {
+  if (Array.isArray(raw)) {
+    const out = raw.map((x) => String(x ?? '').trim()).filter(Boolean);
+    return out.length ? out : undefined;
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    const out = raw
+      .split(/[\n•;]/g)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return out.length ? out : undefined;
+  }
+  return undefined;
+}
+
 function mapStudentCaseCatalogDetail(row: unknown): StudentCaseCatalogDetail | null {
   if (!row || typeof row !== 'object') return null;
   const base = mapStudentCaseCatalog(row);
@@ -417,17 +431,69 @@ function mapStudentCaseCatalogDetail(row: unknown): StudentCaseCatalogDetail | n
   }
 
   const diagnosis =
-    pickStringAny(item, ['diagnosis', 'Diagnosis', 'structuredDiagnosis', 'StructuredDiagnosis']) ??
-    undefined;
+    pickStringAny(item, [
+      'diagnosis',
+      'Diagnosis',
+      'structuredDiagnosis',
+      'StructuredDiagnosis',
+      'suggestedMainDiagnosis',
+      'SuggestedMainDiagnosis',
+      'suggestedDiagnosis',
+      'SuggestedDiagnosis',
+    ]) ?? undefined;
+
+  const expertName =
+    pickStringAny(item, [
+      'expertName',
+      'ExpertName',
+      'validatedByName',
+      'ValidatedByName',
+      'createdByExpertName',
+      'CreatedByExpertName',
+    ]) ?? undefined;
+
+  const clinicalDescription =
+    pickStringAny(item, ['clinicalDescription', 'ClinicalDescription']) ??
+    (typeof item.description === 'string' ? item.description : undefined);
+
+  const studentQuestion = pickStringAny(item, ['studentQuestion', 'StudentQuestion']) ?? undefined;
+
+  const referencesAndCitations =
+    pickStringAny(item, ['referencesAndCitations', 'ReferencesAndCitations']) ?? undefined;
+
+  const reflectiveQuestions = parseStringListField(
+    item.reflectiveQuestions ?? item.ReflectiveQuestions,
+  );
+
+  const differentialDiagnoses = parseStringListField(
+    item.differentialDiagnoses ??
+      item.DifferentialDiagnoses ??
+      item.differentialDiagnosesList ??
+      item.DifferentialDiagnosesList,
+  );
+
+  const boneLocationDetail =
+    pickStringAny(item, ['boneLocation', 'BoneLocation', 'location', 'regionName', 'bone_location']) ??
+    base.location;
+  const lesionTypeDetail =
+    pickStringAny(item, ['lesionType', 'LesionType', 'lesion_type', 'caseType']) ??
+    base.lesionType ??
+    categoryName;
 
   return {
     ...base,
     imageUrl: base.imageUrl ?? (item.primaryImageUrl != null ? String(item.primaryImageUrl) : undefined),
-    location: base.location || categoryName || 'Unknown location',
-    lesionType:
-      pickStringAny(item, ['lesionType', 'lesion_type', 'caseType']) ?? (categoryName || base.lesionType),
+    location: boneLocationDetail || categoryName || base.location,
+    lesionType: lesionTypeDetail,
     categoryDisplay: categoryName || base.categoryDisplay,
     description: item.description != null ? String(item.description) : undefined,
+    clinicalDescription,
+    studentQuestion,
+    expertName,
+    suggestedDiagnosis: diagnosis,
+    differentialDiagnoses,
+    referencesAndCitations,
+    reflectiveQuestions,
     expertSummary:
       item.expertSummary != null
         ? String(item.expertSummary)

@@ -769,7 +769,19 @@ function normalizeLectStudentQuestionDto(raw: unknown): LectStudentQuestionDto |
         ? { questionCoordinates }
         : {}),
       structuredDiagnosis: String(t.structuredDiagnosis ?? t.StructuredDiagnosis ?? '').trim() || null,
+      suggestedMainDiagnosis:
+        String(
+          t.suggestedMainDiagnosis ??
+            t.SuggestedMainDiagnosis ??
+            t.structuredDiagnosis ??
+            t.StructuredDiagnosis ??
+            t.diagnosis ??
+            t.Diagnosis ??
+            '',
+        ).trim() || null,
       keyImagingFindings: String(t.keyImagingFindings ?? t.KeyImagingFindings ?? '').trim() || null,
+      referencesAndCitations:
+        String(t.referencesAndCitations ?? t.ReferencesAndCitations ?? '').trim() || null,
       diagnosis: String(
         t.diagnosis ?? t.Diagnosis ?? t.suggestedDiagnosis ?? t.SuggestedDiagnosis ?? '',
       ).trim(),
@@ -786,7 +798,9 @@ function normalizeLectStudentQuestionDto(raw: unknown): LectStudentQuestionDto |
             .filter(Boolean),
       differentialDiagnoses: Array.isArray(t.differentialDiagnoses)
         ? t.differentialDiagnoses.map((x) => String(x))
-        : [],
+        : Array.isArray(t.differentialDiagnosesList)
+          ? t.differentialDiagnosesList.map((x) => String(x))
+          : [],
       citations: Array.isArray(t.citations)
         ? t.citations
             .map((entry) => {

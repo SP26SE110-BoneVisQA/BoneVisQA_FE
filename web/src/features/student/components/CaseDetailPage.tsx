@@ -14,7 +14,7 @@ import {
 } from '@/features/student/queries/use-student-case-detail';
 import { getQueryErrorMessage } from '@/lib/query-utils';
 import type { StudentCaseCatalogDetail, StudentCatalogCaseImage } from '@/lib/api/types';
-import { AlertCircle, BookOpen, ChevronRight } from 'lucide-react';
+import { AlertCircle, BookOpen, ChevronRight, UserRound } from 'lucide-react';
 import { isNextImageRemoteOptimized } from '@/lib/images/remote-image';
 import { resolveApiAssetUrl } from '@/lib/api/client';
 import { isValidNormalizedBoundingBox } from '@/lib/utils/annotations';
@@ -25,6 +25,41 @@ function catalogImagesForDisplay(item: StudentCaseCatalogDetail): StudentCatalog
     return [{ imageUrl: item.imageUrl.trim(), roiBoundingBox: null }];
   }
   return [];
+}
+
+function CaseDetailSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mt-4 first:mt-0">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+      <div className="mt-1.5 text-sm leading-relaxed text-card-foreground">{children}</div>
+    </div>
+  );
+}
+
+function CaseDetailList({ items }: { items: string[] }) {
+  return (
+    <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
+function expertAttributionLabel(item: StudentCaseCatalogDetail): string {
+  const name = item.expertName?.trim();
+  if (name) {
+    return item.caseOrigin === 'communityPromoted'
+      ? `Approved by ${name}`
+      : `Created by ${name}`;
+  }
+  return item.caseOrigin === 'communityPromoted' ? 'From Community Request' : 'Created by Expert';
 }
 
 export function CaseDetailPage() {
@@ -39,12 +74,24 @@ export function CaseDetailPage() {
   const qaHref = `/student/visual-qa/workspace?caseId=${encodeURIComponent(caseId)}&flow=catalog`;
 
   const lockAskAi = Boolean(item?.communityReferenceOnly);
-  const originLabel =
-    item?.caseOrigin === 'communityPromoted' ? 'From Community Request' : 'Created by Expert';
+  const isCommunity = item?.caseOrigin === 'communityPromoted';
+  const attributionLabel = item ? expertAttributionLabel(item) : '';
 
   const notFound = Boolean(error && isCaseDetailNotFound(error));
   const errorMessage =
     error && !notFound ? getQueryErrorMessage(error, 'Failed to load case detail.') : null;
+
+  const locationChip = item?.location?.trim();
+  const lesionChip = item?.lesionType?.trim();
+
+  const mainDiagnosis =
+    item?.suggestedDiagnosis?.trim() || item?.diagnosis?.trim() || '';
+  const clinicalText =
+    item?.clinicalDescription?.trim() ||
+    (isCommunity ? '' : item?.description?.trim()) ||
+    '';
+  const descriptionText =
+    !isCommunity && item?.description?.trim() ? item.description.trim() : '';
 
   return (
     <DetailPageLayout
@@ -77,8 +124,9 @@ export function CaseDetailPage() {
             <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <BookOpen className="h-4 w-4 text-primary" />
               <span>Medical images</span>
-              <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold normal-case text-foreground">
-                {originLabel}
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold normal-case text-foreground">
+                {item.expertName?.trim() ? <UserRound className="h-3 w-3" aria-hidden /> : null}
+                {attributionLabel}
               </span>
             </div>
             {displayImages.length === 0 ? (
@@ -122,68 +170,99 @@ export function CaseDetailPage() {
               </div>
             )}
           </section>
+
           <section className="space-y-4">
             <article className="rounded-xl border border-border bg-card p-5">
               <h2 className="text-xl font-semibold text-card-foreground">{item.title}</h2>
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                  {item.location}
-                </span>
-                <span className="rounded-full bg-cyan-accent/10 px-2.5 py-1 text-xs font-medium text-cyan-accent">
-                  {item.lesionType}
-                </span>
-                <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-                  {item.difficultyLabel}
-                </span>
+                {locationChip ? (
+                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                    {locationChip}
+                  </span>
+                ) : null}
+                {lesionChip ? (
+                  <span className="rounded-full bg-cyan-accent/10 px-2.5 py-1 text-xs font-medium text-cyan-accent">
+                    {lesionChip}
+                  </span>
+                ) : null}
+                {item.difficultyLabel ? (
+                  <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+                    {item.difficultyLabel}
+                  </span>
+                ) : null}
+                {item.categoryDisplay?.trim() ? (
+                  <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {item.categoryDisplay.trim()}
+                  </span>
+                ) : null}
               </div>
-              {item.description ? (
-                <div className="mt-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Description
-                  </h3>
-                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.description}</p>
-                </div>
-              ) : null}
-              {item.diagnosis?.trim() ? (
-                <div className="mt-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Diagnosis
-                  </h3>
-                  <p className="mt-1 text-sm font-medium leading-relaxed text-card-foreground">
-                    {item.diagnosis.trim()}
-                  </p>
-                </div>
-              ) : null}
-            </article>
 
-            <article className="rounded-xl border border-border bg-card p-5">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Expert-approved metadata
-              </h3>
-              <p className="mt-2 text-sm text-card-foreground">
-                {item.expertSummary || 'No expert summary provided.'}
-              </p>
+              {isCommunity && clinicalText ? (
+                <CaseDetailSection title="Clinical description">
+                  <p className="text-muted-foreground">{clinicalText}</p>
+                </CaseDetailSection>
+              ) : null}
+
+              {!isCommunity && descriptionText ? (
+                <CaseDetailSection title="Description">
+                  <p className="text-muted-foreground">{descriptionText}</p>
+                </CaseDetailSection>
+              ) : null}
+
+              {isCommunity && item.studentQuestion?.trim() ? (
+                <CaseDetailSection title="Student question">
+                  <p className="text-muted-foreground">{item.studentQuestion.trim()}</p>
+                </CaseDetailSection>
+              ) : null}
+
+              {mainDiagnosis ? (
+                <CaseDetailSection title="Suggested main diagnosis">
+                  <p className="font-medium text-card-foreground">{mainDiagnosis}</p>
+                </CaseDetailSection>
+              ) : null}
+
+              {item.differentialDiagnoses && item.differentialDiagnoses.length > 0 ? (
+                <CaseDetailSection title="Differential diagnoses">
+                  <CaseDetailList items={item.differentialDiagnoses} />
+                </CaseDetailSection>
+              ) : null}
+
               {item.keyFindings && item.keyFindings.length > 0 ? (
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                  {item.keyFindings.map((finding, index) => (
-                    <li key={`${finding}-${index}`}>{finding}</li>
-                  ))}
-                </ul>
+                <CaseDetailSection title="Key imaging findings">
+                  <CaseDetailList items={item.keyFindings} />
+                </CaseDetailSection>
               ) : null}
+
+              {item.reflectiveQuestions && item.reflectiveQuestions.length > 0 ? (
+                <CaseDetailSection title="Reflective questions">
+                  <CaseDetailList items={item.reflectiveQuestions} />
+                </CaseDetailSection>
+              ) : null}
+
+              {isCommunity && item.referencesAndCitations?.trim() ? (
+                <CaseDetailSection title="References & citations">
+                  <p className="whitespace-pre-wrap text-muted-foreground">
+                    {item.referencesAndCitations.trim()}
+                  </p>
+                </CaseDetailSection>
+              ) : null}
+
+              {item.expertSummary?.trim() &&
+              !mainDiagnosis &&
+              !(item.keyFindings && item.keyFindings.length > 0) ? (
+                <CaseDetailSection title="Expert summary">
+                  <p className="text-muted-foreground">{item.expertSummary.trim()}</p>
+                </CaseDetailSection>
+              ) : null}
+
               {item.keyLearningPoints && item.keyLearningPoints.length > 0 ? (
-                <div className="mt-4">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Key learning points
-                  </h4>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-card-foreground">
-                    {item.keyLearningPoints.map((pt, index) => (
-                      <li key={`${pt}-${index}`}>{pt}</li>
-                    ))}
-                  </ul>
-                </div>
+                <CaseDetailSection title="Key learning points">
+                  <CaseDetailList items={item.keyLearningPoints} />
+                </CaseDetailSection>
               ) : null}
+
               {item.approvedAt ? (
-                <p className="mt-3 text-xs text-muted-foreground">Approved at: {item.approvedAt}</p>
+                <p className="mt-4 text-xs text-muted-foreground">Approved at: {item.approvedAt}</p>
               ) : null}
             </article>
 

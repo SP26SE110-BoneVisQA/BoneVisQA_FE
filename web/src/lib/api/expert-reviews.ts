@@ -739,47 +739,81 @@ export interface PromoteExpertReviewPayload {
   categoryId?: string;
   categoryName?: string;
   difficulty: string;
-  /** Tên tag, phân tách bởi expert UI. */
-  tagNames: string[];
-  /** Mô tả case = chẩn đoán có cấu trúc từ AI (theo nghiệp vụ promote). */
+  /** Preferred — UUID tags from GET /api/expert/tags. */
+  tagIds: string[];
+  /** Fallback when tagIds unavailable (legacy BE). */
+  tagNames?: string[];
+  /** Clinical narrative for learners (publish form). */
+  clinicalDescription?: string;
+  /** Main case description / clinical context stored on case. */
   description: string;
-  /** Gợi ý chẩn đoán trên case = phần differential từ AI. */
+  /** Suggested main diagnosis from expert override. */
+  suggestedMainDiagnosis?: string;
+  /** BE field name — differential diagnoses (newline-separated). */
   suggestedDiagnosis: string;
-  /** Key findings trên case = findings / key imaging từ AI. */
+  differentialDiagnoses?: string[];
+  /** Key imaging findings on case. */
   keyFindings: string;
   reflectiveQuestions: string;
+  studentQuestion?: string;
+  referencesAndCitations?: string;
   /** ROI / annotation theo từng turn (JSON tuỳ BE). */
   turnAnnotations?: Array<Record<string, unknown>>;
+}
+
+export interface PromoteExpertReviewResult {
+  caseId: string | null;
+  categoryName?: string;
+  difficulty?: string;
+  tagNames?: string[];
 }
 
 export async function promoteExpertReview(
   sessionId: string,
   payload: PromoteExpertReviewPayload,
-): Promise<string | null> {
+): Promise<PromoteExpertReviewResult> {
   const id = String(sessionId ?? '').trim();
   if (!id) throw new Error('Session id is required.');
   const title = String(payload.title ?? '').trim();
   const difficulty = String(payload.difficulty ?? '').trim();
-  const tagNames = Array.isArray(payload.tagNames) ? payload.tagNames.map((t) => String(t).trim()).filter(Boolean) : [];
+  const tagIds = Array.isArray(payload.tagIds)
+    ? payload.tagIds.map((t) => String(t).trim()).filter(Boolean)
+    : [];
+  const tagNames = Array.isArray(payload.tagNames)
+    ? payload.tagNames.map((t) => String(t).trim()).filter(Boolean)
+    : [];
+  const differentialDiagnoses = Array.isArray(payload.differentialDiagnoses)
+    ? payload.differentialDiagnoses.map((t) => String(t).trim()).filter(Boolean)
+    : [];
   const body: Record<string, unknown> = {
     title,
     categoryId: payload.categoryId?.trim() || undefined,
     categoryName: payload.categoryName?.trim() || undefined,
     difficulty,
-    tagNames,
+    tagIds,
+    tagNames: tagNames.length > 0 ? tagNames : undefined,
+    clinicalDescription: payload.clinicalDescription?.trim() || undefined,
     description: String(payload.description ?? '').trim(),
+    suggestedMainDiagnosis: payload.suggestedMainDiagnosis?.trim() || undefined,
     suggestedDiagnosis: String(payload.suggestedDiagnosis ?? '').trim(),
+    differentialDiagnoses: differentialDiagnoses.length > 0 ? differentialDiagnoses : undefined,
     keyFindings: String(payload.keyFindings ?? '').trim(),
     reflectiveQuestions: String(payload.reflectiveQuestions ?? '').trim(),
+    studentQuestion: payload.studentQuestion?.trim() || undefined,
+    referencesAndCitations: payload.referencesAndCitations?.trim() || undefined,
     CategoryId: payload.categoryId?.trim() || undefined,
     CategoryName: payload.categoryName?.trim() || undefined,
-    TagNames: tagNames,
+    TagIds: tagIds,
+    TagNames: tagNames.length > 0 ? tagNames : undefined,
   };
   if (Array.isArray(payload.turnAnnotations) && payload.turnAnnotations.length > 0) {
     body.turnAnnotations = payload.turnAnnotations;
   }
   if (!title || !difficulty) {
     throw new Error('Title and difficulty are required to publish to the library.');
+  }
+  if (tagIds.length === 0 && tagNames.length === 0) {
+    throw new Error('Select at least one tag before publishing to the library.');
   }
   if (!body.description || !body.suggestedDiagnosis || !body.keyFindings || !body.reflectiveQuestions) {
     throw new Error('AI-mapped case fields (description, differential, findings, reflective questions) are required.');
@@ -788,30 +822,32 @@ export async function promoteExpertReview(
     const { data } = await http.post<unknown>(`/api/expert/reviews/${encodeURIComponent(id)}/promote`, body, {
       headers: { 'Content-Type': 'application/json' },
     });
-    if (!data || typeof data !== 'object') return null;
+    if (!data || typeof data !== 'object') return { caseId: null };
     const record = data as Record<string, unknown>;
+    const nestedData = record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : null;
+    const nestedResult =
+      record.result && typeof record.result === 'object' ? (record.result as Record<string, unknown>) : null;
+    const source = nestedData ?? nestedResult ?? record;
     const direct =
-      record.promotedCaseId ??
-      record.PromotedCaseId ??
-      record.caseId ??
-      record.CaseId ??
+      source.promotedCaseId ??
+      source.PromotedCaseId ??
+      source.caseId ??
+      source.CaseId ??
       null;
-    if (direct != null) return String(direct);
-    const nestedData = record.data;
-    if (nestedData && typeof nestedData === 'object') {
-      const nested = nestedData as Record<string, unknown>;
-      const nestedId =
-        nested.promotedCaseId ?? nested.PromotedCaseId ?? nested.caseId ?? nested.CaseId ?? null;
-      if (nestedId != null) return String(nestedId);
-    }
-    const nestedResult = record.result;
-    if (nestedResult && typeof nestedResult === 'object') {
-      const nested = nestedResult as Record<string, unknown>;
-      const nestedId =
-        nested.promotedCaseId ?? nested.PromotedCaseId ?? nested.caseId ?? nested.CaseId ?? null;
-      if (nestedId != null) return String(nestedId);
-    }
-    return null;
+    const tagNamesResponse = source.tagNames ?? source.TagNames;
+    return {
+      caseId: direct != null ? String(direct) : null,
+      categoryName:
+        source.categoryName != null
+          ? String(source.categoryName)
+          : source.CategoryName != null
+            ? String(source.CategoryName)
+            : undefined,
+      difficulty: source.difficulty != null ? String(source.difficulty) : undefined,
+      tagNames: Array.isArray(tagNamesResponse)
+        ? tagNamesResponse.map((t) => String(t).trim()).filter(Boolean)
+        : undefined,
+    };
   } catch (e) {
     if (axios.isAxiosError(e) && (e.response?.status === 409 || e.response?.status === 412)) {
       throw new Error(REVIEW_WORKFLOW_CONFLICT);

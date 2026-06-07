@@ -15,7 +15,7 @@ import type {
   NormalizedImageBoundingBox,
   VisualQaReport,
 } from '@/lib/api/types';
-import type { ExpertCategory } from '@/lib/api/expert-cases';
+import type { ExpertCategory, ExpertTag } from '@/lib/api/expert-cases';
 import { resolveApiAssetUrl } from '@/lib/api/client';
 import { putExpertReviewDraft } from '@/lib/api/expert-reviews';
 import { isValidNormalizedBoundingBox } from '@/lib/utils/annotations';
@@ -104,22 +104,31 @@ function isTerminal(status: string) {
 
 function PromoteClinicalReadiness({
   clinicalDescription,
+  mainDiagnosis,
   differential,
   keyImaging,
   reflective,
+  references,
+  studentQuestion,
 }: {
   clinicalDescription: string;
+  mainDiagnosis: string;
   differential: string;
   keyImaging: string;
   reflective: string;
+  references: string;
+  studentQuestion: string;
 }) {
   const rows = [
-    { label: 'Clinical description', ok: Boolean(clinicalDescription.trim()) },
-    { label: 'Differential diagnoses', ok: Boolean(differential.trim()) },
-    { label: 'Key imaging findings', ok: Boolean(keyImaging.trim()) },
-    { label: 'Reflective questions', ok: Boolean(reflective.trim()) },
+    { label: 'Clinical description', ok: Boolean(clinicalDescription.trim()), required: true },
+    { label: 'Student question', ok: Boolean(studentQuestion.trim()), required: true },
+    { label: 'Suggested main diagnosis', ok: Boolean(mainDiagnosis.trim()), required: true },
+    { label: 'Differential diagnoses', ok: Boolean(differential.trim()), required: true },
+    { label: 'Key imaging findings', ok: Boolean(keyImaging.trim()), required: true },
+    { label: 'Reflective questions', ok: Boolean(reflective.trim()), required: true },
+    { label: 'References & citations', ok: Boolean(references.trim()), required: false },
   ];
-  const allReady = rows.every((row) => row.ok);
+  const allReady = rows.filter((row) => row.required).every((row) => row.ok);
   return (
     <div
       className={`rounded-xl border px-3 py-3 text-xs ${
@@ -230,10 +239,14 @@ function EvidencePanel({
 
 function ReportSections({ report }: { report: VisualQaReport }) {
   const imagingLines = splitLearningBullets(report.keyImagingFindings ?? undefined);
+  const differentialLines =
+    report.differentialDiagnoses?.length > 0
+      ? report.differentialDiagnoses
+      : report.keyFindings;
   const reflectiveText = reflectiveQuestionsToEditText(report, null);
   const hasStructured =
     Boolean(report.suggestedDiagnosis?.trim()) ||
-    report.keyFindings.length > 0 ||
+    differentialLines.length > 0 ||
     imagingLines.length > 0 ||
     Boolean(reflectiveText.trim());
 
@@ -241,7 +254,7 @@ function ReportSections({ report }: { report: VisualQaReport }) {
     return (
       <section>
         <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-900">
-          Structured diagnosis (AI)
+          Suggested main diagnosis
         </h4>
         <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-4 text-sm leading-relaxed text-slate-900 shadow-sm">
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ ...markdownExternalLinkComponents }}>
@@ -257,20 +270,20 @@ function ReportSections({ report }: { report: VisualQaReport }) {
       {report.suggestedDiagnosis ? (
         <section>
           <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-900">
-            Structured diagnosis (AI)
+            Suggested main diagnosis
           </h4>
           <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-4 shadow-sm">
             <p className="text-base font-semibold leading-relaxed text-slate-900">{report.suggestedDiagnosis}</p>
           </div>
         </section>
       ) : null}
-      {report.keyFindings.length > 0 ? (
+      {differentialLines.length > 0 ? (
         <section>
           <h4 className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-900">
-            Differential / key points (AI)
+            Differential diagnoses
           </h4>
           <ul className="space-y-3 rounded-xl border border-slate-300 bg-white px-4 py-4 text-sm font-medium text-slate-900 shadow-sm">
-            {report.keyFindings.map((k, i) => (
+            {differentialLines.map((k, i) => (
               <li key={i} className="flex items-start gap-3">
                 <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-900" />
                 <span>{k}</span>
@@ -346,7 +359,7 @@ function ReportWorkbench({
     <div className="space-y-4">
       <section className="rounded-xl border border-slate-300 bg-slate-50 p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h4 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-900">Structured diagnosis (AI)</h4>
+          <h4 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-900">Suggested main diagnosis</h4>
           <button
             type="button"
             onClick={onBeginEdit}
@@ -367,7 +380,7 @@ function ReportWorkbench({
 
       <section className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
         <h4 className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-900">
-          Differential / key points (AI)
+          Differential diagnoses
         </h4>
         <textarea
           value={keyText}
@@ -380,7 +393,7 @@ function ReportWorkbench({
       </section>
 
       <section className="rounded-xl border border-slate-300 bg-blue-50/90 p-4 shadow-sm">
-        <h4 className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-900">Key imaging findings (SEPS)</h4>
+        <h4 className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-900">Key imaging findings</h4>
         <p className="mb-2 text-xs font-medium text-slate-800">
           Radiology-focused teaching points. Use line breaks or semicolons for separate bullets.
         </p>
@@ -396,7 +409,7 @@ function ReportWorkbench({
 
       <section className="rounded-xl border border-slate-300 bg-amber-50 p-4 shadow-sm">
         <h4 className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-900">
-          Reflective questions (SEPS)
+          Reflective questions
         </h4>
         <p className="mb-2 text-xs font-medium text-slate-800">
           Prompts for learner self-assessment before you resolve this case.
@@ -438,15 +451,20 @@ export type ExpertReviewWorkspaceProps = {
   libraryTitle: string;
   libraryCategoryId: string;
   libraryDifficulty: string;
-  libraryTagsCsv: string;
+  libraryTagIds: string[];
   libraryAnatomySite?: string;
   libraryModality?: string;
   libraryClinicalDescription: string;
   categories: ExpertCategory[];
+  tags: ExpertTag[];
+  studentQuestion: string;
+  mainDiagnosis: string;
+  differentialText: string;
+  referencesText: string;
   onLibraryTitleChange: (v: string) => void;
   onLibraryCategoryIdChange: (v: string) => void;
   onLibraryDifficultyChange: (v: string) => void;
-  onLibraryTagsCsvChange: (v: string) => void;
+  onLibraryTagIdsChange: (v: string[]) => void;
   onLibraryClinicalDescriptionChange: (v: string) => void;
 };
 
@@ -473,18 +491,37 @@ export function ExpertReviewWorkspace({
   libraryTitle,
   libraryCategoryId,
   libraryDifficulty,
-  libraryTagsCsv,
+  libraryTagIds,
   libraryAnatomySite,
   libraryModality,
   libraryClinicalDescription,
   categories,
+  tags,
+  studentQuestion,
+  mainDiagnosis,
+  differentialText,
+  referencesText,
   onLibraryTitleChange,
   onLibraryCategoryIdChange,
   onLibraryDifficultyChange,
-  onLibraryTagsCsvChange,
+  onLibraryTagIdsChange,
   onLibraryClinicalDescriptionChange,
 }: ExpertReviewWorkspaceProps) {
   const [correctedRoi, setCorrectedRoi] = useState<NormalizedImageBoundingBox | null>(null);
+
+  const toggleLibraryTag = (tagId: string) => {
+    const next = libraryTagIds.includes(tagId)
+      ? libraryTagIds.filter((id) => id !== tagId)
+      : [...libraryTagIds, tagId];
+    onLibraryTagIdsChange(next);
+  };
+
+  const tagsByType = tags.reduce<Record<string, ExpertTag[]>>((acc, tag) => {
+    const type = tag.type?.trim() || 'Other';
+    if (!acc[type]) acc[type] = [];
+    acc[type].push(tag);
+    return acc;
+  }, {});
 
   useEffect(() => {
     if (pairMismatch || saving) return;
@@ -670,9 +707,12 @@ export function ExpertReviewWorkspace({
           <CardContent className="space-y-4">
             <PromoteClinicalReadiness
               clinicalDescription={libraryClinicalDescription}
-              differential={keyText}
+              mainDiagnosis={mainDiagnosis}
+              differential={differentialText}
               keyImaging={keyImagingEdit}
               reflective={reflectiveEdit}
+              references={referencesText}
+              studentQuestion={studentQuestion}
             />
             <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1">
@@ -748,15 +788,53 @@ export function ExpertReviewWorkspace({
               </select>
             </label>
             <label className="space-y-1 sm:col-span-2">
-              <span className="text-xs font-semibold text-slate-800">Tags (comma-separated) <span className="text-red-600">*</span></span>
-              <input
-                type="text"
-                value={libraryTagsCsv}
-                onChange={(e) => onLibraryTagsCsvChange(e.target.value)}
-                disabled={pairMismatch}
-                placeholder="e.g. fracture, pediatric, follow-up"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60"
+              <span className="text-xs font-semibold text-slate-800">Student question</span>
+              <textarea
+                value={studentQuestion}
+                disabled
+                rows={3}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm opacity-80"
               />
+            </label>
+            <label className="space-y-1 sm:col-span-2">
+              <span className="text-xs font-semibold text-slate-800">
+                Tags <span className="text-red-600">*</span>
+              </span>
+              {tags.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-600">
+                  No tags loaded from the database.
+                </p>
+              ) : (
+                <div className="max-h-48 space-y-3 overflow-y-auto rounded-lg border border-slate-300 bg-white p-3 shadow-sm">
+                  {Object.entries(tagsByType).map(([type, group]) => (
+                    <div key={type}>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        {type}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {group.map((tag) => {
+                          const selected = libraryTagIds.includes(tag.id);
+                          return (
+                            <button
+                              key={tag.id}
+                              type="button"
+                              disabled={pairMismatch}
+                              onClick={() => toggleLibraryTag(tag.id)}
+                              className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                                selected
+                                  ? 'border-emerald-700 bg-emerald-100 text-emerald-950'
+                                  : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              {tag.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </label>
             </div>
           </CardContent>

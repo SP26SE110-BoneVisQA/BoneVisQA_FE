@@ -209,8 +209,6 @@ export default function ExpertDashboardPage() {
                           caseOrigin={caseItem.caseOrigin}
                           addedBy={caseItem.addedBy}
                           addedDate={caseItem.addedDate}
-                          viewCount={caseItem.viewCount}
-                          usageCount={caseItem.usageCount}
                         />
                       ))
                     )}

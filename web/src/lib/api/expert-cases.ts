@@ -494,12 +494,17 @@ function parseCreatedCaseId(data: unknown): string | undefined {
   if (data == null) return undefined;
   if (typeof data === 'string' && data.trim()) return data.trim();
   const row = data as Record<string, unknown>;
+  const nestedData = row.data as Record<string, unknown> | undefined;
   const nested = row.result as Record<string, unknown> | undefined;
   const id =
     row.caseId ??
     row.CaseId ??
     row.id ??
     row.Id ??
+    nestedData?.caseId ??
+    nestedData?.CaseId ??
+    nestedData?.id ??
+    nestedData?.Id ??
     nested?.id ??
     nested?.Id ??
     nested?.caseId ??
@@ -679,6 +684,7 @@ export async function deleteExpertCaseTag(payload: { caseId: string; tagId: stri
 export interface ExpertTag {
   id: string;
   name: string;
+  type?: string | null;
 }
 
 export async function fetchExpertTags(pageIndex = 1, pageSize = 100): Promise<ExpertTag[]> {
@@ -693,6 +699,7 @@ export async function fetchExpertTags(pageIndex = 1, pageSize = 100): Promise<Ex
     return list.map((t: any) => ({
       id: String(t.id ?? t.Id ?? ''),
       name: String(t.name ?? t.Name ?? t.tagName ?? t.TagName ?? 'Unknown Tag'),
+      type: t.type != null ? String(t.type ?? t.Type ?? '') : t.Type != null ? String(t.Type) : null,
     }));
   } catch (e) {
     throw new Error(getApiErrorMessage(e));

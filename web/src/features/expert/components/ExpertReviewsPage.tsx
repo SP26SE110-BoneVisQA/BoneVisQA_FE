@@ -28,7 +28,7 @@ import {
   promoteExpertReview,
   resolveExpertReview,
 } from '@/lib/api/expert-reviews';
-import { fetchExpertCategories, type ExpertCategory } from '@/lib/api/expert-cases';
+import { fetchExpertCategories, fetchExpertTags, type ExpertCategory, type ExpertTag } from '@/lib/api/expert-cases';
 import type { ExpertReviewItem } from '@/lib/api/types';
 import { getWorkflowStatusMeta, normalizeWorkflowStatus } from '@/lib/visual-qa-workflow';
 import { toast as sonnerToast } from 'sonner';
@@ -181,11 +181,12 @@ function prefillLibraryFieldsFromItem(
     setLibraryTitle: (v: string) => void;
     setLibraryCategoryId: (v: string) => void;
     setLibraryDifficulty: (v: string) => void;
-    setLibraryTagsCsv: (v: string) => void;
+    setLibraryTagIds: (v: string[]) => void;
     setLibraryAnatomySite: (v: string) => void;
     setLibraryModality: (v: string) => void;
     setLibraryClinicalDescription: (v: string) => void;
   },
+  tags: ExpertTag[],
 ): void {
   const derived = deriveExpertCaseFormPrefillFromDicom(item.dicomMetadata);
   const metadataTags = buildMetadataTagCandidates(item);
@@ -196,7 +197,7 @@ function prefillLibraryFieldsFromItem(
   setters.setLibraryTitle(seedTitleBase.slice(0, 200));
   setters.setLibraryCategoryId('');
   setters.setLibraryDifficulty('intermediate');
-  setters.setLibraryTagsCsv(metadataTags.join(', '));
+  setters.setLibraryTagIds(resolveTagIdsFromNames(metadataTags, tags));
   setters.setLibraryAnatomySite(derived.anatomySite);
   setters.setLibraryModality(derived.modality);
   const clinicalSeed =
@@ -205,6 +206,30 @@ function prefillLibraryFieldsFromItem(
     item.report.diagnosis?.trim() ||
     '';
   setters.setLibraryClinicalDescription(clinicalSeed);
+}
+
+function formatReferencesFromReviewItem(item: ExpertReviewItem): string {
+  const citations = item.citations ?? [];
+  if (citations.length === 0) return '';
+  return citations
+    .map((c) => {
+      const parts = [c.sourceText?.trim(), c.referenceUrl?.trim()].filter(Boolean);
+      if (c.pageNumber != null) parts.push(`p.${c.pageNumber}`);
+      return parts.join(' — ');
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function resolveTagIdsFromNames(tagNames: string[], tags: ExpertTag[]): string[] {
+  if (tagNames.length === 0 || tags.length === 0) return [];
+  const byName = new Map(tags.map((tag) => [tag.name.trim().toLowerCase(), tag.id]));
+  const ids: string[] = [];
+  for (const name of tagNames) {
+    const id = byName.get(name.trim().toLowerCase());
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }
 
 function buildMetadataTagCandidates(item: ExpertReviewItem): string[] {
@@ -232,27 +257,27 @@ function buildPromotePayload(
     libraryTitle: string;
     libraryCategoryId: string;
     libraryDifficulty: string;
-    libraryTagsCsv: string;
+    libraryTagIds: string[];
     libraryClinicalDescription: string;
     categories: ExpertCategory[];
+    tags: ExpertTag[];
   },
 ): PromoteExpertReviewPayload {
   const catId = ctx.libraryCategoryId.trim();
   const cat = ctx.categories.find((c) => c.id === catId);
-  const tagNames = ctx.libraryTagsCsv
-    .split(/[,;]/)
+  const tagIds = ctx.libraryTagIds.filter(Boolean);
+  const tagNames = tagIds
+    .map((id) => ctx.tags.find((tag) => tag.id === id)?.name ?? '')
+    .filter(Boolean);
+  const mainDiagnosis = structuredDiagnosisForPromote(item, ctx.diag, true);
+  const differentialLines = ctx.keyText
+    .split('\n')
     .map((s) => s.trim())
     .filter(Boolean);
+  const differentialText =
+    differentialLines.join('\n') || joinDifferentialFromReport(item);
   const description =
-    ctx.libraryClinicalDescription.trim() ||
-    item.report.answerText?.trim() ||
-    structuredDiagnosisForPromote(item, ctx.diag, true);
-  const suggestedDiagnosis =
-    ctx.keyText
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .join('\n') || joinDifferentialFromReport(item);
+    ctx.libraryClinicalDescription.trim() || mainDiagnosis || item.report.answerText?.trim() || '';
   const keyFindings =
     ctx.keyImagingEdit.trim() || joinKeyImagingFindings(item, ctx.keyImagingEdit, true);
   const reflectiveQuestions =
@@ -264,11 +289,17 @@ function buildPromotePayload(
     categoryId: catId || undefined,
     categoryName: cat?.name ?? (catId || undefined),
     difficulty: ctx.libraryDifficulty.trim() || 'intermediate',
-    tagNames,
+    tagIds,
+    tagNames: tagNames.length > 0 ? tagNames : undefined,
+    clinicalDescription: ctx.libraryClinicalDescription.trim() || undefined,
     description,
-    suggestedDiagnosis,
+    suggestedMainDiagnosis: mainDiagnosis || undefined,
+    suggestedDiagnosis: differentialText,
+    differentialDiagnoses: differentialLines.length > 0 ? differentialLines : undefined,
     keyFindings,
     reflectiveQuestions,
+    studentQuestion: item.question?.trim() || firstStudentQuestion(item) || undefined,
+    referencesAndCitations: formatReferencesFromReviewItem(item) || undefined,
     turnAnnotations: collectTurnAnnotationsForPromote(item),
   };
 }
@@ -276,7 +307,9 @@ function buildPromotePayload(
 function validatePromotePayload(payload: PromoteExpertReviewPayload): string | null {
   if (!payload.title.trim()) return 'Enter a library case title before promoting.';
   if (!payload.categoryId) return 'Select a category for the library case.';
-  if (!payload.tagNames.length) return 'Enter at least one tag (comma-separated).';
+  if (!payload.tagIds.length && !(payload.tagNames?.length ?? 0)) {
+    return 'Select at least one tag before promoting.';
+  }
   if (!payload.description.trim()) return 'Enter a clinical description before promoting.';
   if (!payload.suggestedDiagnosis.trim()) {
     return 'Enter differential diagnoses before promoting.';
@@ -325,7 +358,7 @@ export function ExpertReviewsPage() {
   const [libraryTitle, setLibraryTitle] = useState('');
   const [libraryCategoryId, setLibraryCategoryId] = useState('');
   const [libraryDifficulty, setLibraryDifficulty] = useState('intermediate');
-  const [libraryTagsCsv, setLibraryTagsCsv] = useState('');
+  const [libraryTagIds, setLibraryTagIds] = useState<string[]>([]);
   const [libraryAnatomySite, setLibraryAnatomySite] = useState('');
   const [libraryModality, setLibraryModality] = useState('');
   const [libraryClinicalDescription, setLibraryClinicalDescription] = useState('');
@@ -334,6 +367,13 @@ export function ExpertReviewsPage() {
     queryKey: queryKeys.expert.caseMeta(),
     queryFn: fetchExpertCategories,
   });
+
+  const tagsQuery = useQuery({
+    queryKey: [...queryKeys.expert.caseMeta(), 'tags'],
+    queryFn: () => fetchExpertTags(1, 500),
+    staleTime: 60_000,
+  });
+  const expertTags = tagsQuery.data ?? [];
 
   const load = useCallback(async () => {
     const result = await queueQuery.refetch();
@@ -417,16 +457,20 @@ export function ExpertReviewsPage() {
       setReflectiveEdit,
     });
     setExpanded(item.id);
-    prefillLibraryFieldsFromItem(item, {
-      setLibraryTitle,
-      setLibraryCategoryId,
-      setLibraryDifficulty,
-      setLibraryTagsCsv,
-      setLibraryAnatomySite,
-      setLibraryModality,
-      setLibraryClinicalDescription,
-    });
-  }, []);
+    prefillLibraryFieldsFromItem(
+      item,
+      {
+        setLibraryTitle,
+        setLibraryCategoryId,
+        setLibraryDifficulty,
+        setLibraryTagIds,
+        setLibraryAnatomySite,
+        setLibraryModality,
+        setLibraryClinicalDescription,
+      },
+      expertTags,
+    );
+  }, [expertTags]);
 
   useEffect(() => {
     const focus = searchParams.get('focus')?.trim();
@@ -466,15 +510,18 @@ export function ExpertReviewsPage() {
     }
     const derived = deriveExpertCaseFormPrefillFromDicom(item.dicomMetadata);
     const metadataTags = buildMetadataTagCandidates(item);
-    const effectiveLibraryTagsCsv = libraryTagsCsv.trim() ? libraryTagsCsv : metadataTags.join(', ');
+    let effectiveLibraryTagIds = libraryTagIds.filter(Boolean);
+    if (effectiveLibraryTagIds.length === 0) {
+      effectiveLibraryTagIds = resolveTagIdsFromNames(metadataTags, expertTags);
+      if (effectiveLibraryTagIds.length > 0) {
+        setLibraryTagIds(effectiveLibraryTagIds);
+      }
+    }
     if (!libraryAnatomySite && derived.anatomySite) {
       setLibraryAnatomySite(derived.anatomySite);
     }
     if (!libraryModality && derived.modality) {
       setLibraryModality(derived.modality);
-    }
-    if (!libraryTagsCsv.trim() && effectiveLibraryTagsCsv) {
-      setLibraryTagsCsv(effectiveLibraryTagsCsv);
     }
     const promotePayload = buildPromotePayload(item, {
       diag,
@@ -484,9 +531,10 @@ export function ExpertReviewsPage() {
       libraryTitle,
       libraryCategoryId,
       libraryDifficulty,
-      libraryTagsCsv: effectiveLibraryTagsCsv,
+      libraryTagIds: effectiveLibraryTagIds,
       libraryClinicalDescription,
       categories: expertCategories,
+      tags: expertTags,
     });
     const validationError = validatePromotePayload(promotePayload);
     if (validationError) {
@@ -636,15 +684,20 @@ export function ExpertReviewsPage() {
       libraryTitle={libraryTitle}
       libraryCategoryId={libraryCategoryId}
       libraryDifficulty={libraryDifficulty}
-      libraryTagsCsv={libraryTagsCsv}
+      libraryTagIds={libraryTagIds}
       libraryAnatomySite={libraryAnatomySite}
       libraryModality={libraryModality}
       libraryClinicalDescription={libraryClinicalDescription}
       categories={expertCategories}
+      tags={expertTags}
+      studentQuestion={firstStudentQuestion(item)}
+      mainDiagnosis={diag}
+      differentialText={keyText}
+      referencesText={formatReferencesFromReviewItem(item)}
       onLibraryTitleChange={setLibraryTitle}
       onLibraryCategoryIdChange={setLibraryCategoryId}
       onLibraryDifficultyChange={setLibraryDifficulty}
-      onLibraryTagsCsvChange={setLibraryTagsCsv}
+      onLibraryTagIdsChange={setLibraryTagIds}
       onLibraryClinicalDescriptionChange={setLibraryClinicalDescription}
     />
   );

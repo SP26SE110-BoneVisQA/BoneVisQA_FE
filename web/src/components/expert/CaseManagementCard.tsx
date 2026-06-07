@@ -23,8 +23,6 @@ interface CaseManagementCardProps {
   caseOrigin: CaseLibraryOrigin;
   addedBy: string;
   addedDate: string;
-  viewCount: number;
-  usageCount: number;
   thumbnailUrl?: string | null;
 }
 
@@ -69,8 +67,6 @@ export default function CaseManagementCard({
   caseOrigin,
   addedBy,
   addedDate,
-  viewCount,
-  usageCount,
   thumbnailUrl,
 }: CaseManagementCardProps) {
   const toast = useToast();
@@ -150,24 +146,18 @@ export default function CaseManagementCard({
           </span>
         </div>
 
-        <div className="mt-auto grid grid-cols-2 gap-3 rounded-lg border border-border bg-muted/30 p-3">
-          {shouldShowExpertAttribution(addedBy) ? (
-            <div>
-              <p className="text-xs text-muted-foreground">Expert</p>
-              <p className="truncate text-sm font-medium text-card-foreground">{addedBy}</p>
+        <div className="mt-auto rounded-lg border border-border bg-muted/30 p-3">
+          <div className="grid grid-cols-2 gap-3">
+            {shouldShowExpertAttribution(addedBy) ? (
+              <div>
+                <p className="text-xs text-muted-foreground">Expert</p>
+                <p className="truncate text-sm font-medium text-card-foreground">{addedBy}</p>
+              </div>
+            ) : null}
+            <div className={shouldShowExpertAttribution(addedBy) ? undefined : 'col-span-2'}>
+              <p className="text-xs text-muted-foreground">Created</p>
+              <p className="text-sm font-medium text-card-foreground">{dateLabel}</p>
             </div>
-          ) : null}
-          <div className={shouldShowExpertAttribution(addedBy) ? undefined : 'col-span-2'}>
-            <p className="text-xs text-muted-foreground">Created</p>
-            <p className="text-sm font-medium text-card-foreground">{dateLabel}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Views</p>
-            <p className="text-sm font-medium text-card-foreground">{viewCount}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Usage</p>
-            <p className="text-sm font-medium text-card-foreground">{usageCount}×</p>
           </div>
         </div>
 
