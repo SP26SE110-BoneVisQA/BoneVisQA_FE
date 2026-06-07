@@ -1,3 +1,4 @@
+import { inferCaseLibraryOrigin, type CaseLibraryOrigin } from '@/lib/case-origin';
 import { http, getApiErrorMessage } from './client';
 
 export interface ExpertDashboardStats {
@@ -26,7 +27,9 @@ export interface ExpertRecentCase {
   boneLocation: string;
   lesionType: string;
   difficulty: 'basic' | 'intermediate' | 'advanced';
+  /** @deprecated Prefer `caseOrigin`. */
   status: 'approved' | 'pending' | 'draft';
+  caseOrigin: CaseLibraryOrigin;
   addedBy: string;
   addedDate: string;
   viewCount: number;
@@ -147,6 +150,7 @@ function mapRecentCase(row: unknown): ExpertRecentCase | null {
     ),
     difficulty: mapDifficulty(item.difficulty ?? item.Difficulty),
     status: mapRecentCaseStatus(item),
+    caseOrigin: inferCaseLibraryOrigin(item),
     addedBy,
     addedDate: addedRaw,
     viewCount: Number(item.viewCount ?? item.ViewCount ?? 0),

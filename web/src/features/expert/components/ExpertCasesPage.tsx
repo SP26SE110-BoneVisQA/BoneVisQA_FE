@@ -11,30 +11,30 @@ import CreateExpertCaseModal from '@/components/expert/cases/CreateExpertCaseMod
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useExpertCaseLibrary, type ExpertCaseLibraryResponse } from '@/features/expert/queries/use-expert-cases';
+import type { ExpertCaseOrigin } from '@/lib/api/expert-cases';
 import { queryKeys } from '@/lib/query-keys';
 import { getQueryErrorMessage } from '@/lib/query-utils';
 import { FolderOpen, Plus, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
-type StatusTab = 'all' | 'pending' | 'approved' | 'draft' | 'rejected';
+type OriginTab = 'all' | ExpertCaseOrigin;
 
 const ITEMS_PER_PAGE = 6;
 
 export function ExpertCasesPage() {
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
-  const casesQuery = useExpertCaseLibrary({ pageIndex: 1, pageSize: 1000 }); // Fetch all cases for client-side pagination
-  const [activeTab, setActiveTab] = useState<StatusTab>('all');
+  const casesQuery = useExpertCaseLibrary({ pageIndex: 1, pageSize: 1000 });
+  const [activeTab, setActiveTab] = useState<OriginTab>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [assetsCaseId, setAssetsCaseId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
-  // Extract cases from the paginated response
   const casesData: ExpertCaseLibraryResponse | undefined = casesQuery.data;
   const allCases = casesData?.items ?? [];
 
-  // Client-side pagination
   const filtered = useMemo(() => {
-    const byTab = activeTab === 'all' ? allCases : allCases.filter((c) => c.status === activeTab);
+    const byTab =
+      activeTab === 'all' ? allCases : allCases.filter((c) => c.caseOrigin === activeTab);
     const q = query.trim().toLowerCase();
     if (!q) return byTab;
     return byTab.filter((c) => c.title.toLowerCase().includes(q));
@@ -45,8 +45,7 @@ export function ExpertCasesPage() {
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedCases = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  // Reset to page 1 when tab or search changes
-  const handleTabChange = (tab: StatusTab) => {
+  const handleTabChange = (tab: OriginTab) => {
     setActiveTab(tab);
     setCurrentPage(1);
   };
@@ -63,14 +62,11 @@ export function ExpertCasesPage() {
     }
   };
 
-  // Calculate counts from ALL cases (not just current page)
   const counts = useMemo(
     () => ({
       all: allCases.length,
-      pending: allCases.filter((c) => c.status === 'pending').length,
-      approved: allCases.filter((c) => c.status === 'approved').length,
-      draft: allCases.filter((c) => c.status === 'draft').length,
-      rejected: allCases.filter((c) => c.status === 'rejected').length,
+      expertCreated: allCases.filter((c) => c.caseOrigin === 'expertCreated').length,
+      fromStudentRequest: allCases.filter((c) => c.caseOrigin === 'fromStudentRequest').length,
     }),
     [allCases],
   );
@@ -96,7 +92,8 @@ export function ExpertCasesPage() {
         toolbar={
           <div className="space-y-4">
             <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
-              Escalated student reviews are handled in{' '}
+              Cases you create or publish from student reviews appear here and in your students&apos; class
+              library immediately. Escalated reviews are handled in{' '}
               <Link href="/expert/reviews" className="font-medium text-primary hover:underline">
                 Expert review
               </Link>
@@ -105,11 +102,9 @@ export function ExpertCasesPage() {
             <div className="flex flex-wrap gap-2">
               {(
                 [
-                  ['all', 'All', counts.all],
-                  ['pending', 'Pending', counts.pending],
-                  ['approved', 'Approved', counts.approved],
-                  ['draft', 'Draft', counts.draft],
-                  ['rejected', 'Rejected', counts.rejected],
+                  ['all', 'All cases', counts.all],
+                  ['expertCreated', 'Created by you', counts.expertCreated],
+                  ['fromStudentRequest', 'From student requests', counts.fromStudentRequest],
                 ] as const
               ).map(([id, label, count]) => (
                 <button
@@ -141,7 +136,12 @@ export function ExpertCasesPage() {
         {filtered.length === 0 && !casesQuery.isPending ? (
           <EmptyState
             icon={<FolderOpen className="h-6 w-6 text-primary" />}
-            title="No cases in this tab"
+            title={activeTab === 'all' ? 'No cases yet' : 'No cases in this tab'}
+            description={
+              activeTab === 'all'
+                ? 'Create a teaching case or publish one from an escalated student review.'
+                : 'Switch tabs or create a new case to populate this view.'
+            }
             action={
               <Button type="button" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4" />
@@ -159,8 +159,14 @@ export function ExpertCasesPage() {
                   title={item.title}
                   boneLocation={item.boneLocation}
                   lesionType={item.categoryName}
-                  difficulty={item.difficulty === 'Hard' ? 'advanced' : item.difficulty === 'Medium' ? 'intermediate' : 'basic'}
-                  status={item.status}
+                  difficulty={
+                    item.difficulty === 'Hard'
+                      ? 'advanced'
+                      : item.difficulty === 'Medium'
+                        ? 'intermediate'
+                        : 'basic'
+                  }
+                  caseOrigin={item.caseOrigin}
                   addedBy={item.addedBy}
                   addedDate={item.addedDate}
                   viewCount={0}

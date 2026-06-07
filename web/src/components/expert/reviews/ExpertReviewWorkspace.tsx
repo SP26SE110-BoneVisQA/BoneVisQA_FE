@@ -103,18 +103,18 @@ function isTerminal(status: string) {
 }
 
 function PromoteClinicalReadiness({
-  description,
+  clinicalDescription,
   differential,
   keyImaging,
   reflective,
 }: {
-  description: string;
+  clinicalDescription: string;
   differential: string;
   keyImaging: string;
   reflective: string;
 }) {
   const rows = [
-    { label: 'Main diagnosis (description)', ok: Boolean(description.trim()) },
+    { label: 'Clinical description', ok: Boolean(clinicalDescription.trim()) },
     { label: 'Differential diagnoses', ok: Boolean(differential.trim()) },
     { label: 'Key imaging findings', ok: Boolean(keyImaging.trim()) },
     { label: 'Reflective questions', ok: Boolean(reflective.trim()) },
@@ -441,11 +441,13 @@ export type ExpertReviewWorkspaceProps = {
   libraryTagsCsv: string;
   libraryAnatomySite?: string;
   libraryModality?: string;
+  libraryClinicalDescription: string;
   categories: ExpertCategory[];
   onLibraryTitleChange: (v: string) => void;
   onLibraryCategoryIdChange: (v: string) => void;
   onLibraryDifficultyChange: (v: string) => void;
   onLibraryTagsCsvChange: (v: string) => void;
+  onLibraryClinicalDescriptionChange: (v: string) => void;
 };
 
 export function ExpertReviewWorkspace({
@@ -474,11 +476,13 @@ export function ExpertReviewWorkspace({
   libraryTagsCsv,
   libraryAnatomySite,
   libraryModality,
+  libraryClinicalDescription,
   categories,
   onLibraryTitleChange,
   onLibraryCategoryIdChange,
   onLibraryDifficultyChange,
   onLibraryTagsCsvChange,
+  onLibraryClinicalDescriptionChange,
 }: ExpertReviewWorkspaceProps) {
   const [correctedRoi, setCorrectedRoi] = useState<NormalizedImageBoundingBox | null>(null);
 
@@ -665,7 +669,7 @@ export function ExpertReviewWorkspace({
           </CardHeader>
           <CardContent className="space-y-4">
             <PromoteClinicalReadiness
-              description={diag}
+              clinicalDescription={libraryClinicalDescription}
               differential={keyText}
               keyImaging={keyImagingEdit}
               reflective={reflectiveEdit}
@@ -698,6 +702,19 @@ export function ExpertReviewWorkspace({
                 value={libraryTitle}
                 onChange={(e) => onLibraryTitleChange(e.target.value)}
                 disabled={pairMismatch}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60"
+              />
+            </label>
+            <label className="space-y-1 sm:col-span-2">
+              <span className="text-xs font-semibold text-slate-800">
+                Clinical description <span className="text-red-600">*</span>
+              </span>
+              <textarea
+                value={libraryClinicalDescription}
+                onChange={(e) => onLibraryClinicalDescriptionChange(e.target.value)}
+                disabled={pairMismatch}
+                rows={4}
+                placeholder="Summary for learners — clinical context, presentation, and teaching focus"
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60"
               />
             </label>

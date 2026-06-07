@@ -10,7 +10,6 @@ import {
   readAndClearSessionPrefillImage,
   VisualQaSessionHistorySidebar,
 } from '@/components/student/VisualQaSessionHistorySidebar';
-import { PageLoadingSkeleton } from '@/components/shared/DashboardSkeletons';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { resolveStudyImageSrc } from '@/lib/api/visual-qa';
 import { showApiErrorToast } from '@/lib/api/errors/show-api-error-toast';
@@ -412,9 +411,7 @@ export function WorkspacePageClient() {
 
   if (bootLoading && turns.length === 0 && !querySessionId) {
     return (
-      <PageLoadingSkeleton className="min-h-full p-8">
-        <p className="text-sm text-muted-foreground">Opening workspace…</p>
-      </PageLoadingSkeleton>
+      <WorkspaceSessionLoadingOverlay visible message="Opening workspace…" variant="fullscreen" />
     );
   }
 

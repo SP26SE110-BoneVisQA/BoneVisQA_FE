@@ -98,7 +98,7 @@ export function ExpertCaseEditPage() {
       keyFindings: '',
       reflectiveQuestions: '',
       isActive: true,
-      isApproved: false,
+      isApproved: true,
       tagIds: [],
     },
   });
@@ -147,8 +147,8 @@ export function ExpertCaseEditPage() {
           createdByExpertId: expertId,
           description,
           difficulty: values.difficulty,
-          isApproved: values.isApproved,
-          isActive: values.isActive,
+          isApproved: true,
+          isActive: true,
           categoryId:
             resolveExpertCategoryIdForSubmit(values.categoryId, categories) ?? '',
           suggestedDiagnosis: values.suggestedDiagnosis.trim(),
@@ -359,15 +359,11 @@ export function ExpertCaseEditPage() {
                   <h3 className="mb-3 text-sm font-semibold text-card-foreground">Case Information</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-xs text-muted-foreground">Status</p>
-                      <p className="mt-1 font-medium">
-                        {caseData?.status === 'approved' ? (
-                          <span className="text-green-600">✓ Approved</span>
-                        ) : caseData?.status === 'pending' ? (
-                          <span className="text-amber-600">⏳ Pending Review</span>
-                        ) : (
-                          <span className="text-gray-500">Draft</span>
-                        )}
+                      <p className="text-xs text-muted-foreground">Source</p>
+                      <p className="mt-1 font-medium text-card-foreground">
+                        {caseData?.caseOrigin === 'fromStudentRequest'
+                          ? 'From student request'
+                          : 'Created by you'}
                       </p>
                     </div>
                     <div>
@@ -596,50 +592,10 @@ export function ExpertCaseEditPage() {
                       )}
                     />
 
-                    <div className="flex flex-wrap gap-6 rounded-lg border border-border bg-muted/30 p-4">
-                      <FormField
-                        control={form.control}
-                        name="isActive"
-                        render={({ field }) => (
-                          <FormItem className="flex items-center gap-3 space-y-0">
-                            <FormControl>
-                              <input
-                                type="checkbox"
-                                checked={field.value}
-                                onChange={(e) => field.onChange(e.target.checked)}
-                                disabled={busy}
-                                className="h-4 w-4 rounded border-border"
-                              />
-                            </FormControl>
-                            <div>
-                              <FormLabel className="font-medium">Active</FormLabel>
-                              <p className="text-xs text-muted-foreground">Visible to students</p>
-                            </div>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="isApproved"
-                        render={({ field }) => (
-                          <FormItem className="flex items-center gap-3 space-y-0">
-                            <FormControl>
-                              <input
-                                type="checkbox"
-                                checked={field.value}
-                                onChange={(e) => field.onChange(e.target.checked)}
-                                disabled={busy}
-                                className="h-4 w-4 rounded border-border"
-                              />
-                            </FormControl>
-                            <div>
-                              <FormLabel className="font-medium">Approved</FormLabel>
-                              <p className="text-xs text-muted-foreground">Ready for teaching use</p>
-                            </div>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                    <p className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs text-emerald-900">
+                      Saved changes are published immediately to your case library and to students in your supported
+                      classes.
+                    </p>
                   </div>
                 </div>
               </div>

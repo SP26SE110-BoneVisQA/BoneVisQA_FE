@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { buildAdminCasesColumns } from '@/features/admin/components/tables/admin-cases-columns';
 import { useAdminCasesPaged } from '@/features/admin/queries/use-admin-cases';
 import { getQueryErrorMessage } from '@/lib/query-utils';
-import { Search } from 'lucide-react';
+import { FolderOpen, RefreshCw, Search } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -32,8 +32,7 @@ export function AdminCasesPage() {
       (row) =>
         row.title.toLowerCase().includes(q) ||
         row.boneLocation.toLowerCase().includes(q) ||
-        row.lesionType.toLowerCase().includes(q) ||
-        row.status.toLowerCase().includes(q),
+        row.lesionType.toLowerCase().includes(q),
     );
   }, [rows, search]);
 
@@ -54,31 +53,48 @@ export function AdminCasesPage() {
         <Button
           type="button"
           variant="outline"
+          size="sm"
+          className="gap-1.5 shadow-sm"
+          disabled={casesQuery.isFetching}
           onClick={() =>
             void queryClient.invalidateQueries({
               queryKey: [...queryKeys.admin.all, 'cases'],
             })
           }
         >
+          <RefreshCw className={`h-4 w-4 ${casesQuery.isFetching ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       }
       toolbar={
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div className="relative max-w-md flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search cases on this page..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-2xl border border-border bg-gradient-to-br from-card via-card to-muted/20 p-4 shadow-sm">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10">
+              <FolderOpen className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Case library oversight</p>
+              <p className="mt-1">
+                Read-only view of published teaching cases. Experts own create, update, and delete; admins can browse and inspect details only.
+              </p>
+            </div>
           </div>
-          {totalCount > 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Page {displayPage} of {totalPages} · {totalCount} case{totalCount === 1 ? '' : 's'} total
-            </p>
-          ) : null}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative max-w-md flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-11 pl-9 shadow-sm"
+                placeholder="Search cases on this page..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {totalCount > 0 ? (
+              <p className="text-xs font-medium text-muted-foreground">
+                Page {displayPage} of {totalPages} · {totalCount} case{totalCount === 1 ? '' : 's'} total
+              </p>
+            ) : null}
+          </div>
         </div>
       }
     >

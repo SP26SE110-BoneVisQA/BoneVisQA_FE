@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
-import { Edit, Trash2, Eye, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Edit, Trash2, Eye, BookOpen, MessageSquareQuote } from 'lucide-react';
+import { caseOriginLabel, type CaseLibraryOrigin } from '@/lib/case-origin';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { resolveApiAssetUrl } from '@/lib/api/client';
@@ -19,7 +20,7 @@ interface CaseManagementCardProps {
   boneLocation: string;
   lesionType: string;
   difficulty: 'basic' | 'intermediate' | 'advanced';
-  status: 'draft' | 'pending' | 'approved' | 'rejected';
+  caseOrigin: CaseLibraryOrigin;
   addedBy: string;
   addedDate: string;
   viewCount: number;
@@ -27,26 +28,19 @@ interface CaseManagementCardProps {
   thumbnailUrl?: string | null;
 }
 
-const statusConfig = {
-  draft: {
-    color: 'border-border bg-muted/60 text-muted-foreground',
-    icon: Clock,
-    label: 'Draft',
+const originConfig: Record<
+  CaseLibraryOrigin,
+  { color: string; icon: typeof BookOpen; label: string }
+> = {
+  expertCreated: {
+    color: 'border-violet-300/50 bg-violet-50 text-violet-800',
+    icon: BookOpen,
+    label: caseOriginLabel('expertCreated'),
   },
-  pending: {
-    color: 'border-warning/30 bg-warning/10 text-warning',
-    icon: AlertCircle,
-    label: 'Pending',
-  },
-  approved: {
-    color: 'border-success/30 bg-success/10 text-success',
-    icon: CheckCircle,
-    label: 'Approved',
-  },
-  rejected: {
-    color: 'border-destructive/30 bg-destructive/10 text-destructive',
-    icon: AlertCircle,
-    label: 'Rejected',
+  fromStudentRequest: {
+    color: 'border-sky-300/50 bg-sky-50 text-sky-800',
+    icon: MessageSquareQuote,
+    label: caseOriginLabel('fromStudentRequest'),
   },
 };
 
@@ -72,7 +66,7 @@ export default function CaseManagementCard({
   boneLocation,
   lesionType,
   difficulty,
-  status,
+  caseOrigin,
   addedBy,
   addedDate,
   viewCount,
@@ -84,8 +78,8 @@ export default function CaseManagementCard({
   const [deleting, setDeleting] = useState(false);
   const [imgError, setImgError] = useState(false);
 
-  const statusInfo = statusConfig[status];
-  const StatusIcon = statusInfo.icon;
+  const originInfo = originConfig[caseOrigin];
+  const OriginIcon = originInfo.icon;
   const dateLabel = formatCaseDateForDisplay(addedDate);
   const locLabel = boneLocation === '—' ? 'Not specified' : boneLocation;
   const catLabel = lesionType === '—' ? 'Uncategorized' : lesionType;
@@ -130,10 +124,10 @@ export default function CaseManagementCard({
       <div className="flex flex-col flex-1 p-4">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <span
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${originInfo.color}`}
           >
-            <StatusIcon className="h-3 w-3 shrink-0" aria-hidden />
-            {statusInfo.label}
+            <OriginIcon className="h-3 w-3 shrink-0" aria-hidden />
+            {originInfo.label}
           </span>
           <span
             className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${difficultyConfig[difficulty]}`}

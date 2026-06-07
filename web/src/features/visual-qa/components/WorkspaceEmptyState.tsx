@@ -84,7 +84,7 @@ export function WorkspaceEmptyState({ onUploaded }: Props) {
                 Upload DICOM
               </div>
               <h2 className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-3xl">
-                Start from your own DICOM archive or open a curated teaching case.
+                Start from your own DICOM archive
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
                 Upload a study archive to begin a private Visual QA session, or pick a featured case below.

@@ -13,9 +13,22 @@ export interface ModalProps {
   onClose: () => void;
   footer?: ReactNode;
   size?: 'md' | 'lg' | 'xl' | '2xl';
+  /** When false, overlay click and Escape do not close the dialog. */
+  dismissible?: boolean;
+  /** Keep dialog content mounted while closed (preserves nested form state). */
+  forceMount?: boolean;
 }
 
-export function Modal({ open, title, children, onClose, footer, size = 'md' }: ModalProps) {
+export function Modal({
+  open,
+  title,
+  children,
+  onClose,
+  footer,
+  size = 'md',
+  dismissible = true,
+  forceMount = false,
+}: ModalProps) {
   const maxW =
     size === 'lg'
       ? 'max-w-2xl'
@@ -35,12 +48,19 @@ export function Modal({ open, title, children, onClose, footer, size = 'md' }: M
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            'fixed inset-0 z-[150] bg-background/80 backdrop-blur-sm',
+            'fixed inset-0 z-[150] bg-slate-950/45 backdrop-blur-md',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
           )}
         />
         <Dialog.Content
+          forceMount={forceMount || undefined}
+          onInteractOutside={(event) => {
+            if (!dismissible) event.preventDefault();
+          }}
+          onEscapeKeyDown={(event) => {
+            if (!dismissible) event.preventDefault();
+          }}
           className={cn(
             'fixed left-1/2 top-1/2 z-[151] flex max-h-[min(92vh,880px)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-border bg-card p-0 text-card-foreground shadow-xl outline-none',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',

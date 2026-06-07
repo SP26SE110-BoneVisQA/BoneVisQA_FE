@@ -1,14 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DetailPageLayout } from '@/components/layouts';
-import { DestructiveConfirmDialog } from '@/components/shared/DestructiveConfirmDialog';
-import { appToast } from '@/lib/api/errors/app-toast';
-import { deleteAdminCase, fetchAdminCaseDetail, updateAdminCase } from '@/lib/api/admin-cases';
+import { fetchAdminCaseDetail } from '@/lib/api/admin-cases';
+import { caseOriginLabel } from '@/lib/case-origin';
 import { resolveApiAssetUrl } from '@/lib/api/client';
-import type { ExpertCase, SaveExpertCaseInput } from '@/lib/api/expert-cases';
+import type { ExpertCase } from '@/lib/api/expert-cases';
 import {
   expertCaseToAdminDetailView,
   type CaseDetail,
@@ -18,8 +16,8 @@ import {
   ArrowLeft,
   CheckCircle,
   Clock,
-  EyeOff,
   XCircle,
+  EyeOff,
   Eye,
   BarChart3,
   Calendar,
@@ -29,35 +27,18 @@ import {
   ShieldCheck,
   ShieldAlert,
   AlertTriangle,
-  Trash2,
   ImageOff,
   X,
   FileImage,
   Info,
   Users,
   MessageSquare,
-  Send,
   Star,
   Loader2,
 } from 'lucide-react';
 
 type CaseStatus = CaseDetail['status'];
 type Difficulty = CaseDetail['difficulty'];
-
-function expertToSaveInput(c: ExpertCase): SaveExpertCaseInput {
-  return {
-    title: c.title,
-    createdByExpertId: c.createdByExpertId,
-    description: c.description,
-    difficulty: c.difficulty,
-    isApproved: c.isApproved,
-    isActive: c.isActive,
-    categoryId: c.categoryId,
-    suggestedDiagnosis: c.suggestedDiagnosis,
-    reflectiveQuestions: c.reflectiveQuestions,
-    keyFindings: c.keyFindings,
-  };
-}
 
 const mockCases: Record<string, CaseDetail> = {
   '1': {
@@ -186,18 +167,11 @@ const difficultyConfig: Record<Difficulty, { color: string; label: string }> = {
 
 export function AdminCaseDetailPage({ caseId }: { caseId: string }) {
   const id = caseId;
-  const router = useRouter();
-
   const initial = mockCases[id] || getDefaultCase(id);
   const [caseData, setCaseData] = useState<CaseDetail>(initial);
   const [sourceCase, setSourceCase] = useState<ExpertCase | null>(null);
   const [apiLoading, setApiLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<'approve' | 'hide' | 'delete' | null>(null);
-  const [reviewComment, setReviewComment] = useState('');
-  const [reviewRating, setReviewRating] = useState(0);
-  const [hoverRating, setHoverRating] = useState(0);
-  const [reviewAction, setReviewAction] = useState<Review['action']>('comment');
 
   useEffect(() => {
     let cancelled = false;
@@ -228,96 +202,11 @@ export function AdminCaseDetailPage({ caseId }: { caseId: string }) {
     };
   }, [id]);
 
-  const handleSubmitReview = () => {
-    if (!reviewComment.trim()) return;
-    const newReview: Review = {
-      id: `r-${Date.now()}`,
-      reviewer: 'Admin',
-      role: 'Admin',
-      date: new Date().toISOString().split('T')[0],
-      rating: reviewRating,
-      comment: reviewComment.trim(),
-      action: reviewAction,
-    };
-    setCaseData((prev) => ({ ...prev, reviews: [newReview, ...prev.reviews] }));
-    setReviewComment('');
-    setReviewRating(0);
-    setReviewAction('comment');
-  };
-
   const stConfig = statusConfig[caseData.status];
   const StIcon = stConfig.icon;
   const dConfig = difficultyConfig[caseData.difficulty];
   const privacyIssueImages = caseData.images.filter((img) => !img.anonymized);
-
-  const handleConfirm = async () => {
-    const d = dialog;
-    if (!d) return;
-
-    if (d === 'delete') {
-      if (sourceCase) {
-        try {
-          await deleteAdminCase(id);
-          appToast.success('Case deleted.');
-          router.push('/admin/cases');
-        } catch (e) {
-          appToast.error(e instanceof Error ? e.message : 'Delete failed.');
-        }
-        return;
-      }
-      router.push('/admin/cases');
-      return;
-    }
-
-    if (sourceCase && (d === 'approve' || d === 'hide')) {
-      try {
-        const base = expertToSaveInput(sourceCase);
-        const body =
-          d === 'approve'
-            ? { ...base, isApproved: true, isActive: true }
-            : { ...base, isActive: false };
-        await updateAdminCase(id, body);
-        const refreshed = await fetchAdminCaseDetail(id);
-        setSourceCase(refreshed);
-        setCaseData(expertCaseToAdminDetailView(refreshed));
-        appToast.success(d === 'approve' ? 'Case approved.' : 'Case deactivated (hidden).');
-      } catch (e) {
-        appToast.error(e instanceof Error ? e.message : 'Update failed.');
-      }
-      return;
-    }
-
-    if (d === 'approve') {
-      setCaseData((prev) => ({ ...prev, status: 'approved' }));
-    } else if (d === 'hide') {
-      setCaseData((prev) => ({ ...prev, status: 'hidden' }));
-    }
-    setDialog(null);
-  };
-
-  const dialogCopy =
-    dialog === 'approve'
-      ? {
-          title: 'Approve case',
-          description: `Approve "${caseData.title}"? Students will be able to view this case.`,
-          confirmLabel: 'Approve',
-          destructive: false,
-        }
-      : dialog === 'hide'
-        ? {
-            title: 'Hide case',
-            description: `Hide "${caseData.title}" from students? It will remain in the system but won't be visible.`,
-            confirmLabel: 'Hide case',
-            destructive: false,
-          }
-        : dialog === 'delete'
-          ? {
-              title: 'Delete case',
-              description: `Permanently delete "${caseData.title}"? This cannot be undone.`,
-              confirmLabel: 'Delete',
-              destructive: true,
-            }
-          : null;
+  const originLabel = sourceCase ? caseOriginLabel(sourceCase.caseOrigin) : null;
 
   return (
     <>
@@ -341,43 +230,15 @@ export function AdminCaseDetailPage({ caseId }: { caseId: string }) {
             </span>
           </div>
         ) : null}
-        {/* Back + Actions */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <Link
             href="/admin/cases"
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-card-foreground transition-colors"
+            className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-card-foreground"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Cases
           </Link>
-
-          <div className="flex items-center gap-2">
-            {caseData.status !== 'approved' && (
-              <button
-                onClick={() => setDialog('approve')}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-success text-white text-sm font-medium hover:bg-success/90 cursor-pointer transition-colors"
-              >
-                <CheckCircle className="w-4 h-4" />
-                Approve
-              </button>
-            )}
-            {(caseData.status === 'approved' || caseData.status === 'pending') && (
-              <button
-                onClick={() => setDialog('hide')}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-card-foreground hover:bg-input cursor-pointer transition-colors"
-              >
-                <EyeOff className="w-4 h-4" />
-                Hide
-              </button>
-            )}
-            <button
-              onClick={() => setDialog('delete')}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/50 text-sm font-medium text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
-          </div>
+          <p className="text-xs font-medium text-muted-foreground">Read-only · managed by experts</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -386,10 +247,16 @@ export function AdminCaseDetailPage({ caseId }: { caseId: string }) {
             {/* Title & Status */}
             <div className="bg-card rounded-xl border border-border p-6">
               <div className="flex flex-wrap items-center gap-2 mb-4">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${stConfig.bg} ${stConfig.color}`}>
-                  <StIcon className="w-3.5 h-3.5" />
-                  {stConfig.label}
-                </span>
+                {originLabel ? (
+                  <span className="inline-flex items-center gap-1.5 rounded bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                    {originLabel}
+                  </span>
+                ) : (
+                  <span className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium ${stConfig.bg} ${stConfig.color}`}>
+                    <StIcon className="h-3.5 w-3.5" />
+                    {stConfig.label}
+                  </span>
+                )}
                 <span className={`px-2.5 py-1 rounded text-xs font-medium ${dConfig.color}`}>
                   {dConfig.label}
                 </span>
@@ -433,85 +300,6 @@ export function AdminCaseDetailPage({ caseId }: { caseId: string }) {
                 <MessageSquare className="w-5 h-5 text-primary" />
                 Reviews ({caseData.reviews.length})
               </h3>
-
-              {/* Add Review Form */}
-              <div className="border border-border rounded-lg p-4 mb-5">
-                <p className="text-sm font-medium text-card-foreground mb-3">Add Review</p>
-
-                {/* Rating */}
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs text-muted-foreground">Rating:</span>
-                  <div className="flex items-center gap-0.5">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setReviewRating(star === reviewRating ? 0 : star)}
-                        onMouseEnter={() => setHoverRating(star)}
-                        onMouseLeave={() => setHoverRating(0)}
-                        className="cursor-pointer p-0.5"
-                      >
-                        <Star
-                          className={`w-4 h-4 transition-colors ${
-                            star <= (hoverRating || reviewRating)
-                              ? 'text-warning fill-warning'
-                              : 'text-muted-foreground/30'
-                          }`}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                  {reviewRating > 0 && (
-                    <span className="text-xs text-muted-foreground">{reviewRating}/5</span>
-                  )}
-                </div>
-
-                {/* Action */}
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {(
-                    [
-                      { value: 'comment', label: 'Comment', color: 'bg-primary/10 text-primary border-primary/30' },
-                      { value: 'approved', label: 'Approve', color: 'bg-success/10 text-success border-success/30' },
-                      { value: 'requested_changes', label: 'Request Changes', color: 'bg-warning/10 text-warning border-warning/30' },
-                      { value: 'rejected', label: 'Reject', color: 'bg-destructive/10 text-destructive border-destructive/30' },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setReviewAction(opt.value)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition-all ${
-                        reviewAction === opt.value
-                          ? `${opt.color} ring-1 ring-current`
-                          : 'border-border text-muted-foreground hover:bg-input'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Comment */}
-                <div className="flex gap-2">
-                  <textarea
-                    value={reviewComment}
-                    onChange={(e) => setReviewComment(e.target.value)}
-                    placeholder="Write your review comment..."
-                    rows={3}
-                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-input text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                  />
-                </div>
-                <div className="flex justify-end mt-3">
-                  <button
-                    onClick={handleSubmitReview}
-                    disabled={!reviewComment.trim()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Send className="w-4 h-4" />
-                    Submit Review
-                  </button>
-                </div>
-              </div>
 
               {/* Review History */}
               {caseData.reviews.length === 0 ? (
@@ -748,17 +536,6 @@ export function AdminCaseDetailPage({ caseId }: { caseId: string }) {
           </div>
         </div>
       </DetailPageLayout>
-
-      {dialogCopy ? (
-        <DestructiveConfirmDialog
-          open={Boolean(dialog)}
-          onOpenChange={(open) => !open && setDialog(null)}
-          title={dialogCopy.title}
-          confirmLabel={dialogCopy.confirmLabel}
-          destructive={dialogCopy.destructive}
-          onConfirm={handleConfirm}
-        />
-      ) : null}
     </>
   );
 }

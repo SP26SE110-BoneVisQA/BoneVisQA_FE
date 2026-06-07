@@ -15,11 +15,13 @@ import {
   normalizeIngestJobStatus,
   pollUntilIngestComplete,
 } from '@/lib/api/ingest-job-poll';
+import { inferCaseLibraryOrigin, type CaseLibraryOrigin } from '@/lib/case-origin';
 import { http, getApiErrorMessage } from './client';
 
 export type CaseDifficulty = 'Easy' | 'Medium' | 'Hard';
-/** Aligns with workbench cards: draft (inactive), pending, approved, rejected. */
+/** @deprecated Workflow statuses removed from UI — kept for legacy API mapping only. */
 export type CaseStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+export type ExpertCaseOrigin = CaseLibraryOrigin;
 
 /** Re-export from ontology module to avoid circular imports with visual-qa/dicom-metadata. */
 export {
@@ -39,7 +41,9 @@ export interface ExpertCase {
   title: string;
   categoryName: string;
   difficulty: CaseDifficulty;
+  /** @deprecated Prefer `caseOrigin` in UI. */
   status: CaseStatus;
+  caseOrigin: ExpertCaseOrigin;
   isApproved: boolean;
   isActive: boolean;
   addedBy: string;
@@ -346,6 +350,7 @@ export function mapCase(row: unknown): ExpertCase | null {
     categoryName: String(categoryNameRaw),
     difficulty: mapDifficulty(item.difficulty ?? record.caseDifficulty ?? record.difficulty ?? record.Difficulty),
     status: mapCaseListStatus(item, record),
+    caseOrigin: inferCaseLibraryOrigin(record),
     isApproved: Boolean(item.isApproved ?? item.approved ?? record.isApproved ?? record.approved ?? record.IsApproved),
     isActive: Boolean(item.isActive ?? item.active ?? record.isActive ?? record.active ?? record.IsActive),
     addedBy: addedByDisplay === '—' ? '' : addedByDisplay,
@@ -372,16 +377,34 @@ export interface ExpertCasePagedResponse {
   pageSize: number;
 }
 
+function unwrapExpertPagedBody(payload: unknown): Record<string, unknown> {
+  if (payload == null || typeof payload !== 'object') return {};
+  const root = payload as Record<string, unknown>;
+  const inner = (root.data ?? root.result ?? root) as Record<string, unknown>;
+  return inner && typeof inner === 'object' ? inner : {};
+}
+
+function unwrapExpertDetailPayload(payload: unknown): unknown {
+  if (payload == null || typeof payload !== 'object') return payload;
+  const row = payload as Record<string, unknown>;
+  return row.data ?? row.result ?? payload;
+}
+
 export async function fetchExpertCasesPaged(pageIndex = 1, pageSize = 5): Promise<ExpertCasePagedResponse> {
   try {
-    const { data } = await http.get<any>(`/api/expert/cases?pageIndex=${pageIndex}&pageSize=${pageSize}`);
-    const itemsRaw = data?.items ?? data?.result?.items ?? [];
-    const items = Array.isArray(itemsRaw) ? itemsRaw.map(mapCase).filter((item): item is ExpertCase => item !== null) : [];
+    const { data } = await http.get<unknown>(
+      `/api/expert/cases?pageIndex=${pageIndex}&pageSize=${pageSize}`,
+    );
+    const inner = unwrapExpertPagedBody(data);
+    const itemsRaw = inner.items ?? inner.Items ?? [];
+    const items = Array.isArray(itemsRaw)
+      ? itemsRaw.map(mapCase).filter((item): item is ExpertCase => item !== null)
+      : [];
     return {
       items,
-      totalCount: Number(data?.totalCount ?? data?.result?.totalCount ?? items.length),
-      pageIndex: Number(data?.pageIndex ?? data?.result?.pageIndex ?? pageIndex),
-      pageSize: Number(data?.pageSize ?? data?.result?.pageSize ?? pageSize),
+      totalCount: Number(inner.totalCount ?? inner.TotalCount ?? items.length),
+      pageIndex: Number(inner.pageIndex ?? inner.PageIndex ?? pageIndex),
+      pageSize: Number(inner.pageSize ?? inner.PageSize ?? pageSize),
     };
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
@@ -514,11 +537,7 @@ export async function createExpertCase(input: CreateExpertCaseJsonInput): Promis
 export async function fetchExpertCase(id: string): Promise<ExpertCase> {
   try {
     const { data } = await http.get<unknown>(`/api/expert/cases/${id}`);
-    const row =
-      data && typeof data === 'object' && 'result' in data
-        ? (data as { result: unknown }).result
-        : data;
-    const mapped = mapCase(row);
+    const mapped = mapCase(unwrapExpertDetailPayload(data));
     if (!mapped) throw new Error('Case not found or invalid response.');
     return mapped;
   } catch (e) {

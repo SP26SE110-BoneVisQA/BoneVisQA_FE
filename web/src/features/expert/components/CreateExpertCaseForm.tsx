@@ -179,7 +179,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
           createdByExpertId: expertId,
           description: payload.description ?? '',
           difficulty: values.difficulty,
-          isApproved: false,
+          isApproved: true,
           isActive: true,
           categoryId: categoryId ?? '',
           suggestedDiagnosis: payload.suggestedDiagnosis ?? '',

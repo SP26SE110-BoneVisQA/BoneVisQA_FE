@@ -7,13 +7,15 @@ import {
   type SaveExpertCaseInput,
 } from './expert-cases';
 
+import { inferCaseLibraryOrigin, type CaseLibraryOrigin } from '@/lib/case-origin';
+
 export interface AdminCaseRow {
   id: string;
   title: string;
   boneLocation: string;
   lesionType: string;
   difficulty: string;
-  status: string;
+  caseOrigin: CaseLibraryOrigin;
   createdAt: string;
 }
 
@@ -57,7 +59,7 @@ function mapCaseRow(row: unknown): AdminCaseRow {
         '—',
       ),
       difficulty: mapped.difficulty,
-      status: mapped.status,
+      caseOrigin: mapped.caseOrigin,
       createdAt: mapped.addedDate || asString((row as Record<string, unknown>).createdAt ?? (row as Record<string, unknown>).CreatedAt, ''),
     };
   }
@@ -68,7 +70,7 @@ function mapCaseRow(row: unknown): AdminCaseRow {
     boneLocation: asString(r.boneLocation ?? r.location ?? r.BoneLocation ?? r.Location, 'Unknown'),
     lesionType: asString(r.lesionType ?? r.type ?? r.LesionType ?? r.Type, 'Unknown'),
     difficulty: asString(r.difficulty ?? r.Difficulty, 'Unknown'),
-    status: asString(r.status ?? r.Status, 'Pending'),
+    caseOrigin: inferCaseLibraryOrigin(r),
     createdAt: asString(r.createdAt ?? r.uploadedAt ?? r.updatedAt ?? r.CreatedAt ?? r.UploadedAt, ''),
   };
 }

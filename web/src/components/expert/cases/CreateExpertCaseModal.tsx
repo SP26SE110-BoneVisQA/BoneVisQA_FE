@@ -11,7 +11,14 @@ type Props = {
 
 export default function CreateExpertCaseModal({ open, onClose, onCreated }: Props) {
   return (
-    <Modal open={open} onClose={onClose} title="Create teaching case" size="2xl">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Create teaching case"
+      size="2xl"
+      dismissible={false}
+      forceMount
+    >
       <CreateExpertCaseForm
         onCancel={onClose}
         onCreated={(caseId) => {

@@ -58,7 +58,7 @@ export default function ExpertDashboardPage() {
         iconColor: 'bg-warning/10 text-warning',
       },
       {
-        title: 'Approved This Month',
+        title: 'Published This Month',
         value: stats.approvedThisMonth.toString(),
         change: stats.approvedThisMonth,
         trend: 'up' as const,
@@ -77,10 +77,10 @@ export default function ExpertDashboardPage() {
   }, [stats]);
 
   const avgDailyReviews = activity?.avgDailyReviews.toFixed(1) ?? '0';
-  const [caseTab, setCaseTab] = useState<'all' | 'pending' | 'approved' | 'draft'>('all');
+  const [caseTab, setCaseTab] = useState<'all' | 'expertCreated' | 'fromStudentRequest'>('all');
   const filteredRecentCases = useMemo(() => {
     if (caseTab === 'all') return recentCases;
-    return recentCases.filter((item) => item.status === caseTab);
+    return recentCases.filter((item) => item.caseOrigin === caseTab);
   }, [caseTab, recentCases]);
 
   return (
@@ -160,14 +160,13 @@ export default function ExpertDashboardPage() {
                   <div
                     className="mb-4 flex flex-wrap gap-2 rounded-xl border border-border bg-muted/40 p-1"
                     role="tablist"
-                    aria-label="Case status tabs"
+                    aria-label="Case source tabs"
                   >
                     {(
                       [
                         ['all', 'All'],
-                        ['pending', 'Pending'],
-                        ['approved', 'Approved'],
-                        ['draft', 'Draft'],
+                        ['expertCreated', 'Created'],
+                        ['fromStudentRequest', 'From requests'],
                       ] as const
                     ).map(([id, label]) => (
                       <button
@@ -207,7 +206,7 @@ export default function ExpertDashboardPage() {
                           boneLocation={caseItem.boneLocation}
                           lesionType={caseItem.lesionType}
                           difficulty={caseItem.difficulty}
-                          status={caseItem.status}
+                          caseOrigin={caseItem.caseOrigin}
                           addedBy={caseItem.addedBy}
                           addedDate={caseItem.addedDate}
                           viewCount={caseItem.viewCount}

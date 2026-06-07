@@ -10,14 +10,14 @@ import { RectangleAnnotationOverlay } from '@/components/shared/RectangleAnnotat
 import { SkeletonBlock } from '@/components/shared/DashboardSkeletons';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
-import { fetchExpertCase, formatCaseDateForDisplay, type CaseStatus } from '@/lib/api/expert-cases';
+import { fetchExpertCase, formatCaseDateForDisplay } from '@/lib/api/expert-cases';
+import { caseOriginLabel } from '@/lib/case-origin';
 import { getApiProblemDetails, resolveApiAssetUrl } from '@/lib/api/client';
 import { parseNormalizedBoundingBox } from '@/lib/utils/annotations';
 import {
   Pencil,
-  CheckCircle,
-  Clock,
-  AlertCircle,
+  BookOpen,
+  MessageSquareQuote,
   Target,
   FileText,
   ImageIcon,
@@ -28,32 +28,6 @@ import {
   ChevronDown,
   ChevronRight
 } from 'lucide-react';
-
-const statusBadge: Record<
-  CaseStatus,
-  { label: string; className: string; Icon: typeof CheckCircle }
-> = {
-  draft: {
-    label: 'Draft',
-    className: 'bg-slate-100 text-slate-700 border-slate-200',
-    Icon: Clock,
-  },
-  pending: {
-    label: 'Pending Review',
-    className: 'bg-amber-50 text-amber-700 border-amber-200',
-    Icon: AlertCircle,
-  },
-  approved: {
-    label: 'Approved',
-    className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    Icon: CheckCircle,
-  },
-  rejected: {
-    label: 'Rejected',
-    className: 'bg-red-50 text-red-700 border-red-200',
-    Icon: AlertCircle,
-  },
-};
 
 // Accordion Section Component
 function AccordionSection({
@@ -120,8 +94,12 @@ export default function ExpertCaseDetailPage() {
     toast.error(combined);
   }, [error, errorMsg, toast]);
 
-  const st = caseRow ? statusBadge[caseRow.status] : null;
-  const StatusIcon = st?.Icon ?? Clock;
+  const originLabel = caseRow ? caseOriginLabel(caseRow.caseOrigin) : '';
+  const OriginIcon = caseRow?.caseOrigin === 'fromStudentRequest' ? MessageSquareQuote : BookOpen;
+  const originClass =
+    caseRow?.caseOrigin === 'fromStudentRequest'
+      ? 'border-sky-200 bg-sky-50 text-sky-800'
+      : 'border-violet-200 bg-violet-50 text-violet-800';
 
   if (isPending) {
     return (
@@ -163,12 +141,12 @@ export default function ExpertCaseDetailPage() {
         {/* Top action bar */}
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            {st && (
+            {caseRow && (
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${st.className}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${originClass}`}
               >
-                <StatusIcon className="h-3.5 w-3.5" aria-hidden />
-                {st.label}
+                <OriginIcon className="h-3.5 w-3.5" aria-hidden />
+                {originLabel}
               </span>
             )}
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-semibold">
