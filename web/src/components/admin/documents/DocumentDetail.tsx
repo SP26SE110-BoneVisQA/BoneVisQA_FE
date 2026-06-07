@@ -62,6 +62,44 @@ function asNonNegInt(value: unknown): number | undefined {
   return Math.floor(value);
 }
 
+function asProgressPct(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return Math.min(100, Math.max(0, value));
+}
+
+function mergeIndexingPhase(
+  next?: DocumentIndexingPhase | 0,
+  prev?: DocumentIndexingPhase | 0,
+): DocumentIndexingPhase | 0 | undefined {
+  if (next != null && next >= 1 && next <= 5) return next;
+  if (prev != null && prev >= 1 && prev <= 5) return prev;
+  return next ?? prev;
+}
+
+function mergeIngestionFields(
+  prev: IngestionSnapshot | null,
+  next: Omit<IngestionSnapshot, 'source'> & { source: IngestionSnapshot['source'] },
+): IngestionSnapshot {
+  const nextNorm = normalizeIndexingStatus(next.status);
+  const mergedError =
+    nextNorm === 'failed' ? next.errorMessage ?? prev?.errorMessage : undefined;
+
+  return {
+    source: next.source,
+    status: next.status ?? prev?.status,
+    currentPageIndexing: next.currentPageIndexing ?? prev?.currentPageIndexing,
+    totalPages: next.totalPages ?? prev?.totalPages,
+    totalChunks: next.totalChunks ?? prev?.totalChunks,
+    chunksProcessed: next.chunksProcessed ?? prev?.chunksProcessed,
+    currentOperation: next.currentOperation ?? prev?.currentOperation,
+    progressPercentage: asProgressPct(next.progressPercentage) ?? prev?.progressPercentage,
+    indexingPhase: mergeIndexingPhase(next.indexingPhase, prev?.indexingPhase),
+    phaseLabel: next.phaseLabel ?? prev?.phaseLabel,
+    phaseHint: next.phaseHint ?? prev?.phaseHint,
+    errorMessage: mergedError,
+  };
+}
+
 export default function DocumentDetail({ id }: { id: string }) {
   const [doc, setDoc] = useState<AdminDocumentDetail | null>(null);
   const [liveStatus, setLiveStatus] = useState<IngestionSnapshot | null>(null);
@@ -80,66 +118,52 @@ export default function DocumentDetail({ id }: { id: string }) {
         const prevNorm = prev ? normalizeIndexingStatus(prev.status) : null;
 
         if (!prev) {
+          const initial = mergeIngestionFields(null, next);
           if (nextNorm === 'completed') {
             return {
-              ...next,
+              ...initial,
               currentOperation: undefined,
               errorMessage: next.errorMessage?.trim() ? next.errorMessage : undefined,
-              progressPercentage: next.progressPercentage ?? 100,
+              progressPercentage: asProgressPct(next.progressPercentage) ?? 100,
             };
           }
-          return next;
+          return initial;
         }
 
         const prevCur = asNonNegInt(prev.currentPageIndexing) ?? 0;
         const nextCur = asNonNegInt(next.currentPageIndexing) ?? 0;
 
+        if (prevNorm === 'completed' && nextNorm !== 'failed' && next.source === 'signalr') {
+          return prev;
+        }
+
+        let merged = mergeIngestionFields(prev, next);
+
         if (next.source === 'rest' && prev.source === 'signalr' && prevCur > nextCur) {
-          const merged = {
-            ...next,
+          merged = {
+            ...merged,
             currentPageIndexing: prev.currentPageIndexing,
             source: prev.source,
           };
-          if (nextNorm === 'completed') {
-            return {
-              ...merged,
-              currentOperation: undefined,
-              errorMessage: next.errorMessage?.trim() ? next.errorMessage : undefined,
-              progressPercentage: next.progressPercentage ?? 100,
-            };
-          }
-          return merged;
         }
 
         if (next.source === 'signalr' && nextCur < prevCur) {
-          return {
-            ...next,
+          merged = {
+            ...merged,
             currentPageIndexing: prev.currentPageIndexing,
           };
         }
 
         if (nextNorm === 'completed') {
           return {
-            ...next,
+            ...merged,
             currentOperation: undefined,
             errorMessage: next.errorMessage?.trim() ? next.errorMessage : undefined,
-            progressPercentage: next.progressPercentage ?? 100,
+            progressPercentage: asProgressPct(next.progressPercentage) ?? merged.progressPercentage ?? 100,
           };
         }
 
-        if (prevNorm === 'completed' && nextNorm !== 'failed' && next.source === 'signalr') {
-          return prev;
-        }
-
-        const mergedError =
-          nextNorm === 'failed'
-            ? next.errorMessage ?? prev.errorMessage
-            : undefined;
-
-        return {
-          ...next,
-          errorMessage: mergedError,
-        };
+        return merged;
       });
     },
     [],
@@ -263,7 +287,7 @@ export default function DocumentDetail({ id }: { id: string }) {
         totalChunks: asNonNegInt(payload.totalChunks),
         chunksProcessed: asNonNegInt(payload.chunksProcessed),
         currentOperation: payload.operation,
-        progressPercentage: asNonNegInt(payload.progressPercentage),
+        progressPercentage: asProgressPct(payload.progressPercentage),
         indexingPhase: payload.indexingPhase,
         phaseLabel: payload.phaseLabel ?? payload.phase,
         phaseHint: payload.phase,
@@ -311,10 +335,14 @@ export default function DocumentDetail({ id }: { id: string }) {
 
   const interactionLocked = normalizedStatus === 'pending' || normalizedStatus === 'processing';
   const totalPages = liveStatus?.totalPages ?? doc?.totalPages ?? 0;
-  const totalChunks = liveStatus?.totalChunks ?? 0;
 
-  const overallProgress =
-    liveStatus?.progressPercentage ?? doc?.indexingProgressPercentage ?? 0;
+  const overallProgress = Math.min(
+    100,
+    Math.max(
+      0,
+      liveStatus?.progressPercentage ?? doc?.indexingProgressPercentage ?? 0,
+    ),
+  );
 
   const phaseModel = useMemo(() => {
     return computePhaseBars({
@@ -531,21 +559,19 @@ export default function DocumentDetail({ id }: { id: string }) {
                       <div className="flex items-center justify-between text-xs font-semibold text-sky-950">
                         <span>Overall progress</span>
                         <span className="tabular-nums text-muted-foreground">
-                          {Math.round(phaseModel.overallPct)}%
+                          {Math.round(overallProgress)}%
                         </span>
                       </div>
-                      <Progress value={phaseModel.overallPct} />
+                      <Progress value={overallProgress} />
                     </div>
                   )}
 
                   {INDEXING_PHASE_STEPS.map(({ key, label, phase }) => {
                     const pct = phaseBarValue(phaseModel, key);
-                    const isChunkPhase = phase === 4 || phase === 5;
-                    const chunksProcessed = liveStatus?.chunksProcessed ?? 0;
-                    const chunkDetail =
-                      isChunkPhase && totalChunks > 0
-                        ? ` (${chunksProcessed}/${totalChunks})`
-                        : '';
+                    const isActiveChunkPhase =
+                      (phase === 4 || phase === 5) &&
+                      phaseModel.activePhaseNumber === phase &&
+                      (normalizedStatus === 'processing' || normalizedStatus === 'pending');
 
                     return (
                       <div
@@ -559,18 +585,22 @@ export default function DocumentDetail({ id }: { id: string }) {
                         )}
                       >
                         <div className="flex items-center justify-between text-xs font-semibold text-sky-950">
-                          <span>
-                            {label}
-                            {chunkDetail}
-                          </span>
+                          <span>{label}</span>
                           <span className="tabular-nums text-muted-foreground">{pct}%</span>
                         </div>
                         <Progress value={pct} variant={barVariantFor(key)} />
+                        {isActiveChunkPhase && displayCurrentOperation ? (
+                          <p className="text-[10px] leading-snug text-muted-foreground">
+                            {displayCurrentOperation}
+                          </p>
+                        ) : null}
                       </div>
                     );
                   })}
 
-                  {displayCurrentOperation ? (
+                  {displayCurrentOperation &&
+                  phaseModel.activePhaseNumber !== 4 &&
+                  phaseModel.activePhaseNumber !== 5 ? (
                     <p className="rounded-lg border border-sky-100 bg-white/80 px-3 py-2 text-xs text-muted-foreground">
                       <span className="font-semibold text-foreground">Current operation: </span>
                       {displayCurrentOperation}
@@ -588,80 +618,65 @@ export default function DocumentDetail({ id }: { id: string }) {
               </Card>
 
               {normalizedStatus === 'failed' ? (
-                <div className="w-full space-y-3 text-left">
-                  <div className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
-                    <p className="font-semibold text-amber-950">Indexing failed</p>
-                    <p className="mt-1 text-amber-900/90">
-                      You can retry without re-uploading the file. Use Re-index to run the pipeline
-                      again on the existing PDF.
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        disabled={retryBusy}
-                        onClick={() => setReindexConfirmOpen(true)}
-                        className="rounded-xl"
-                      >
-                        {retryBusy ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4" />
-                        )}
-                        Retry indexing
-                      </Button>
-                    </div>
-                  </div>
-
+                <div
+                  role="alert"
+                  className="w-full rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-left text-sm text-destructive"
+                >
+                  <p className="font-semibold text-destructive">Indexing failed</p>
+                  <p className="mt-1 text-destructive/90">
+                    You can retry without re-uploading the file.
+                  </p>
                   {technicalErrorMessage ? (
-                    <div
-                      role="alert"
-                      className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                    >
-                      <p className="font-semibold text-destructive">Indexing error</p>
-                      <p className="mt-1 whitespace-pre-wrap break-words text-destructive/90">
-                        {technicalErrorMessage}
-                      </p>
-                    </div>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-destructive/90">
+                      {technicalErrorMessage}
+                    </p>
                   ) : null}
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      disabled={retryBusy}
+                      onClick={() => setReindexConfirmOpen(true)}
+                      className="rounded-xl"
+                    >
+                      {retryBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      Retry indexing
+                    </Button>
+                  </div>
                 </div>
               ) : null}
 
               {normalizedStatus === 'completed' && technicalErrorMessage ? (
-                <div className="w-full space-y-3 text-left">
-                  <div className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
-                    <p className="font-semibold text-amber-950">Last re-index attempt failed</p>
-                    <p className="mt-1 text-amber-900/90">
-                      The document remains available from the previous successful index. You can retry
-                      re-indexing without uploading a new file.
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={retryBusy}
-                        onClick={() => setReindexConfirmOpen(true)}
-                        className="rounded-xl"
-                      >
-                        {retryBusy ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4" />
-                        )}
-                        Retry indexing
-                      </Button>
-                    </div>
-                  </div>
-                  <div
-                    role="alert"
-                    className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                  >
-                    <p className="font-semibold text-destructive">Indexing error</p>
-                    <p className="mt-1 whitespace-pre-wrap break-words text-destructive/90">
-                      {technicalErrorMessage}
-                    </p>
+                <div className="w-full rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-left text-sm text-amber-950">
+                  <p className="font-semibold text-amber-950">Last re-index attempt failed</p>
+                  <p className="mt-1 text-amber-900/90">
+                    The document remains available from the previous successful index. You can retry
+                    re-indexing without uploading a new file.
+                  </p>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-destructive">
+                    {technicalErrorMessage}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={retryBusy}
+                      onClick={() => setReindexConfirmOpen(true)}
+                      className="rounded-xl"
+                    >
+                      {retryBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      Retry indexing
+                    </Button>
                   </div>
                 </div>
               ) : null}

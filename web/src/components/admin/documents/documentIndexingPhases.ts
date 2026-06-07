@@ -114,7 +114,7 @@ export function computePhaseBars(args: {
   const { normalized, indexingPhase = 0, operation, phaseHint, progressPercentage = 0 } = args;
   const overall = clampPct(progressPercentage);
   const activePhaseNumber: DocumentIndexingPhase =
-    indexingPhase >= 1 && indexingPhase <= 5
+    indexingPhase != null && indexingPhase >= 1 && indexingPhase <= 5
       ? (indexingPhase as DocumentIndexingPhase)
       : detectActivePhaseFromHints(operation, overall);
   const activePhase = phaseKeyFromNumber(activePhaseNumber);
