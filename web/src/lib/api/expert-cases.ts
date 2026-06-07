@@ -702,21 +702,138 @@ export async function fetchExpertAnnotations(pageIndex = 1, pageSize = 10, image
   }
 }
 
+const MAX_EXPERT_ARCHIVE_BYTES = 209_715_200; // 200 MB — BE StudyArchiveIngestHelper
+const EXPERT_ARCHIVE_EXTENSIONS = ['.zip', '.rar'] as const;
+
+function expertArchiveExtension(fileName: string): string {
+  const idx = fileName.lastIndexOf('.');
+  if (idx < 0) return '';
+  return fileName.slice(idx).toLowerCase();
+}
+
+/** Client-side validation before `POST /api/expert/cases/upload-dicom`. */
+export function validateExpertStudyArchive(file: File): string | null {
+  const ext = expertArchiveExtension(file.name);
+  if (ext === '.dcm') {
+    return 'Please zip your DICOM study folder first.';
+  }
+  if (!EXPERT_ARCHIVE_EXTENSIONS.includes(ext as (typeof EXPERT_ARCHIVE_EXTENSIONS)[number])) {
+    return 'Only DICOM archive files (.zip or .rar) are supported.';
+  }
+  if (file.size > MAX_EXPERT_ARCHIVE_BYTES) {
+    return 'File exceeds the 200 MB limit.';
+  }
+  if (file.size <= 0) {
+    return 'File is empty.';
+  }
+  return null;
+}
+
+export interface ExpertDicomStudyUploadResponse {
+  caseId?: string;
+  mediaId?: string | null;
+  catalogImageId?: string | null;
+  previewImageUrl?: string;
+  dicomMetadata?: Record<string, unknown> | null;
+  ingestOk: boolean;
+  ingestError?: string | null;
+}
+
+export type ExpertDicomUploadErrorCode =
+  | 'INVALID_CONTENT_TYPE'
+  | 'MISSING_FILE'
+  | 'INVALID_ARCHIVE';
+
 export type ExpertCaseDicomUploadResult = {
   caseId: string | null;
   id: string;
   imageUrl: string;
-  modality: string;
   mediaId: string | null;
   catalogImageId: string | null;
   dicomMetadata: VisualQaDicomMetadata | null;
+  ingestOk: boolean;
+  ingestError: string | null;
 };
 
 export type ExpertCaseDicomUploadOptions = {
   caseId?: string;
-  modality?: string;
   diagnosisText?: string;
+  skipApiToast?: boolean;
+  onUploadProgress?: (percent: number) => void;
 };
+
+function unwrapExpertDicomPayload(data: unknown): unknown {
+  if (data && typeof data === 'object' && 'result' in data) {
+    const nested = (data as { result: unknown }).result;
+    if (nested !== undefined && nested !== null) return nested;
+  }
+  return data;
+}
+
+function normalizeExpertDicomUploadResponse(raw: unknown): ExpertDicomStudyUploadResponse {
+  const o =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : ({} as Record<string, unknown>);
+  const pick = (keys: string[]) => {
+    for (const k of keys) {
+      if (k in o && o[k] !== undefined) return o[k];
+    }
+    return undefined;
+  };
+
+  const caseId = String(pick(['caseId', 'CaseId']) ?? '').trim() || undefined;
+  const previewImageUrl =
+    String(pick(['previewImageUrl', 'PreviewImageUrl', 'imageUrl', 'ImageUrl']) ?? '').trim() || undefined;
+  const ingestOk = Boolean(pick(['ingestOk', 'IngestOk']));
+  const ingestErrorRaw = pick(['ingestError', 'IngestError']);
+  const ingestError =
+    typeof ingestErrorRaw === 'string' && ingestErrorRaw.trim() ? ingestErrorRaw.trim() : null;
+
+  const mediaId = String(pick(['mediaId', 'MediaId']) ?? '').trim() || null;
+  const catalogImageId = String(pick(['catalogImageId', 'CatalogImageId']) ?? '').trim() || null;
+  const dicomMetadataRaw = pick(['dicomMetadata', 'dicom_metadata', 'DicomMetadata']);
+  const dicomMetadata =
+    dicomMetadataRaw && typeof dicomMetadataRaw === 'object'
+      ? (dicomMetadataRaw as Record<string, unknown>)
+      : null;
+
+  return {
+    caseId,
+    previewImageUrl,
+    ingestOk,
+    ingestError,
+    mediaId,
+    catalogImageId,
+    dicomMetadata,
+  };
+}
+
+export function formatExpertDicomUploadError(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data as Record<string, unknown> | undefined;
+    if (!data) return 'Upload failed. Please try again.';
+    if (typeof data.message === 'string' && data.message.trim()) return data.message.trim();
+    if (typeof data.ingestError === 'string' && data.ingestError.trim()) return data.ingestError.trim();
+    if (typeof data.detail === 'string' && data.detail.trim()) return data.detail.trim();
+    if (typeof data.title === 'string' && data.title.trim()) return data.title.trim();
+  }
+  return getApiErrorMessage(err) || 'Upload failed. Please try again.';
+}
+
+function toExpertCaseDicomUploadResult(
+  response: ExpertDicomStudyUploadResponse,
+): ExpertCaseDicomUploadResult {
+  const catalogImageId = response.catalogImageId ?? null;
+  return {
+    caseId: response.caseId?.trim() || null,
+    id: catalogImageId ?? '',
+    imageUrl: response.previewImageUrl?.trim() ?? '',
+    mediaId: response.mediaId ?? null,
+    catalogImageId,
+    dicomMetadata: normalizeDicomMetadata(response.dicomMetadata),
+    ingestOk: response.ingestOk,
+    ingestError: response.ingestError ?? null,
+  };
+}
 
 /**
  * Ingest DICOM archive for an expert case — `POST /api/expert/cases/upload-dicom`.
@@ -726,54 +843,60 @@ export async function uploadExpertCaseDicomArchive(
   file: File,
   options?: ExpertCaseDicomUploadOptions,
 ): Promise<ExpertCaseDicomUploadResult> {
+  const validationError = validateExpertStudyArchive(file);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
   const form = new FormData();
-  form.append('file', file);
+  form.append('file', file, file.name);
   const caseId = options?.caseId?.trim();
   if (caseId) {
     form.append('caseId', caseId);
-    form.append('CaseId', caseId);
-  }
-  const modality = options?.modality?.trim();
-  if (modality) {
-    form.append('modality', modality);
-    form.append('Modality', modality);
   }
   const diagnosisText = options?.diagnosisText?.trim();
   if (diagnosisText) {
     form.append('diagnosisText', diagnosisText);
-    form.append('DiagnosisText', diagnosisText);
   }
 
   try {
     const { data } = await http.post<unknown>('/api/expert/cases/upload-dicom', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      skipApiToast: options?.skipApiToast,
+      onUploadProgress: (ev) => {
+        if (!options?.onUploadProgress || !ev.total) return;
+        const pct = Math.round((ev.loaded / ev.total) * 100);
+        options.onUploadProgress(Math.min(100, pct));
+      },
     });
-    const row =
-      data && typeof data === 'object' && 'result' in data
-        ? (data as { result: unknown }).result
-        : data;
-    const o =
-      row && typeof row === 'object' ? (row as Record<string, unknown>) : ({} as Record<string, unknown>);
-    const pick = (keys: string[]) => {
-      for (const k of keys) {
-        if (k in o && o[k] != null) return o[k];
-      }
-      return undefined;
-    };
-    const catalogImageId = String(pick(['catalogImageId', 'CatalogImageId']) ?? '').trim() || null;
-    const resolvedCaseId =
-      String(pick(['caseId', 'CaseId']) ?? '').trim() || null;
-    return {
-      caseId: resolvedCaseId,
-      id: String(pick(['id', 'Id']) ?? catalogImageId ?? '').trim(),
-      imageUrl: String(pick(['previewImageUrl', 'PreviewImageUrl', 'imageUrl', 'ImageUrl']) ?? '').trim(),
-      modality: String(pick(['modality', 'Modality']) ?? modality ?? '').trim(),
-      mediaId: String(pick(['mediaId', 'MediaId']) ?? '').trim() || null,
-      catalogImageId,
-      dicomMetadata: normalizeDicomMetadata(pick(['dicomMetadata', 'dicom_metadata', 'DicomMetadata'])),
-    };
+
+    const payload = unwrapExpertDicomPayload(data);
+    const response = normalizeExpertDicomUploadResponse(payload);
+    const result = toExpertCaseDicomUploadResult(response);
+
+    if (!result.ingestOk) {
+      const msg = result.ingestError?.trim() || 'Unable to process the DICOM archive.';
+      const err = new Error(msg) as Error & { uploadResult?: ExpertCaseDicomUploadResult };
+      err.uploadResult = result;
+      throw err;
+    }
+
+    return result;
   } catch (e) {
-    throw new Error(getApiErrorMessage(e));
+    if (axios.isAxiosError(e) && e.response?.data) {
+      const payload = unwrapExpertDicomPayload(e.response.data);
+      const response = normalizeExpertDicomUploadResponse(payload);
+      const result = toExpertCaseDicomUploadResult(response);
+      if (!result.ingestOk) {
+        const msg = result.ingestError?.trim() || 'Unable to process the DICOM archive.';
+        const err = new Error(msg) as Error & { uploadResult?: ExpertCaseDicomUploadResult };
+        err.uploadResult = result;
+        throw err;
+      }
+    }
+    if (e instanceof Error && 'uploadResult' in e) {
+      throw e;
+    }
+    throw new Error(formatExpertDicomUploadError(e));
   }
 }
 

@@ -38,14 +38,15 @@ import {
   useUpdateExpertCase,
 } from '@/features/expert/queries/use-expert-cases';
 import { useExpertProfile } from '@/features/expert/queries/use-expert-profile';
-import { uploadExpertCaseDicomArchive } from '@/lib/api/expert-cases';
+import {
+  uploadExpertCaseDicomArchive,
+  validateExpertStudyArchive,
+} from '@/lib/api/expert-cases';
 import { applyDicomMetadataToExpertForm } from '@/features/expert/lib/apply-dicom-metadata-to-form';
 import { appToast } from '@/lib/api/errors/app-toast';
 import type { CreateExpertCaseJsonInput } from '@/lib/api/expert-cases';
 import type { VisualQaDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 import { Loader2 } from 'lucide-react';
-
-const MAX_DICOM_BYTES = 200 * 1024 * 1024;
 
 type Props = {
   onCreated: (caseId: string | undefined) => void;
@@ -102,13 +103,12 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
 
     try {
       const ingestPromise = uploadExpertCaseDicomArchive(file, {
-        modality: form.getValues('modality'),
         diagnosisText: form.getValues('description') || undefined,
+        skipApiToast: true,
       });
       void appToast.promise(ingestPromise, {
         loading: 'Extracting DICOM metadata…',
         success: 'DICOM metadata extracted — form fields updated.',
-        error: 'DICOM ingest failed. Check the archive format and try again.',
       });
       const ingest = await ingestPromise;
 
@@ -121,9 +121,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
         setIngestCaseId(ingest.caseId);
       }
     } catch {
-      if (requestId === ingestRequestId.current) {
-        setDicomArchive(null);
-      }
+      /* toast shows BE message via Error; keep archive selected for retry */
     } finally {
       if (requestId === ingestRequestId.current) {
         setDicomIngestBusy(false);
@@ -135,13 +133,9 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    const lower = f.name.toLowerCase();
-    if (!lower.endsWith('.zip') && !lower.endsWith('.rar')) {
-      appToast.error('Only DICOM archive files (.zip or .rar) are supported.');
-      return;
-    }
-    if (f.size > MAX_DICOM_BYTES) {
-      appToast.error('DICOM archive must be 200 MB or smaller.');
+    const validationError = validateExpertStudyArchive(f);
+    if (validationError) {
+      appToast.error(validationError);
       return;
     }
     setDicomArchive(f);
@@ -199,8 +193,8 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
     if (dicomArchive && caseId && !existingCaseId) {
       await uploadExpertCaseDicomArchive(dicomArchive, {
         caseId,
-        modality: values.modality,
         diagnosisText: values.description || undefined,
+        skipApiToast: true,
       });
     }
 
