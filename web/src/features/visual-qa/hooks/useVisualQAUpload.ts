@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import axios from 'axios';
-import { showApiErrorToast } from '@/lib/api/errors/show-api-error-toast';
 import { appToast } from '@/lib/api/errors';
 import {
   postVisualQaUploadPersonal,
   validatePersonalStudyArchive,
+  formatVisualQaUploadError,
   type VisualQaUploadPersonalResponse,
 } from '@/lib/api/visual-qa';
 import { useVisualQaStore } from '@/features/visual-qa/store/visual-qa-store';
@@ -60,21 +59,15 @@ export function useVisualQAUpload() {
             ? (err as Error & { uploadResult?: VisualQaUploadPersonalResponse }).uploadResult
             : undefined;
 
+        const userMessage = formatVisualQaUploadError(err);
         if (uploadResult && !uploadResult.ingestOk) {
-          const ingestMsg = uploadResult.ingestError?.trim();
-          setIngestError(
-            ingestMsg || (err instanceof Error ? err.message : 'Unable to process the DICOM archive.'),
-          );
-        } else if (err instanceof Error) {
-          setIngestError(err.message);
+          setIngestError(userMessage);
+        } else {
+          setIngestError(userMessage);
         }
 
         if (!options?.skipApiToast) {
-          if (axios.isAxiosError(err)) {
-            showApiErrorToast(err);
-          } else {
-            appToast.error(err instanceof Error ? err.message : 'Upload failed.');
-          }
+          appToast.error(userMessage);
         }
         throw err;
       } finally {

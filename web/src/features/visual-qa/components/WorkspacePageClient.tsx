@@ -12,7 +12,7 @@ import {
 } from '@/components/student/VisualQaSessionHistorySidebar';
 import { PageLoadingSkeleton } from '@/components/shared/DashboardSkeletons';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { resolveApiAssetUrl } from '@/lib/api/client';
+import { resolveStudyImageSrc } from '@/lib/api/visual-qa';
 import { showApiErrorToast } from '@/lib/api/errors/show-api-error-toast';
 import { fetchCaseCatalogDetail } from '@/lib/api/student';
 import type { StudentCaseCatalogDetail } from '@/lib/api/types';
@@ -27,6 +27,7 @@ import { WorkspaceImagePanel } from '@/features/visual-qa/components/WorkspaceIm
 import { WorkspaceChatPanel } from '@/features/visual-qa/components/WorkspaceChatPanel';
 import { WorkspaceEmptyState } from '@/features/visual-qa/components/WorkspaceEmptyState';
 import { WorkspaceContextPanel } from '@/features/visual-qa/components/WorkspaceContextPanel';
+import { WorkspaceSessionLoadingOverlay } from '@/features/visual-qa/components/WorkspaceSessionLoadingOverlay';
 import { useDashboardHeader } from '@/components/layouts/dashboard-header-context';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -38,8 +39,8 @@ function resolveCatalogImageUrl(detail: StudentCaseCatalogDetail): string | null
     ...((detail.images ?? []).map((img) => img.imageUrl)),
   ];
   for (const candidate of candidates) {
-    const trimmed = candidate?.trim();
-    if (trimmed) return resolveApiAssetUrl(trimmed);
+    const resolved = resolveStudyImageSrc(candidate);
+    if (resolved) return resolved;
   }
   return null;
 }
@@ -71,6 +72,8 @@ export function WorkspacePageClient() {
   const [caseDetail, setCaseDetail] = useState<StudentCaseCatalogDetail | null>(null);
   const [bootLoading, setBootLoading] = useState(true);
   const [bootError, setBootError] = useState<string | null>(null);
+  const [isSessionLoading, setIsSessionLoading] = useState(false);
+  const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'image' | 'chat'>('image');
   const [personalMeta, setPersonalMeta] = useState<{
     fileName?: string;
@@ -140,14 +143,19 @@ export function WorkspacePageClient() {
     const bootKey = `${querySessionId}|${queryCaseId}|${queryFlow}`;
     if (bootKeyRef.current === bootKey && turns.length > 0) {
       setBootLoading(false);
+      setIsSessionLoading(false);
       return;
     }
 
     let cancelled = false;
+    const isSessionBoot = Boolean(querySessionId);
+    const isCatalogBoot = Boolean(queryCaseId) && !querySessionId;
 
     void (async () => {
-      const isInitialBoot = bootKeyRef.current !== bootKey;
-      if (isInitialBoot && turns.length === 0) {
+      if (isSessionBoot) {
+        setIsSessionLoading(true);
+        setSessionLoadError(null);
+      } else if (isCatalogBoot && turns.length === 0) {
         setBootLoading(true);
       }
       setBootError(null);
@@ -158,6 +166,10 @@ export function WorkspacePageClient() {
         }
 
         if (querySessionId) {
+          const storeSessionId = useVisualQaStore.getState().sessionId?.trim();
+          if (storeSessionId !== querySessionId) {
+            useVisualQaStore.getState().beginSessionLoad(querySessionId);
+          }
           await hydrateSession(querySessionId);
           if (cancelled) return;
           if (queryFlow === 'personal' || flow === 'personal') {
@@ -184,7 +196,12 @@ export function WorkspacePageClient() {
         if (!cancelled) bootKeyRef.current = bootKey;
       } catch (err) {
         if (cancelled) return;
-        if (axios.isAxiosError(err)) {
+        if (isSessionBoot) {
+          setSessionLoadError('Không tải được phiên Visual QA.');
+          if (axios.isAxiosError(err)) {
+            showApiErrorToast(err);
+          }
+        } else if (axios.isAxiosError(err)) {
           showApiErrorToast(err);
           if (err.response?.status === 404) {
             setBootError('Case or Q&A session not found.');
@@ -195,7 +212,10 @@ export function WorkspacePageClient() {
           setBootError(err instanceof Error ? err.message : 'Unable to load Visual QA session.');
         }
       } finally {
-        if (!cancelled) setBootLoading(false);
+        if (!cancelled) {
+          if (isSessionBoot) setIsSessionLoading(false);
+          else setBootLoading(false);
+        }
       }
     })();
 
@@ -229,9 +249,8 @@ export function WorkspacePageClient() {
   }, [effectiveCaseId, flow]);
 
   const displayImageUrl = useMemo(() => {
-    if (previewImageUrl?.trim()) {
-      return resolveApiAssetUrl(previewImageUrl);
-    }
+    const fromPreview = resolveStudyImageSrc(previewImageUrl);
+    if (fromPreview) return fromPreview;
     if (caseDetail) return resolveCatalogImageUrl(caseDetail);
     return null;
   }, [caseDetail, previewImageUrl]);
@@ -260,7 +279,7 @@ export function WorkspacePageClient() {
       bootKeyRef.current = bootKey;
 
       const url = `/student/visual-qa/workspace?sessionId=${encodeURIComponent(sid)}&flow=personal`;
-      router.replace(url);
+      router.replace(url, { scroll: false });
     },
     [router, setFlow],
   );
@@ -268,12 +287,15 @@ export function WorkspacePageClient() {
   const handleSelectHistorySession = useCallback(
     (targetSessionId: string) => {
       const sid = targetSessionId.trim();
-      if (!sid) return;
+      if (!sid || sid === effectiveSessionId) return;
       setAwaitingNewSession(false);
       setEmptyLandingHistoryOpen(false);
+      setSessionLoadError(null);
       const prefill = readAndClearSessionPrefillImage(sid);
-      if (prefill) {
-        useVisualQaStore.getState().setPreviewImageUrl(prefill);
+      useVisualQaStore.getState().beginSessionLoad(sid);
+      const resolvedPrefill = resolveStudyImageSrc(prefill);
+      if (resolvedPrefill) {
+        useVisualQaStore.getState().setPreviewImageUrl(resolvedPrefill);
       }
       setFlow('personal');
       setPersonalMeta((prev) => ({
@@ -281,15 +303,28 @@ export function WorkspacePageClient() {
         sessionId: sid,
         uploadedAt: prev?.uploadedAt,
       }));
-      bootKeyRef.current = `${sid}||personal`;
-      useVisualQaStore.getState().beginSessionLoad(sid);
       router.replace(
         `/student/visual-qa/workspace?sessionId=${encodeURIComponent(sid)}&flow=personal`,
+        { scroll: false },
       );
-      void hydrateSession(sid);
     },
-    [hydrateSession, router, setFlow],
+    [effectiveSessionId, router, setFlow],
   );
+
+  const handleRetrySessionLoad = useCallback(async () => {
+    const sid = effectiveSessionId?.trim();
+    if (!sid) return;
+    setSessionLoadError(null);
+    setIsSessionLoading(true);
+    bootKeyRef.current = null;
+    try {
+      await hydrateSession(sid);
+    } catch {
+      setSessionLoadError('Không tải được phiên Visual QA.');
+    } finally {
+      setIsSessionLoading(false);
+    }
+  }, [effectiveSessionId, hydrateSession]);
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -305,7 +340,7 @@ export function WorkspacePageClient() {
           params.set('sessionId', newSessionId);
           if (effectiveCaseId) params.set('caseId', effectiveCaseId);
           params.set('flow', flow === 'personal' ? 'personal' : 'catalog');
-          router.replace(`/student/visual-qa/workspace?${params.toString()}`);
+          router.replace(`/student/visual-qa/workspace?${params.toString()}`, { scroll: false });
         }
         if (newSessionId) setHistoryRefreshNonce((n) => n + 1);
       } catch (err) {
@@ -329,7 +364,13 @@ export function WorkspacePageClient() {
 
   const readOnlyImage = isCatalogFlow || capabilities?.isReadOnly === true;
   const composerDisabled =
-    isUploading || (!effectiveCaseId && !effectiveSessionId) || bootLoading || Boolean(bootError);
+    isUploading ||
+    isSessionLoading ||
+    isAsking ||
+    (!effectiveCaseId && !effectiveSessionId) ||
+    bootLoading ||
+    Boolean(bootError) ||
+    Boolean(sessionLoadError);
 
   const imagePanel = (
     <div className="flex h-full min-h-0 flex-col">
@@ -337,7 +378,11 @@ export function WorkspacePageClient() {
         <WorkspaceImagePanel
           imageUrl={displayImageUrl}
           imageAlt={title}
-          loading={isUploading || (isCatalogFlow && bootLoading && !displayImageUrl)}
+          loading={
+            isUploading ||
+            isSessionLoading ||
+            (isCatalogFlow && bootLoading && !displayImageUrl)
+          }
           readOnly={readOnlyImage}
           catalogMode={isCatalogFlow}
         />
@@ -355,7 +400,7 @@ export function WorkspacePageClient() {
     </div>
   );
 
-  if (bootLoading && turns.length === 0) {
+  if (bootLoading && turns.length === 0 && !querySessionId) {
     return (
       <PageLoadingSkeleton className="min-h-full p-8">
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -433,27 +478,42 @@ export function WorkspacePageClient() {
           />
         ) : null}
 
-        <WorkspaceShell
-          className="min-h-0 min-w-0"
-          mobileTab={mobileTab}
-          onMobileTabChange={setMobileTab}
-          imagePanel={imagePanel}
-          chatPanel={
-            <WorkspaceChatPanel
-              turns={turns}
-              capabilities={capabilities}
-              isAsking={isAsking}
-              lastSystemNotice={lastSystemNotice}
-              composerDisabled={composerDisabled}
-              requestingExpertSupport={requestingExpertSupport}
-              expertSupportByAssistantId={expertSupportByAssistantId}
-              onRequestExpertSupport={requestExpertSupport}
-              onSend={handleSend}
-              onClear={handleNewSession}
-              answerVariant={answerVariant}
-            />
-          }
-        />
+        <div className="relative min-h-0 min-w-0">
+          <WorkspaceSessionLoadingOverlay visible={isSessionLoading} />
+          {sessionLoadError && !isSessionLoading ? (
+            <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+              <span>{sessionLoadError}</span>
+              <button
+                type="button"
+                onClick={handleRetrySessionLoad}
+                className="shrink-0 rounded-lg border border-destructive/40 bg-white px-3 py-1 text-xs font-medium hover:bg-destructive/5"
+              >
+                Thử lại
+              </button>
+            </div>
+          ) : null}
+          <WorkspaceShell
+            className="min-h-0 min-w-0"
+            mobileTab={mobileTab}
+            onMobileTabChange={setMobileTab}
+            imagePanel={imagePanel}
+            chatPanel={
+              <WorkspaceChatPanel
+                turns={turns}
+                capabilities={capabilities}
+                isAsking={isAsking}
+                lastSystemNotice={lastSystemNotice}
+                composerDisabled={composerDisabled}
+                requestingExpertSupport={requestingExpertSupport}
+                expertSupportByAssistantId={expertSupportByAssistantId}
+                onRequestExpertSupport={requestExpertSupport}
+                onSend={handleSend}
+                onClear={handleNewSession}
+                answerVariant={answerVariant}
+              />
+            }
+          />
+        </div>
       </div>
     </div>
   );

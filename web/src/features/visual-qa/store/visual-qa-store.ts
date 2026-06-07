@@ -143,9 +143,9 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
       setFromUpload: (response) =>
         set({
           flow: 'personal',
-          sessionId: response.sessionId.trim() || null,
-          caseId: response.caseId.trim() || null,
-          previewImageUrl: response.previewImageUrl.trim() || null,
+          sessionId: response.sessionId?.trim() || null,
+          caseId: response.caseId?.trim() || null,
+          previewImageUrl: response.previewImageUrl?.trim() || null,
           imageId:
             response.catalogImageId?.trim() ||
             response.mediaId?.trim() ||
@@ -184,7 +184,9 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
         const sessionFields = resolveSessionFields(response);
         const sessionId = response.sessionId?.trim() || get().sessionId;
         const caseId = response.caseId?.trim() || get().caseId;
-        const imageUrl = response.sessionImageUrl?.trim() || get().previewImageUrl;
+        const imageUrl =
+          response.sessionImageUrl?.trim() ||
+          get().previewImageUrl;
         const dicomMetadata = response.dicomMetadata ?? get().dicomMetadata;
 
         set((state) => ({
@@ -209,6 +211,10 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
         if (!id) return;
         set({
           sessionId: id,
+          caseId: null,
+          previewImageUrl: null,
+          imageId: null,
+          dicomMetadata: null,
           turns: [],
           reviewFeedback: null,
           sessionStatus: null,
@@ -221,7 +227,11 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
       hydrateThread: (thread, options) => {
         const sessionFields = resolveSessionFields(thread);
         const sessionId = thread.sessionId?.trim() || get().sessionId;
-        const preview = thread.sessionImageUrl?.trim() || get().previewImageUrl;
+        const preview =
+          thread.studyImageUrl?.trim() ||
+          thread.sessionImageUrl?.trim() ||
+          thread.imageUrl?.trim() ||
+          get().previewImageUrl;
 
         set((state) => {
           const incomingTurns = dedupeAskJsonTurnBatch(thread.turns ?? []);
