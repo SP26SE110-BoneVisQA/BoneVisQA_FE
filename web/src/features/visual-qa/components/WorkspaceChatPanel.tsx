@@ -14,7 +14,7 @@ type WorkspaceChatPanelProps = {
   isAsking: boolean;
   lastSystemNotice: string | null;
   composerDisabled?: boolean;
-  requestingExpertSupport?: boolean;
+  requestingExpertSupportForAssistantId?: string | null;
   expertSupportByAssistantId?: Record<string, ExpertSupportUiState>;
   onRequestExpertSupport?: (turn: VisualQaTurn) => void | Promise<void>;
   onSend: (text: string) => void | Promise<void>;
@@ -28,7 +28,7 @@ export function WorkspaceChatPanel({
   isAsking,
   lastSystemNotice,
   composerDisabled = false,
-  requestingExpertSupport = false,
+  requestingExpertSupportForAssistantId = null,
   expertSupportByAssistantId = {},
   onRequestExpertSupport,
   onSend,
@@ -37,20 +37,25 @@ export function WorkspaceChatPanel({
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState('');
 
-  const composerLocked = composerDisabled || isAsking;
+  const composerLocked = composerDisabled;
 
   const sessionCapabilities = useMemo(
     () =>
       capabilities
         ? {
             canAskNext: true,
-            canRequestReview: capabilities.canRequestReview,
+            canRequestReview: true,
             isReadOnly: false,
             turnsUsed: capabilities.turnsUsed,
             turnLimit: capabilities.turnLimit,
             reason: null,
           }
-        : undefined,
+        : {
+            canAskNext: true,
+            canRequestReview: true,
+            isReadOnly: false,
+            reason: null,
+          },
     [capabilities],
   );
 
@@ -81,8 +86,8 @@ export function WorkspaceChatPanel({
         isLoading={isAsking}
         chatRequestPhase={isAsking ? 'analyzing' : 'idle'}
         blockingNotice={lastSystemNotice}
-        canRequestReview={Boolean(capabilities?.canRequestReview)}
-        requestingExpertSupport={requestingExpertSupport}
+        canRequestReview
+        requestingExpertSupportForAssistantId={requestingExpertSupportForAssistantId}
         expertSupportByAssistantId={expertSupportByAssistantId}
         onRequestExpertSupport={(turn) => void onRequestExpertSupport?.(turn)}
         onSendMessage={handleRetryFromConversation}
@@ -96,7 +101,7 @@ export function WorkspaceChatPanel({
           onChange={setDraft}
           onSubmit={() => void handleSubmit()}
           disabled={composerLocked}
-          isLoading={isAsking}
+          isLoading={false}
           placeholder={
             answerVariant === 'catalog'
               ? 'Ask a short question about this teaching case…'

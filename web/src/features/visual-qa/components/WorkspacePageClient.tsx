@@ -102,7 +102,7 @@ export function WorkspacePageClient() {
 
   const {
     expertSupportByAssistantId,
-    requestingExpertSupport,
+    requestingExpertSupportForAssistantId,
     requestExpertSupport,
   } = useVisualQAExpertSupport(effectiveSessionId || sessionId, turns);
 
@@ -366,7 +366,6 @@ export function WorkspacePageClient() {
   const composerDisabled =
     isUploading ||
     isSessionLoading ||
-    isAsking ||
     (!effectiveCaseId && !effectiveSessionId) ||
     bootLoading ||
     Boolean(bootError) ||
@@ -504,7 +503,7 @@ export function WorkspacePageClient() {
                 isAsking={isAsking}
                 lastSystemNotice={lastSystemNotice}
                 composerDisabled={composerDisabled}
-                requestingExpertSupport={requestingExpertSupport}
+                requestingExpertSupportForAssistantId={requestingExpertSupportForAssistantId}
                 expertSupportByAssistantId={expertSupportByAssistantId}
                 onRequestExpertSupport={requestExpertSupport}
                 onSend={handleSend}

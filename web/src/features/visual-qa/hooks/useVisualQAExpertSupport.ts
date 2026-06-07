@@ -34,7 +34,8 @@ export function useVisualQAExpertSupport(sessionId: string | null, turns: Visual
   const [expertSupportByAssistantId, setExpertSupportByAssistantId] = useState<
     Record<string, ExpertSupportUiState>
   >({});
-  const [requestingExpertSupport, setRequestingExpertSupport] = useState(false);
+  const [requestingExpertSupportForAssistantId, setRequestingExpertSupportForAssistantId] =
+    useState<string | null>(null);
 
   const sid = sessionId?.trim() ?? '';
 
@@ -62,7 +63,7 @@ export function useVisualQAExpertSupport(sessionId: string | null, turns: Visual
         return;
       }
 
-      setRequestingExpertSupport(true);
+      setRequestingExpertSupportForAssistantId(assistantMessageId);
       setExpertSupportByAssistantId((prev) => ({
         ...prev,
         [assistantMessageId]: { phase: 'awaiting' },
@@ -98,7 +99,7 @@ export function useVisualQAExpertSupport(sessionId: string | null, turns: Visual
         }
         throw err;
       } finally {
-        setRequestingExpertSupport(false);
+        setRequestingExpertSupportForAssistantId(null);
       }
     },
     [sid],
@@ -106,7 +107,7 @@ export function useVisualQAExpertSupport(sessionId: string | null, turns: Visual
 
   return {
     expertSupportByAssistantId,
-    requestingExpertSupport,
+    requestingExpertSupportForAssistantId,
     requestExpertSupport,
   };
 }

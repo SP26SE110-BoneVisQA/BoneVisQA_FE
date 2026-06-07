@@ -18,7 +18,7 @@ export function WorkspaceSessionLoadingOverlay({ visible }: Props) {
     >
       <div className="pointer-events-auto flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/80 px-6 py-5 shadow-xl">
         <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
-        <p className="text-sm font-medium text-slate-100">Đang tải phiên học…</p>
+        <p className="text-sm font-medium text-slate-100">Loading conversation…</p>
       </div>
     </div>
   );

@@ -38,8 +38,12 @@ function workflowIndicatesAwaitingExpert(raw: string | null | undefined): boolea
 function turnIndicatesAwaitingExpert(turn: VisualQaTurn): boolean {
   if (workflowIndicatesAwaitingExpert(turn.reviewState)) return true;
   if (workflowIndicatesAwaitingExpert(turn.answerStatus)) return true;
-  const status = (turn.answerStatus ?? '').trim().toLowerCase();
-  return status === 'pending' || status.includes('pending');
+  const reviewState = (turn.reviewState ?? '').trim().toLowerCase();
+  return (
+    reviewState === 'submitted' ||
+    reviewState === 'awaiting_review' ||
+    reviewState === 'pending_review'
+  );
 }
 
 function resolveReviewUpdateTarget(reviewTurn: VisualQaTurn, sortedTurns: VisualQaTurn[]): VisualQaTurn | null {

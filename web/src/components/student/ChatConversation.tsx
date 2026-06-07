@@ -40,6 +40,8 @@ type Props = {
   errorMessage?: string | null;
   canRequestReview?: boolean;
   requestingExpertSupport?: boolean;
+  /** When set, only the matching assistant message shows a sending state for expert support. */
+  requestingExpertSupportForAssistantId?: string | null;
   onRequestExpertSupport?: (turn: VisualQaTurn) => void;
   onSendMessage: (message: string) => void | Promise<void>;
   onClear: () => void;
@@ -199,6 +201,7 @@ export function ChatConversation({
   errorMessage,
   canRequestReview = false,
   requestingExpertSupport = false,
+  requestingExpertSupportForAssistantId = null,
   onRequestExpertSupport,
   onSendMessage,
   onClear,
@@ -419,7 +422,11 @@ export function ChatConversation({
                         systemNoticeLabel={systemNoticeLabel}
                         educatorFeedbackEntries={showEducatorFeedback ? educatorFeedbackEntries : []}
                         canRequestReview={canRequestReview}
-                        requestingExpertSupport={requestingExpertSupport}
+                        requestingExpertSupport={
+                          requestingExpertSupport ||
+                          (assistantKey !== '' &&
+                            requestingExpertSupportForAssistantId === assistantKey)
+                        }
                         activeMenuTurnKey={activeAiMenuKey}
                         turnMenuKey={turnMenuKey}
                         onToggleMenu={() =>

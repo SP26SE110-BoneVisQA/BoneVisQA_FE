@@ -79,7 +79,19 @@ export function useVisualQA() {
           { locale: state.locale, skipApiToast: true },
         );
 
-        useVisualQaStore.getState().appendFromAskJson(response);
+        const store = useVisualQaStore.getState();
+        store.appendFromAskJson(response);
+
+        const refreshSessionId = (response.sessionId ?? resolvedSessionId)?.trim();
+        if (refreshSessionId) {
+          try {
+            const thread = await fetchVisualQaThread(refreshSessionId);
+            store.hydrateThread(thread, { replace: true });
+          } catch {
+            // Keep ask-json payload when thread refresh fails.
+          }
+        }
+
         return response;
       } catch (err) {
         if (axios.isAxiosError(err) && err.response?.data) {

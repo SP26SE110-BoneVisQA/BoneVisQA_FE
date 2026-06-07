@@ -49,7 +49,21 @@ function mergeCitations(base: VisualQaTurn['citations'], incoming: VisualQaTurn[
   return out;
 }
 
+function turnHasServerAnswer(turn: VisualQaTurn): boolean {
+  if (turn.turnId?.trim()) return true;
+  if (turn.assistantMessageId?.trim()) return true;
+  if (turn.answerText?.trim()) return true;
+  if (turn.diagnosis?.trim()) return true;
+  if (turn.structuredDiagnosis?.trim()) return true;
+  if (turn.findings?.some((item) => item?.trim())) return true;
+  return false;
+}
+
 function mergeTurn(existing: VisualQaTurn, incoming: VisualQaTurn): VisualQaTurn {
+  const resolvedAwaitingAssistant =
+    incoming.awaitingAssistant ??
+    (turnHasServerAnswer(incoming) ? false : existing.awaitingAssistant);
+
   return {
     ...existing,
     ...incoming,
@@ -97,7 +111,7 @@ function mergeTurn(existing: VisualQaTurn, incoming: VisualQaTurn): VisualQaTurn
     reviewTargetTurnIndex: incoming.reviewTargetTurnIndex ?? existing.reviewTargetTurnIndex,
     policyReason: incoming.policyReason ?? existing.policyReason,
     systemNoticeCode: incoming.systemNoticeCode ?? existing.systemNoticeCode,
-    awaitingAssistant: incoming.awaitingAssistant ?? existing.awaitingAssistant,
+    awaitingAssistant: resolvedAwaitingAssistant,
   };
 }
 
@@ -245,7 +259,7 @@ export function appendOptimisticQuestionTurn(
     responseKind: 'analysis',
     actorRole: 'assistant',
     lastResponderRole: 'assistant',
-    isReviewTarget: true,
+    isReviewTarget: false,
   };
   return mergeTurnsByIdentity(base, [optimistic]);
 }

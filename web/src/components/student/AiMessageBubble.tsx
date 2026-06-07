@@ -142,6 +142,7 @@ export function AiMessageBubble({
     canRequestReview &&
     expertSupportInline == null &&
     !awaitingAssistant &&
+    Boolean(turn.assistantMessageId?.trim()) &&
     (turn.actorRole?.trim().toLowerCase() === 'assistant' ||
       turn.isReviewTarget === true ||
       responseKind === 'analysis');
