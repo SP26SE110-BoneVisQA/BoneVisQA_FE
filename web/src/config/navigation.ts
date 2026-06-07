@@ -12,7 +12,6 @@ import {
   LayoutDashboard,
   Megaphone,
   ScanSearch,
-  Server,
   Stethoscope,
   Users,
   BarChart3,
@@ -36,7 +35,6 @@ export const navByRole: Record<AppRoleKey, NavItem[]> = {
     { label: 'Classifications', href: '/admin/classifications', icon: Stethoscope },
     { label: 'Knowledge Base', href: '/admin/documents', icon: Database },
     { label: 'Flagged chunks', href: '/admin/flagged-chunks', icon: Flag },
-    { label: 'System Configuration', href: '/admin/system-config', icon: Server },
   ],
   lecturer: [
     { label: 'Dashboard', href: '/lecturer/dashboard', icon: LayoutDashboard },

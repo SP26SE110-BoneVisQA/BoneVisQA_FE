@@ -17,7 +17,6 @@ import {
   Database,
   BadgeCheck,
   BookOpen,
-  Shield,
 } from 'lucide-react';
 
 export default function AdminSidebar() {
@@ -48,7 +47,6 @@ export default function AdminSidebar() {
     { icon: BookOpen, label: t('nav.classes', 'Classes'), href: '/admin/classes' },
     { icon: Database, label: t('nav.documents', 'Documents'), href: '/admin/documents' },
     { icon: FileText, label: t('nav.cases', 'Cases'), href: '/admin/cases' },
-    { icon: Shield, label: t('nav.systemConfig', 'System Config'), href: '/admin/system-config' },
     { icon: BrainCircuit, label: t('nav.aiConfig', 'AI Config'), href: '/admin/ai-config' },
     { icon: Settings, label: t('nav.settings', 'Settings'), href: '/admin/settings' },
   ];
