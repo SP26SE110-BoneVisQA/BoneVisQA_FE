@@ -70,10 +70,12 @@ export function DocumentIndexingCell({ doc, statusDetail, showQueueHint = false 
       <StaticIndexingBadge statusRaw={effectiveStatus} />
       <IndexingProgressBar
         statusRaw={effectiveStatus}
+        progressPercentage={statusDetail?.progressPercentage}
         currentPageIndexing={cur}
         totalPages={total}
         totalChunks={statusDetail?.totalChunks}
         currentOperation={statusDetail?.currentOperation ?? null}
+        phaseLabel={statusDetail?.phaseLabel ?? null}
       />
       {n === 'pending' && showQueueHint ? (
         <p className="text-[11px] font-medium leading-snug text-sky-800">

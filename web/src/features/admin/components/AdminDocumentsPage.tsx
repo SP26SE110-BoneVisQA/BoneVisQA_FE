@@ -21,7 +21,7 @@ import {
   normalizeIndexingStatus,
 } from '@/lib/api/admin-documents';
 import { resolveApiAssetUrl, withVersionedAssetUrl } from '@/lib/api/client';
-import type { DocumentStatusResponse } from '@/lib/api/types';
+import type { DocumentIngestionStatusDto, DocumentStatusResponse } from '@/lib/api/types';
 import { getQueryErrorMessage } from '@/lib/query-utils';
 import { FileText, Plus, Search } from 'lucide-react';
 
@@ -48,7 +48,33 @@ export function AdminDocumentsPage() {
   const tags = metaQuery.data?.tags ?? [];
 
   useEffect(() => {
-    const onIndexing = () => invalidateDocuments();
+    const onIndexing = (event: Event) => {
+      const custom = event as CustomEvent<DocumentIngestionStatusDto>;
+      const payload = custom.detail;
+      if (payload?.documentId) {
+        setStatusByDocId((prev) => {
+          const existing = prev[payload.documentId];
+          return {
+            ...prev,
+            [payload.documentId]: {
+              status: payload.status ?? existing?.status ?? 'Processing',
+              progressPercentage:
+                payload.progressPercentage ?? existing?.progressPercentage ?? 0,
+              currentOperation: payload.operation ?? existing?.currentOperation ?? null,
+              currentPageIndexing:
+                payload.currentPageIndexing ?? existing?.currentPageIndexing ?? 0,
+              totalPages: payload.totalPages ?? existing?.totalPages ?? 0,
+              totalChunks: payload.totalChunks ?? existing?.totalChunks ?? 0,
+              chunksProcessed: payload.chunksProcessed ?? existing?.chunksProcessed ?? 0,
+              indexingPhase: payload.indexingPhase ?? existing?.indexingPhase ?? 0,
+              phaseLabel: payload.phaseLabel ?? payload.phase ?? existing?.phaseLabel ?? null,
+              errorMessage: payload.errorMessage ?? existing?.errorMessage ?? null,
+            },
+          };
+        });
+      }
+      invalidateDocuments();
+    };
     window.addEventListener('DocumentIndexingProgressUpdated', onIndexing);
     return () => window.removeEventListener('DocumentIndexingProgressUpdated', onIndexing);
   }, [invalidateDocuments]);

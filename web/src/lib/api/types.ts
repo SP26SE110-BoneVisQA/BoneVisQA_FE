@@ -209,16 +209,23 @@ export type DocumentIndexingStatus =
   | 'Completed'
   | 'Failed';
 
-export interface DocumentStatusResponse {
-  status: DocumentIndexingStatus | string;
+export type DocumentIndexingPhase = 1 | 2 | 3 | 4 | 5;
+
+export interface DocumentIngestionStatus {
+  status: string;
   progressPercentage: number;
-  currentOperation: string;
-  /** 1-based page currently being indexed (when provided by pipeline). */
-  currentPageIndexing?: number;
-  totalPages?: number;
-  /** Some pipelines report chunk totals instead of page totals. */
-  totalChunks?: number;
+  currentOperation: string | null;
+  totalPages: number;
+  totalChunks: number;
+  currentPageIndexing: number;
+  errorMessage: string | null;
+  indexingPhase: DocumentIndexingPhase | 0;
+  phaseLabel: string | null;
+  chunksProcessed: number;
 }
+
+/** REST response from GET /api/admin/documents/{id}/ingestion-status */
+export type DocumentStatusResponse = DocumentIngestionStatus;
 
 /** Real-time ingestion update payload from SignalR `DocumentIndexingProgressUpdated`. */
 export interface DocumentIngestionStatusDto {
@@ -229,7 +236,11 @@ export interface DocumentIngestionStatusDto {
   currentPageIndexing?: number;
   progressPercentage?: number;
   operation?: string;
-  /** Backend pipeline phase hint (e.g. Download, Parsing, Vectorizing). */
+  /** Backend pipeline phase (1–5). */
+  indexingPhase?: DocumentIndexingPhase | 0;
+  phaseLabel?: string;
+  chunksProcessed?: number;
+  /** Legacy pipeline phase hint (e.g. Download, Parsing, Vectorizing). */
   phase?: string;
   /** Failure detail when status is Failed. */
   errorMessage?: string;

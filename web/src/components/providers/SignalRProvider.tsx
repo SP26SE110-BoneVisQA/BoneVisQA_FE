@@ -69,6 +69,8 @@ function mapDocumentIngestionPayload(raw: unknown): DocumentIngestionStatusDto |
   const operationRaw =
     r.operation ?? r.currentOperation ?? r.Operation ?? r.CurrentOperation;
 
+  const phaseNum = num(r.indexingPhase ?? r.IndexingPhase);
+
   return {
     documentId,
     status:
@@ -82,6 +84,17 @@ function mapDocumentIngestionPayload(raw: unknown): DocumentIngestionStatusDto |
     currentPageIndexing: num(r.currentPageIndexing ?? r.CurrentPageIndexing),
     progressPercentage: num(r.progressPercentage ?? r.ProgressPercentage),
     operation: operationRaw != null ? String(operationRaw) : undefined,
+    indexingPhase:
+      phaseNum != null && phaseNum >= 0 && phaseNum <= 5
+        ? (phaseNum as DocumentIngestionStatusDto['indexingPhase'])
+        : undefined,
+    phaseLabel:
+      r.phaseLabel != null
+        ? String(r.phaseLabel)
+        : r.PhaseLabel != null
+          ? String(r.PhaseLabel)
+          : undefined,
+    chunksProcessed: num(r.chunksProcessed ?? r.ChunksProcessed),
     phase:
       r.phase != null
         ? String(r.phase)

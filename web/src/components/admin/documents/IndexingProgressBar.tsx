@@ -4,95 +4,86 @@ import { normalizeIndexingStatus, type NormalizedIndexingStatus } from '@/lib/ap
 
 type Props = {
   statusRaw?: string;
+  progressPercentage?: number | null;
   currentPageIndexing?: number | null;
   totalPages?: number | null;
   totalChunks?: number | null;
   currentOperation?: string | null;
+  phaseLabel?: string | null;
   className?: string;
 };
 
 type ProgressState = {
   normalizedStatus: NormalizedIndexingStatus;
-  current: number;
-  total: number;
-  unit: 'page' | 'chunk';
   percent: number;
   isIndeterminate: boolean;
   label: string;
   helper: string;
 };
 
-function toNonNegativeInt(value: number | null | undefined): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  if (value <= 0) return 0;
-  return Math.floor(value);
+function clampPct(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, Math.round(value)));
 }
 
 function buildProgressState(
   statusRaw: string | undefined,
+  progressPercentage: number | null | undefined,
   currentPageIndexing: number | null | undefined,
   totalPages: number | null | undefined,
   totalChunks: number | null | undefined,
+  phaseLabel: string | null | undefined,
 ): ProgressState {
   const statusText = (statusRaw ?? '').trim().toLowerCase();
   const isReindexing = statusText.includes('reindex');
   const normalizedStatus = normalizeIndexingStatus(statusRaw);
-  const current = toNonNegativeInt(currentPageIndexing);
-  const totalPagesInt = toNonNegativeInt(totalPages);
-  const totalChunksInt = toNonNegativeInt(totalChunks);
-  const total = totalPagesInt > 0 ? totalPagesInt : totalChunksInt;
-  const unit: 'page' | 'chunk' = totalPagesInt > 0 ? 'page' : 'chunk';
   const isActive = normalizedStatus === 'pending' || normalizedStatus === 'processing';
-  const isIndeterminate = isActive && total <= 0;
 
-  if (isIndeterminate) {
-    return {
-      normalizedStatus,
-      current,
-      total,
-      unit,
-      percent: 0,
-      isIndeterminate: true,
-      label:
-        normalizedStatus === 'pending'
-          ? isReindexing
-            ? 'Re-analyzing Document...'
-            : 'Analyzing PDF...'
-          : isReindexing
-            ? 'Re-vectorizing Content...'
-            : 'Extracting data...',
-      helper: isReindexing ? 'Reindexing' : normalizedStatus === 'pending' ? 'Pending' : 'Processing',
-    };
-  }
+  const hasServerPct =
+    typeof progressPercentage === 'number' && Number.isFinite(progressPercentage);
+  const percent = hasServerPct ? clampPct(progressPercentage) : 0;
+  const isIndeterminate = isActive && !hasServerPct;
 
-  // Strict formula: (currentPageIndexing / totalPages) * 100
-  const raw = total > 0 ? (current / total) * 100 : 0;
-  const safe = Number.isFinite(raw) ? raw : 0;
-  const percent = Math.min(100, Math.max(0, Math.round(safe)));
+  const phaseText = phaseLabel?.trim();
+  const label = phaseText
+    ? `${isReindexing ? 'Reindexing' : 'Processing'}: ${phaseText} (${percent}%)`
+    : isIndeterminate
+      ? normalizedStatus === 'pending'
+        ? isReindexing
+          ? 'Re-analyzing document…'
+          : 'Analyzing PDF…'
+        : isReindexing
+          ? 'Re-vectorizing content…'
+          : 'Extracting data…'
+      : `${isReindexing ? 'Reindexing' : 'Processing'} (${percent}%)`;
 
   return {
     normalizedStatus,
-    current,
-    total,
-    unit,
     percent,
-    isIndeterminate: false,
-    label: `${isReindexing ? 'Reindexing' : 'Processing'}: ${
-      unit === 'page' ? 'Page' : 'Chunk'
-    } ${current || '—'} / ${total || '—'} (${percent}%)`,
+    isIndeterminate,
+    label,
     helper: isReindexing ? 'Reindexing' : normalizedStatus === 'pending' ? 'Pending' : 'Processing',
   };
 }
 
 export function IndexingProgressBar({
   statusRaw,
+  progressPercentage,
   currentPageIndexing,
   totalPages,
   totalChunks,
   currentOperation,
+  phaseLabel,
   className,
 }: Props) {
-  const state = buildProgressState(statusRaw, currentPageIndexing, totalPages, totalChunks);
+  const state = buildProgressState(
+    statusRaw,
+    progressPercentage,
+    currentPageIndexing,
+    totalPages,
+    totalChunks,
+    phaseLabel,
+  );
 
   return (
     <div className={`space-y-2 ${className ?? ''}`.trim()}>

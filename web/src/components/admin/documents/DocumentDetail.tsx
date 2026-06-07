@@ -34,15 +34,24 @@ import { DestructiveConfirmDialog } from '@/components/shared/DestructiveConfirm
 import { appToast } from '@/lib/api/errors/app-toast';
 import { toast } from 'sonner';
 import AdminDocumentReplaceFileModal from './AdminDocumentReplaceFileModal';
-import { computePhaseBars, type IndexingPhaseKey } from './documentIndexingPhases';
+import type { DocumentIndexingPhase } from '@/lib/api/types';
+import {
+  computePhaseBars,
+  INDEXING_PHASE_STEPS,
+  phaseBarValue,
+  type IndexingPhaseKey,
+} from './documentIndexingPhases';
 
 type IngestionSnapshot = {
   status?: string;
   currentPageIndexing?: number;
   totalPages?: number;
   totalChunks?: number;
+  chunksProcessed?: number;
   currentOperation?: string;
   progressPercentage?: number;
+  indexingPhase?: DocumentIndexingPhase | 0;
+  phaseLabel?: string;
   phaseHint?: string;
   errorMessage?: string;
   source: 'rest' | 'signalr';
@@ -75,7 +84,7 @@ export default function DocumentDetail({ id }: { id: string }) {
             return {
               ...next,
               currentOperation: undefined,
-              errorMessage: undefined,
+              errorMessage: next.errorMessage?.trim() ? next.errorMessage : undefined,
               progressPercentage: next.progressPercentage ?? 100,
             };
           }
@@ -95,7 +104,7 @@ export default function DocumentDetail({ id }: { id: string }) {
             return {
               ...merged,
               currentOperation: undefined,
-              errorMessage: undefined,
+              errorMessage: next.errorMessage?.trim() ? next.errorMessage : undefined,
               progressPercentage: next.progressPercentage ?? 100,
             };
           }
@@ -113,7 +122,7 @@ export default function DocumentDetail({ id }: { id: string }) {
           return {
             ...next,
             currentOperation: undefined,
-            errorMessage: undefined,
+            errorMessage: next.errorMessage?.trim() ? next.errorMessage : undefined,
             progressPercentage: next.progressPercentage ?? 100,
           };
         }
@@ -151,8 +160,12 @@ export default function DocumentDetail({ id }: { id: string }) {
           currentPageIndexing: status.currentPageIndexing ?? data.currentPageIndexing,
           totalPages: status.totalPages ?? data.totalPages,
           totalChunks: status.totalChunks,
-          currentOperation: status.currentOperation,
+          chunksProcessed: status.chunksProcessed,
+          currentOperation: status.currentOperation ?? undefined,
           progressPercentage: status.progressPercentage,
+          indexingPhase: status.indexingPhase,
+          phaseLabel: status.phaseLabel ?? undefined,
+          errorMessage: status.errorMessage ?? undefined,
         });
       } catch (err: unknown) {
         if (disposed) return;
@@ -205,8 +218,12 @@ export default function DocumentDetail({ id }: { id: string }) {
           currentPageIndexing: status.currentPageIndexing,
           totalPages: status.totalPages,
           totalChunks: status.totalChunks,
-          currentOperation: status.currentOperation,
+          chunksProcessed: status.chunksProcessed,
+          currentOperation: status.currentOperation ?? undefined,
           progressPercentage: status.progressPercentage,
+          indexingPhase: status.indexingPhase,
+          phaseLabel: status.phaseLabel ?? undefined,
+          errorMessage: status.errorMessage ?? undefined,
         });
         setDoc((prev) =>
           prev
@@ -244,8 +261,11 @@ export default function DocumentDetail({ id }: { id: string }) {
         currentPageIndexing: asNonNegInt(payload.currentPageIndexing),
         totalPages: asNonNegInt(payload.totalPages),
         totalChunks: asNonNegInt(payload.totalChunks),
+        chunksProcessed: asNonNegInt(payload.chunksProcessed),
         currentOperation: payload.operation,
         progressPercentage: asNonNegInt(payload.progressPercentage),
+        indexingPhase: payload.indexingPhase,
+        phaseLabel: payload.phaseLabel ?? payload.phase,
         phaseHint: payload.phase,
         errorMessage: payload.errorMessage,
       });
@@ -293,33 +313,27 @@ export default function DocumentDetail({ id }: { id: string }) {
   const totalPages = liveStatus?.totalPages ?? doc?.totalPages ?? 0;
   const totalChunks = liveStatus?.totalChunks ?? 0;
 
+  const overallProgress =
+    liveStatus?.progressPercentage ?? doc?.indexingProgressPercentage ?? 0;
+
   const phaseModel = useMemo(() => {
     return computePhaseBars({
       normalized: normalizedStatus,
+      indexingPhase: liveStatus?.indexingPhase,
       operation: liveStatus?.currentOperation,
-      phaseHint: liveStatus?.phaseHint,
-      totalPages,
-      totalChunks,
-      currentPageIndexing: liveStatus?.currentPageIndexing ?? doc?.currentPageIndexing ?? 0,
-      progressPercentage:
-        liveStatus?.progressPercentage ?? doc?.indexingProgressPercentage ?? 0,
+      phaseHint: liveStatus?.phaseHint ?? liveStatus?.phaseLabel,
+      progressPercentage: overallProgress,
     });
   }, [
     normalizedStatus,
+    liveStatus?.indexingPhase,
     liveStatus?.currentOperation,
     liveStatus?.phaseHint,
-    totalPages,
-    totalChunks,
-    liveStatus?.currentPageIndexing,
-    liveStatus?.progressPercentage,
-    doc?.currentPageIndexing,
-    doc?.indexingProgressPercentage,
+    liveStatus?.phaseLabel,
+    overallProgress,
   ]);
 
-  const failureMessage =
-    normalizedStatus === 'failed'
-      ? liveStatus?.errorMessage?.trim() || 'Indexing failed. You can retry without re-uploading the file.'
-      : null;
+  const technicalErrorMessage = liveStatus?.errorMessage?.trim() || null;
 
   const handleRetryIndexing = async () => {
     setRetryBusy(true);
@@ -357,8 +371,11 @@ export default function DocumentDetail({ id }: { id: string }) {
             currentPageIndexing: status.currentPageIndexing ?? data.currentPageIndexing,
             totalPages: status.totalPages ?? data.totalPages,
             totalChunks: status.totalChunks,
-            currentOperation: status.currentOperation,
+            chunksProcessed: status.chunksProcessed,
+            currentOperation: status.currentOperation ?? undefined,
             progressPercentage: status.progressPercentage,
+            indexingPhase: status.indexingPhase,
+            phaseLabel: status.phaseLabel ?? undefined,
             errorMessage: undefined,
           });
         })(),
@@ -505,34 +522,53 @@ export default function DocumentDetail({ id }: { id: string }) {
                 <CardHeader className="space-y-1 pb-4">
                   <CardTitle className="text-base text-sky-950">RAG ingestion pipeline</CardTitle>
                   <CardDescription className="text-sky-900/80">
-                    Download &amp; parse → page indexing → chunk persist → metadata &amp; embedding enrichment.
+                    Download PDF → extract text → chunk &amp; persist → enrich metadata → generate embeddings.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="min-h-[280px] space-y-5 pt-0">
-                  {(
-                    [
-                      ['download', '1 · Download & parse', phaseModel.downloadPct],
-                      ['pageIndexing', '2 · Page indexing', phaseModel.pageIndexingPct],
-                      ['chunkPersist', '3 · Chunk persist', phaseModel.chunkPersistPct],
-                      ['enrich', '4 · Enrich metadata & embeddings', phaseModel.enrichPct],
-                    ] as const
-                  ).map(([phase, label, pct]) => (
-                    <div
-                      key={phase}
-                      className={cn(
-                        'space-y-2 rounded-lg px-1 py-0.5 transition-colors',
-                        phaseModel.activePhase === phase && normalizedStatus === 'processing'
-                          ? 'bg-sky-100/80 ring-1 ring-sky-300/60'
-                          : undefined,
-                      )}
-                    >
+                <CardContent className="min-h-[320px] space-y-5 pt-0">
+                  {(normalizedStatus === 'processing' || normalizedStatus === 'pending') && (
+                    <div className="space-y-2 rounded-lg border border-sky-200/70 bg-white/70 px-3 py-3">
                       <div className="flex items-center justify-between text-xs font-semibold text-sky-950">
-                        <span>{label}</span>
-                        <span className="tabular-nums text-muted-foreground">{pct}%</span>
+                        <span>Overall progress</span>
+                        <span className="tabular-nums text-muted-foreground">
+                          {Math.round(phaseModel.overallPct)}%
+                        </span>
                       </div>
-                      <Progress value={pct} variant={barVariantFor(phase)} />
+                      <Progress value={phaseModel.overallPct} />
                     </div>
-                  ))}
+                  )}
+
+                  {INDEXING_PHASE_STEPS.map(({ key, label, phase }) => {
+                    const pct = phaseBarValue(phaseModel, key);
+                    const isChunkPhase = phase === 4 || phase === 5;
+                    const chunksProcessed = liveStatus?.chunksProcessed ?? 0;
+                    const chunkDetail =
+                      isChunkPhase && totalChunks > 0
+                        ? ` (${chunksProcessed}/${totalChunks})`
+                        : '';
+
+                    return (
+                      <div
+                        key={key}
+                        className={cn(
+                          'space-y-2 rounded-lg px-1 py-0.5 transition-colors',
+                          phaseModel.activePhase === key &&
+                            (normalizedStatus === 'processing' || normalizedStatus === 'pending')
+                            ? 'bg-sky-100/80 ring-1 ring-sky-300/60'
+                            : undefined,
+                        )}
+                      >
+                        <div className="flex items-center justify-between text-xs font-semibold text-sky-950">
+                          <span>
+                            {label}
+                            {chunkDetail}
+                          </span>
+                          <span className="tabular-nums text-muted-foreground">{pct}%</span>
+                        </div>
+                        <Progress value={pct} variant={barVariantFor(key)} />
+                      </div>
+                    );
+                  })}
 
                   {displayCurrentOperation ? (
                     <p className="rounded-lg border border-sky-100 bg-white/80 px-3 py-2 text-xs text-muted-foreground">
@@ -551,29 +587,81 @@ export default function DocumentDetail({ id }: { id: string }) {
                 </CardContent>
               </Card>
 
-              {normalizedStatus === 'failed' && failureMessage ? (
-                <div
-                  role="alert"
-                  className="w-full rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-left text-sm text-destructive"
-                >
-                  <p className="font-semibold text-destructive">Indexing error</p>
-                  <p className="mt-1 text-destructive/90">{failureMessage}</p>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="sm"
-                      disabled={retryBusy}
-                      onClick={() => setReindexConfirmOpen(true)}
-                      className="rounded-xl"
+              {normalizedStatus === 'failed' ? (
+                <div className="w-full space-y-3 text-left">
+                  <div className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+                    <p className="font-semibold text-amber-950">Indexing failed</p>
+                    <p className="mt-1 text-amber-900/90">
+                      You can retry without re-uploading the file. Use Re-index to run the pipeline
+                      again on the existing PDF.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        disabled={retryBusy}
+                        onClick={() => setReindexConfirmOpen(true)}
+                        className="rounded-xl"
+                      >
+                        {retryBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        Retry indexing
+                      </Button>
+                    </div>
+                  </div>
+
+                  {technicalErrorMessage ? (
+                    <div
+                      role="alert"
+                      className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
                     >
-                      {retryBusy ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4" />
-                      )}
-                      Retry indexing
-                    </Button>
+                      <p className="font-semibold text-destructive">Indexing error</p>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-destructive/90">
+                        {technicalErrorMessage}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {normalizedStatus === 'completed' && technicalErrorMessage ? (
+                <div className="w-full space-y-3 text-left">
+                  <div className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+                    <p className="font-semibold text-amber-950">Last re-index attempt failed</p>
+                    <p className="mt-1 text-amber-900/90">
+                      The document remains available from the previous successful index. You can retry
+                      re-indexing without uploading a new file.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={retryBusy}
+                        onClick={() => setReindexConfirmOpen(true)}
+                        className="rounded-xl"
+                      >
+                        {retryBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        Retry indexing
+                      </Button>
+                    </div>
+                  </div>
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                  >
+                    <p className="font-semibold text-destructive">Indexing error</p>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-destructive/90">
+                      {technicalErrorMessage}
+                    </p>
                   </div>
                 </div>
               ) : null}
@@ -660,16 +748,19 @@ export default function DocumentDetail({ id }: { id: string }) {
           void (async () => {
             const [data, status] = await Promise.all([getAdminDocumentById(id), fetchDocumentStatus(id)]);
             setDoc(data);
-            applyIngestionSnapshot({
-              source: 'rest',
-              status: status.status || data.indexingStatus,
-              currentPageIndexing: status.currentPageIndexing ?? data.currentPageIndexing,
-              totalPages: status.totalPages ?? data.totalPages,
-              totalChunks: status.totalChunks,
-              currentOperation: status.currentOperation,
-              progressPercentage: status.progressPercentage,
-              errorMessage: undefined,
-            });
+          applyIngestionSnapshot({
+            source: 'rest',
+            status: status.status || data.indexingStatus,
+            currentPageIndexing: status.currentPageIndexing ?? data.currentPageIndexing,
+            totalPages: status.totalPages ?? data.totalPages,
+            totalChunks: status.totalChunks,
+            chunksProcessed: status.chunksProcessed,
+            currentOperation: status.currentOperation ?? undefined,
+            progressPercentage: status.progressPercentage,
+            indexingPhase: status.indexingPhase,
+            phaseLabel: status.phaseLabel ?? undefined,
+            errorMessage: undefined,
+          });
           })();
         }}
       />

@@ -1,14 +1,44 @@
+import type { DocumentIndexingPhase } from '@/lib/api/types';
 import type { NormalizedIndexingStatus } from '@/lib/api/admin-documents';
 
-export type IndexingPhaseKey = 'download' | 'pageIndexing' | 'chunkPersist' | 'enrich';
+export type IndexingPhaseKey =
+  | 'download'
+  | 'extract'
+  | 'chunkPersist'
+  | 'enrichMetadata'
+  | 'generateEmbeddings';
+
+export const INDEXING_PHASE_STEPS: ReadonlyArray<{
+  key: IndexingPhaseKey;
+  phase: DocumentIndexingPhase;
+  label: string;
+}> = [
+  { key: 'download', phase: 1, label: '1 · Download PDF' },
+  { key: 'extract', phase: 2, label: '2 · Extract text' },
+  { key: 'chunkPersist', phase: 3, label: '3 · Chunk & persist' },
+  { key: 'enrichMetadata', phase: 4, label: '4 · Enrich metadata' },
+  { key: 'generateEmbeddings', phase: 5, label: '5 · Generate embeddings' },
+] as const;
+
+/** Backend progress ranges per phase (0–100 overall). */
+const PHASE_RANGES: ReadonlyArray<{ start: number; end: number }> = [
+  { start: 0, end: 8 },
+  { start: 8, end: 40 },
+  { start: 40, end: 65 },
+  { start: 65, end: 80 },
+  { start: 80, end: 100 },
+];
 
 export type PhaseBarsModel = {
   downloadPct: number;
-  pageIndexingPct: number;
+  extractPct: number;
   chunkPersistPct: number;
-  enrichPct: number;
+  enrichMetadataPct: number;
+  generateEmbeddingsPct: number;
   failedPhase: IndexingPhaseKey | null;
   activePhase: IndexingPhaseKey | null;
+  activePhaseNumber: DocumentIndexingPhase | 0;
+  overallPct: number;
 };
 
 function clampPct(n: number): number {
@@ -16,135 +46,145 @@ function clampPct(n: number): number {
   return Math.min(100, Math.max(0, Math.round(n)));
 }
 
-/** Guess which pipeline bar failed from backend hints. */
-export function inferFailedPhase(operation?: string, phaseHint?: string): IndexingPhaseKey {
-  const op = (operation ?? '').toLowerCase();
-  const ph = (phaseHint ?? '').toLowerCase();
-  if (/enrich|embed|metadata and embedding/.test(op) || /enrich|embed/.test(ph)) return 'enrich';
-  if (/chunk|persist|saving chunk/.test(op) || /chunk|persist/.test(ph)) return 'chunkPersist';
-  if (/indexing pages|pdf|parse|page|pig|ocr/.test(op) || /pars|pdf|page/.test(ph)) return 'pageIndexing';
-  if (/download|load|storage|stream/.test(op) || /download|load/.test(ph)) return 'download';
-  return 'enrich';
+function phaseKeyFromNumber(phase: DocumentIndexingPhase | 0): IndexingPhaseKey | null {
+  const match = INDEXING_PHASE_STEPS.find((s) => s.phase === phase);
+  return match?.key ?? null;
 }
 
-function detectActivePhase(operation?: string, progressPercentage = 0): IndexingPhaseKey {
+function detectActivePhaseFromHints(
+  operation?: string,
+  progressPercentage = 0,
+): DocumentIndexingPhase {
   const op = (operation ?? '').toLowerCase();
-  if (/completed\.?$/i.test(op.trim()) || progressPercentage >= 100) return 'enrich';
-  if (/enrich|embedding|metadata and embedding/.test(op)) return 'enrich';
-  if (/chunk|persist|saving chunk|chunking completed/.test(op)) return 'chunkPersist';
-  if (/indexing pages|pdf parsed|page \d|parsing/.test(op)) return 'pageIndexing';
-  if (/download|stream to disk|waiting for chunking/.test(op)) return 'download';
+  if (/embed|vector|generat/.test(op)) return 5;
+  if (/enrich|metadata/.test(op)) return 4;
+  if (/chunk|persist/.test(op)) return 3;
+  if (/extract|pars|page|pdfpig|pig/.test(op)) return 2;
+  if (/download|storage|stream/.test(op)) return 1;
 
-  if (progressPercentage >= 95) return 'enrich';
-  if (progressPercentage >= 50) return 'chunkPersist';
-  if (progressPercentage >= 10) return 'pageIndexing';
-  return 'download';
+  if (progressPercentage >= 80) return 5;
+  if (progressPercentage >= 65) return 4;
+  if (progressPercentage >= 40) return 3;
+  if (progressPercentage >= 8) return 2;
+  return 1;
+}
+
+function barPctForPhase(
+  targetPhase: DocumentIndexingPhase,
+  activePhase: DocumentIndexingPhase,
+  overall: number,
+): number {
+  if (targetPhase < activePhase) return 100;
+  if (targetPhase > activePhase) return 0;
+  const { start, end } = PHASE_RANGES[targetPhase - 1];
+  const span = end - start;
+  if (span <= 0) return overall >= end ? 100 : 0;
+  return clampPct(((overall - start) / span) * 100);
+}
+
+/** Guess which pipeline bar failed from backend hints. */
+export function inferFailedPhase(
+  indexingPhase?: DocumentIndexingPhase | 0,
+  operation?: string,
+  phaseHint?: string,
+): IndexingPhaseKey {
+  if (indexingPhase != null && indexingPhase >= 1 && indexingPhase <= 5) {
+    return phaseKeyFromNumber(indexingPhase) ?? 'generateEmbeddings';
+  }
+  const op = (operation ?? '').toLowerCase();
+  const ph = (phaseHint ?? '').toLowerCase();
+  if (/embed|vector|generat/.test(op) || /embed|vector/.test(ph)) return 'generateEmbeddings';
+  if (/enrich|metadata/.test(op) || /enrich|metadata/.test(ph)) return 'enrichMetadata';
+  if (/chunk|persist/.test(op) || /chunk|persist/.test(ph)) return 'chunkPersist';
+  if (/extract|pars|page|pdf|pig/.test(op) || /extract|pars|page/.test(ph)) return 'extract';
+  if (/download|load|storage|stream/.test(op) || /download|load/.test(ph)) return 'download';
+  return 'generateEmbeddings';
 }
 
 /**
- * Map REST + SignalR fields into four stable progress bars aligned with the ingestion pipeline.
+ * Map REST + SignalR fields into five stable progress bars aligned with the ingestion pipeline.
  */
 export function computePhaseBars(args: {
   normalized: NormalizedIndexingStatus;
+  indexingPhase?: DocumentIndexingPhase | 0;
   operation?: string;
   phaseHint?: string;
-  totalPages?: number;
-  totalChunks?: number;
-  currentPageIndexing?: number;
   progressPercentage?: number;
 }): PhaseBarsModel {
-  const {
-    normalized,
-    operation,
-    phaseHint,
-    totalPages = 0,
-    totalChunks = 0,
-    currentPageIndexing = 0,
-    progressPercentage = 0,
-  } = args;
-
+  const { normalized, indexingPhase = 0, operation, phaseHint, progressPercentage = 0 } = args;
   const overall = clampPct(progressPercentage);
-  const activePhase = detectActivePhase(operation, overall);
-  const cur = Math.max(0, Math.floor(currentPageIndexing));
+  const activePhaseNumber: DocumentIndexingPhase =
+    indexingPhase >= 1 && indexingPhase <= 5
+      ? (indexingPhase as DocumentIndexingPhase)
+      : detectActivePhaseFromHints(operation, overall);
+  const activePhase = phaseKeyFromNumber(activePhaseNumber);
 
   if (normalized === 'completed') {
     return {
       downloadPct: 100,
-      pageIndexingPct: 100,
+      extractPct: 100,
       chunkPersistPct: 100,
-      enrichPct: 100,
+      enrichMetadataPct: 100,
+      generateEmbeddingsPct: 100,
       failedPhase: null,
       activePhase: null,
+      activePhaseNumber: 0,
+      overallPct: 100,
     };
   }
 
   if (normalized === 'unknown') {
     return {
       downloadPct: 12,
-      pageIndexingPct: 0,
+      extractPct: 0,
       chunkPersistPct: 0,
-      enrichPct: 0,
+      enrichMetadataPct: 0,
+      generateEmbeddingsPct: 0,
       failedPhase: null,
       activePhase: 'download',
+      activePhaseNumber: 1,
+      overallPct: overall,
     };
   }
 
   if (normalized === 'failed') {
-    const failedPhase = inferFailedPhase(operation, phaseHint);
+    const failedPhase = inferFailedPhase(indexingPhase, operation, phaseHint);
     const partial = computePhaseBars({
       normalized: 'processing',
+      indexingPhase: activePhaseNumber,
       operation,
       phaseHint,
-      totalPages,
-      totalChunks,
-      currentPageIndexing,
       progressPercentage,
     });
     return { ...partial, failedPhase };
   }
 
-  const pagesReady = totalPages > 0;
-  const chunksReady = totalChunks > 0;
-
-  let downloadPct = 0;
-  let pageIndexingPct = 0;
-  let chunkPersistPct = 0;
-  let enrichPct = 0;
-
-  if (activePhase === 'download') {
-    downloadPct = overall > 0 ? clampPct((overall / 10) * 100) : normalized === 'pending' ? 28 : 55;
-  } else {
-    downloadPct = 100;
-  }
-
-  if (activePhase === 'pageIndexing') {
-    pageIndexingPct =
-      pagesReady && totalPages > 0
-        ? clampPct((cur / totalPages) * 100)
-        : clampPct(((overall - 10) / 40) * 100);
-  } else if (activePhase === 'chunkPersist' || activePhase === 'enrich') {
-    pageIndexingPct = 100;
-  }
-
-  if (activePhase === 'chunkPersist') {
-    chunkPersistPct =
-      chunksReady && totalChunks > 0
-        ? clampPct((cur / totalChunks) * 100)
-        : clampPct(((overall - 50) / 45) * 100);
-  } else if (activePhase === 'enrich') {
-    chunkPersistPct = 100;
-  }
-
-  if (activePhase === 'enrich') {
-    enrichPct = clampPct(((overall - 95) / 4) * 100) || (overall >= 99 ? 100 : Math.max(8, overall - 90));
-  }
-
   return {
-    downloadPct,
-    pageIndexingPct,
-    chunkPersistPct,
-    enrichPct,
+    downloadPct: barPctForPhase(1, activePhaseNumber, overall),
+    extractPct: barPctForPhase(2, activePhaseNumber, overall),
+    chunkPersistPct: barPctForPhase(3, activePhaseNumber, overall),
+    enrichMetadataPct: barPctForPhase(4, activePhaseNumber, overall),
+    generateEmbeddingsPct: barPctForPhase(5, activePhaseNumber, overall),
     failedPhase: null,
     activePhase,
+    activePhaseNumber,
+    overallPct: overall,
   };
+}
+
+export function phaseBarValue(model: PhaseBarsModel, key: IndexingPhaseKey): number {
+  switch (key) {
+    case 'download':
+      return model.downloadPct;
+    case 'extract':
+      return model.extractPct;
+    case 'chunkPersist':
+      return model.chunkPersistPct;
+    case 'enrichMetadata':
+      return model.enrichMetadataPct;
+    case 'generateEmbeddings':
+      return model.generateEmbeddingsPct;
+    default:
+      return 0;
+  }
 }

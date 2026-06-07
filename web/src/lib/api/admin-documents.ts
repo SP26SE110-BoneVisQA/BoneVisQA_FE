@@ -310,6 +310,17 @@ export async function reindexDocumentMetadata(
   }
 }
 
+function parseIndexingPhase(value: unknown): DocumentStatusResponse['indexingPhase'] {
+  const n =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? parseInt(value, 10)
+        : Number.NaN;
+  if (!Number.isFinite(n) || n < 0 || n > 5) return 0;
+  return n as DocumentStatusResponse['indexingPhase'];
+}
+
 function mapDocumentStatus(row: unknown): DocumentStatusResponse {
   const r = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
   const progressRaw = r.progressPercentage ?? r.progress ?? r.indexingProgress ?? 0;
@@ -327,25 +338,47 @@ function mapDocumentStatus(row: unknown): DocumentStatusResponse {
     optNonNegInt(r.currentPageIndexing) ??
     optNonNegInt(r.current_page_indexing) ??
     optNonNegInt(r.currentPage) ??
-    optNonNegInt(r.current_page);
+    optNonNegInt(r.current_page) ??
+    0;
   const totalPages =
-    optNonNegInt(r.totalPages) ?? optNonNegInt(r.total_pages) ?? optNonNegInt(r.pageCount);
+    optNonNegInt(r.totalPages) ?? optNonNegInt(r.total_pages) ?? optNonNegInt(r.pageCount) ?? 0;
   const totalChunks =
-    optNonNegInt(r.totalChunks) ?? optNonNegInt(r.total_chunks) ?? optNonNegInt(r.chunkCount);
+    optNonNegInt(r.totalChunks) ?? optNonNegInt(r.total_chunks) ?? optNonNegInt(r.chunkCount) ?? 0;
+  const chunksProcessed =
+    optNonNegInt(r.chunksProcessed) ??
+    optNonNegInt(r.chunks_processed) ??
+    optNonNegInt(r.ChunksProcessed) ??
+    0;
+
+  const operationRaw = r.currentOperation ?? r.operation ?? r.CurrentOperation ?? r.Operation;
+  const currentOperation =
+    operationRaw != null && String(operationRaw).trim() !== '' ? String(operationRaw) : null;
+
+  const errorRaw = r.errorMessage ?? r.ErrorMessage ?? r.indexingErrorMessage ?? r.indexing_error_message;
+  const errorMessage =
+    errorRaw != null && String(errorRaw).trim() !== '' ? String(errorRaw) : null;
+
+  const phaseLabelRaw = r.phaseLabel ?? r.PhaseLabel ?? r.phase;
+  const phaseLabel =
+    phaseLabelRaw != null && String(phaseLabelRaw).trim() !== '' ? String(phaseLabelRaw) : null;
 
   return {
     status: String(r.status ?? r.indexingStatus ?? 'Unknown'),
     progressPercentage,
-    currentOperation: String(r.currentOperation ?? r.operation ?? ''),
+    currentOperation,
     currentPageIndexing,
     totalPages,
     totalChunks,
+    errorMessage,
+    indexingPhase: parseIndexingPhase(r.indexingPhase ?? r.IndexingPhase),
+    phaseLabel,
+    chunksProcessed,
   };
 }
 
 export async function fetchDocumentStatus(id: string): Promise<DocumentStatusResponse> {
   try {
-    const { data } = await http.get<unknown>(`${ADMIN_DOCUMENTS}/${id}/status`);
+    const { data } = await http.get<unknown>(`${ADMIN_DOCUMENTS}/${id}/ingestion-status`);
     return mapDocumentStatus(data);
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
