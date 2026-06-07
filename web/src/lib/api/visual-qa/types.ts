@@ -58,16 +58,35 @@ export type VisualQaAskJsonResponse = VisualQaSessionReport & {
   latestTurn?: VisualQaTurn | null;
 };
 
+/** `GET /api/student/visual-qa/history/personal` list row (`VisualQaSessionHistoryItemDto`). */
+export interface VisualQaSessionHistoryItem {
+  sessionId: string;
+  caseId?: string | null;
+  status: string;
+  sessionStatus: string;
+  updatedAt?: string | null;
+  questionSnippet?: string | null;
+  imageUrl?: string | null;
+  reviewState?: string | null;
+  lastResponderRole?: string | null;
+  rejectionReason?: string | null;
+}
+
+export interface VisualQaPersonalHistoryResult {
+  totalCount: number;
+  items: VisualQaSessionHistoryItem[];
+}
+
 /** `POST /api/student/visual-qa/upload-personal` success / failure body. */
 export interface VisualQaUploadPersonalResponse {
-  sessionId: string;
-  caseId: string;
-  previewImageUrl: string;
-  ingestOk: boolean;
-  ingestError: string | null;
+  sessionId?: string;
+  caseId?: string;
   mediaId?: string | null;
   catalogImageId?: string | null;
+  previewImageUrl?: string;
   dicomMetadata?: VisualQaDicomMetadata | null;
+  ingestOk: boolean;
+  ingestError?: string | null;
 }
 
 export interface VisualQaUploadPersonalOptions {
@@ -77,7 +96,11 @@ export interface VisualQaUploadPersonalOptions {
 }
 
 /** `GET /api/student/visual-qa/history/{sessionId}` (`VisualQaThreadDto`). */
-export type VisualQaThreadResponse = VisualQaSessionReport;
+export type VisualQaThreadResponse = VisualQaSessionReport & {
+  /** BE alias — same value as `sessionImageUrl`; normalized in `hydrateThread`. */
+  imageUrl?: string | null;
+  studyImageUrl?: string | null;
+};
 
 export interface VisualQaHistoryListParams {
   limit?: number;

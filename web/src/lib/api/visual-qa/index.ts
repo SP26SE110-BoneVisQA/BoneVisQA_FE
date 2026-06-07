@@ -15,7 +15,15 @@ export {
 export {
   postVisualQaUploadPersonal,
   validatePersonalStudyArchive,
+  MAX_STUDY_ARCHIVE_BYTES,
 } from '@/lib/api/visual-qa/upload-personal';
+
+export {
+  isBrokenLegacyImageUrl,
+  resolveStudyImageSrc,
+} from '@/lib/api/visual-qa/image-url';
+
+export { formatVisualQaUploadError } from '@/lib/api/visual-qa/upload-errors';
 
 export {
   fetchVisualQaThread,
@@ -32,5 +40,7 @@ export type {
   VisualQaUploadPersonalOptions,
   VisualQaThreadResponse,
   VisualQaHistoryListParams,
+  VisualQaSessionHistoryItem,
+  VisualQaPersonalHistoryResult,
   VisualQaLocale,
 } from '@/lib/api/visual-qa/types';

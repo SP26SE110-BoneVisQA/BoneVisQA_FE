@@ -7,7 +7,8 @@ import type {
 import { normalizeDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 import { unwrapVisualQaPayload } from '@/lib/api/visual-qa/unwrap';
 
-const MAX_ARCHIVE_BYTES = 209_715_200; // 200 MB — BE StudyArchiveIngestHelper
+export const MAX_STUDY_ARCHIVE_BYTES = 209_715_200; // 200 MB — BE Kestrel limit
+const MAX_ARCHIVE_BYTES = MAX_STUDY_ARCHIVE_BYTES;
 const ALLOWED_EXTENSIONS = ['.zip', '.rar'] as const;
 
 function extensionOf(fileName: string): string {
@@ -19,13 +20,13 @@ function extensionOf(fileName: string): string {
 export function validatePersonalStudyArchive(file: File): string | null {
   const ext = extensionOf(file.name);
   if (!ALLOWED_EXTENSIONS.includes(ext as (typeof ALLOWED_EXTENSIONS)[number])) {
-    return 'Only DICOM archive files (.zip or .rar) are supported.';
+    return 'Chỉ chấp nhận file .zip hoặc .rar chứa study DICOM.';
   }
   if (file.size > MAX_ARCHIVE_BYTES) {
-    return 'File exceeds the 200 MB limit.';
+    return 'File tối đa 200 MB. Vui lòng nén lại study trước khi upload.';
   }
   if (file.size <= 0) {
-    return 'File is empty.';
+    return 'File rỗng.';
   }
   return null;
 }
@@ -83,13 +84,14 @@ export async function postVisualQaUploadPersonal(
   }
 
   const form = new FormData();
-  form.append('file', file);
+  form.append('file', file, file.name);
   const note = options.diagnosisText?.trim();
   if (note) form.append('diagnosisText', note);
 
   try {
+    // Let axios set multipart boundary automatically (manual Content-Type breaks uploads)
     const { data } = await http.post<unknown>('/api/student/visual-qa/upload-personal', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30 * 60 * 1000,
       skipApiToast: options.skipApiToast,
       onUploadProgress: (ev) => {
         if (!options.onUploadProgress || !ev.total) return;

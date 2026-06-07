@@ -86,6 +86,7 @@ type ProblemDetailsPayload = {
   type?: unknown;
   instance?: unknown;
   message?: unknown;
+  ingestError?: unknown;
   error?: unknown;
   errors?: unknown;
 };
@@ -241,11 +242,11 @@ export function getApiErrorMessage(err: unknown): string {
       }
 
       if (raw === 'Request failed') {
-        // ProblemDetails priority: detail (specific) -> title (summary).
-        if (typeof o.detail === 'string' && o.detail.trim()) raw = o.detail.trim();
+        // Explicit API messages (upload validation, ingest) before ProblemDetails fallbacks.
+        if (typeof o.message === 'string' && o.message.trim()) raw = o.message.trim();
+        else if (typeof o.ingestError === 'string' && o.ingestError.trim()) raw = o.ingestError.trim();
+        else if (typeof o.detail === 'string' && o.detail.trim()) raw = o.detail.trim();
         else if (typeof o.title === 'string' && o.title.trim()) raw = o.title.trim();
-        // Backward compatibility for legacy API shapes.
-        else if (typeof o.message === 'string' && o.message.trim()) raw = o.message.trim();
         else if (typeof o.error === 'string' && o.error.trim()) raw = o.error.trim();
         else if (Array.isArray(o.errors) && o.errors[0]) raw = String(o.errors[0]);
       }
