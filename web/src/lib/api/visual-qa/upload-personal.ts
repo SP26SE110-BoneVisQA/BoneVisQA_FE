@@ -6,6 +6,12 @@ import type {
 } from '@/lib/api/visual-qa/types';
 import { normalizeDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 import { unwrapVisualQaPayload } from '@/lib/api/visual-qa/unwrap';
+import {
+  extractIngestJobId,
+  isIngestJobTerminal,
+  normalizeIngestJobStatus,
+  pollUntilIngestComplete,
+} from '@/lib/api/ingest-job-poll';
 
 export const MAX_STUDY_ARCHIVE_BYTES = 209_715_200; // 200 MB — BE Kestrel limit
 const MAX_ARCHIVE_BYTES = MAX_STUDY_ARCHIVE_BYTES;
@@ -70,9 +76,81 @@ function normalizeUploadResponse(raw: unknown): VisualQaUploadPersonalResponse {
   };
 }
 
+type VisualQaIngestJobSnapshot = VisualQaUploadPersonalResponse & { status: string };
+
+function normalizeVisualQaIngestJob(raw: unknown): VisualQaIngestJobSnapshot {
+  const response = normalizeUploadResponse(raw);
+  const status = normalizeIngestJobStatus(raw);
+  if (status === 'completed' && !response.ingestOk) {
+    return { ...response, ingestOk: true, status };
+  }
+  if (status === 'failed') {
+    return { ...response, ingestOk: false, status };
+  }
+  return { ...response, status: status || 'processing' };
+}
+
+async function fetchVisualQaIngestJob(
+  jobId: string,
+  skipApiToast?: boolean,
+): Promise<VisualQaIngestJobSnapshot> {
+  const { data } = await http.get<unknown>(
+    `/api/student/visual-qa/upload-personal/jobs/${jobId}`,
+    { skipApiToast: skipApiToast ?? true },
+  );
+  return normalizeVisualQaIngestJob(unwrapVisualQaPayload(data));
+}
+
+function throwUploadFailure(
+  result: VisualQaUploadPersonalResponse,
+  fallbackMessage: string,
+): never {
+  const msg = result.ingestError?.trim() || fallbackMessage;
+  const err = new Error(msg) as Error & { uploadResult?: VisualQaUploadPersonalResponse };
+  err.uploadResult = result;
+  throw err;
+}
+
+async function resolveVisualQaUpload(
+  payload: unknown,
+  httpStatus: number,
+  options: VisualQaUploadPersonalOptions = {},
+): Promise<VisualQaUploadPersonalResponse> {
+  const ingestJobId = extractIngestJobId(payload);
+  if (ingestJobId || httpStatus === 202) {
+    if (!ingestJobId) {
+      throw new Error('Upload accepted but ingestJobId is missing.');
+    }
+
+    const finalJob = await pollUntilIngestComplete(
+      () => fetchVisualQaIngestJob(ingestJobId, options.skipApiToast),
+      (job) => isIngestJobTerminal(job.status, job.ingestOk, job.ingestError),
+      { onPoll: options.onIngestPolling },
+    );
+
+    const result = normalizeUploadResponse(finalJob);
+    if (finalJob.status === 'failed' || !result.ingestOk) {
+      throwUploadFailure(result, 'Unable to process the DICOM archive.');
+    }
+    if (!result.sessionId?.trim() || !result.caseId?.trim()) {
+      throw new Error('Upload response is missing sessionId or caseId.');
+    }
+    return result;
+  }
+
+  const result = normalizeUploadResponse(payload);
+  if (!result.ingestOk) {
+    throwUploadFailure(result, 'Unable to process the DICOM archive.');
+  }
+  if (!result.sessionId?.trim() || !result.caseId?.trim()) {
+    throw new Error('Upload response is missing sessionId or caseId.');
+  }
+  return result;
+}
+
 /**
  * `POST /api/student/visual-qa/upload-personal` (multipart).
- * @see FRONTEND_HANDOFF_REPORT §2.4
+ * BE returns 202 + `ingestJobId`; poll until ingest completes.
  */
 export async function postVisualQaUploadPersonal(
   file: File,
@@ -89,41 +167,28 @@ export async function postVisualQaUploadPersonal(
   if (note) form.append('diagnosisText', note);
 
   try {
-    // Let axios set multipart boundary automatically (manual Content-Type breaks uploads)
-    const { data } = await http.post<unknown>('/api/student/visual-qa/upload-personal', form, {
-      timeout: 30 * 60 * 1000,
-      skipApiToast: options.skipApiToast,
-      onUploadProgress: (ev) => {
-        if (!options.onUploadProgress || !ev.total) return;
-        const pct = Math.round((ev.loaded / ev.total) * 100);
-        options.onUploadProgress(Math.min(100, pct));
+    const { data, status: httpStatus } = await http.post<unknown>(
+      '/api/student/visual-qa/upload-personal',
+      form,
+      {
+        timeout: 15 * 60 * 1000,
+        skipApiToast: options.skipApiToast,
+        onUploadProgress: (ev) => {
+          if (!options.onUploadProgress || !ev.total) return;
+          const pct = Math.round((ev.loaded / ev.total) * 100);
+          options.onUploadProgress(Math.min(100, pct));
+        },
       },
-    });
+    );
 
     const payload = unwrapVisualQaPayload(data);
-    const result = normalizeUploadResponse(payload);
-
-    if (!result.ingestOk) {
-      const msg = result.ingestError?.trim() || 'Unable to process the DICOM archive.';
-      const err = new Error(msg) as Error & { uploadResult?: VisualQaUploadPersonalResponse };
-      err.uploadResult = result;
-      throw err;
-    }
-
-    if (!result.sessionId?.trim() || !result.caseId?.trim()) {
-      throw new Error('Upload response is missing sessionId or caseId.');
-    }
-
-    return result;
+    return await resolveVisualQaUpload(payload, httpStatus, options);
   } catch (e) {
     if (axios.isAxiosError(e) && e.response?.data) {
       const payload = unwrapVisualQaPayload(e.response.data);
       const result = normalizeUploadResponse(payload);
       if (!result.ingestOk) {
-        const msg = result.ingestError?.trim() || 'Unable to process the DICOM archive.';
-        const err = new Error(msg) as Error & { uploadResult?: VisualQaUploadPersonalResponse };
-        err.uploadResult = result;
-        throw err;
+        throwUploadFailure(result, 'Unable to process the DICOM archive.');
       }
     }
     if (axios.isAxiosError(e)) {
