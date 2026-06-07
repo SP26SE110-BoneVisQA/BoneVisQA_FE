@@ -177,14 +177,14 @@ export function WorkspaceStructuredAnswer({
           </div>
         ) : null}
 
-        {educatorFeedbackEntries.length > 0 ? (
-          <EducatorFeedbackSection entries={educatorFeedbackEntries} />
-        ) : null}
-
         {citations.length > 0 ? (
           <div className="rounded-[1.1rem] border border-emerald-200/70 bg-emerald-50/70 px-3 py-3 shadow-sm">
             <WorkspaceRagSources citations={citations} className="mt-0 border-t-0 pt-0" defaultExpanded />
           </div>
+        ) : null}
+
+        {educatorFeedbackEntries.length > 0 ? (
+          <EducatorFeedbackSection entries={educatorFeedbackEntries} />
         ) : null}
       </div>
     );
@@ -206,7 +206,7 @@ export function WorkspaceStructuredAnswer({
             Educational answer structure
           </p>
           <p className="text-xs text-slate-500">
-            Diagnosis, differential, imaging signs, reflection, and supporting sources.
+            Diagnosis, differential, imaging signs, reflection, sources, then educator feedback.
           </p>
         </div>
       </div>
@@ -248,10 +248,6 @@ export function WorkspaceStructuredAnswer({
         />
       </div>
 
-      {educatorFeedbackEntries.length > 0 ? (
-        <EducatorFeedbackSection entries={educatorFeedbackEntries} />
-      ) : null}
-
       {citations.length > 0 ? (
         <div className="rounded-[1.1rem] border border-emerald-200/70 bg-emerald-50/70 px-3 py-3 shadow-sm">
           <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-emerald-950">
@@ -262,6 +258,10 @@ export function WorkspaceStructuredAnswer({
           </p>
           <WorkspaceRagSources citations={citations} className="mt-0 border-t-0 pt-0" defaultExpanded />
         </div>
+      ) : null}
+
+      {educatorFeedbackEntries.length > 0 ? (
+        <EducatorFeedbackSection entries={educatorFeedbackEntries} />
       ) : null}
     </div>
   );

@@ -28,7 +28,6 @@ import { useEffect, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle,
-  Edit3,
   Library,
   Link2,
   RefreshCw,
@@ -101,6 +100,51 @@ export function reflectiveQuestionsToEditText(
 
 function isTerminal(status: string) {
   return getWorkflowStatusMeta(status).terminal;
+}
+
+function PromoteClinicalReadiness({
+  description,
+  differential,
+  keyImaging,
+  reflective,
+}: {
+  description: string;
+  differential: string;
+  keyImaging: string;
+  reflective: string;
+}) {
+  const rows = [
+    { label: 'Main diagnosis (description)', ok: Boolean(description.trim()) },
+    { label: 'Differential diagnoses', ok: Boolean(differential.trim()) },
+    { label: 'Key imaging findings', ok: Boolean(keyImaging.trim()) },
+    { label: 'Reflective questions', ok: Boolean(reflective.trim()) },
+  ];
+  const allReady = rows.every((row) => row.ok);
+  return (
+    <div
+      className={`rounded-xl border px-3 py-3 text-xs ${
+        allReady ? 'border-emerald-300 bg-white/80' : 'border-amber-300 bg-amber-50/80'
+      }`}
+    >
+      <p className="font-semibold text-slate-900">
+        {allReady
+          ? 'Case content ready — sourced from Expert clinical override above.'
+          : 'Complete the missing fields in Expert clinical override above before promoting.'}
+      </p>
+      <ul className="mt-2 space-y-1">
+        {rows.map((row) => (
+          <li key={row.label} className="flex items-center gap-2 text-slate-800">
+            {row.ok ? (
+              <CheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden />
+            ) : (
+              <XCircle className="h-3.5 w-3.5 shrink-0 text-amber-700" aria-hidden />
+            )}
+            {row.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function EvidencePanel({
@@ -439,7 +483,7 @@ export function ExpertReviewWorkspace({
   const [correctedRoi, setCorrectedRoi] = useState<NormalizedImageBoundingBox | null>(null);
 
   useEffect(() => {
-    if (pairMismatch) return;
+    if (pairMismatch || saving) return;
     const sid = item.sessionId;
     const hasRoi = correctedRoi !== null && isValidNormalizedBoundingBox(correctedRoi);
     if (!hasRoi) return;
@@ -453,7 +497,7 @@ export function ExpertReviewWorkspace({
       }).catch(() => {});
     }, 1600);
     return () => window.clearTimeout(timer);
-  }, [correctedRoi, item.sessionId, pairMismatch]);
+  }, [correctedRoi, item.sessionId, pairMismatch, saving]);
 
   const statusMeta = getWorkflowStatusMeta(item.status);
   const catalogCase = item.caseId != null && String(item.caseId).trim() !== '';
@@ -615,10 +659,18 @@ export function ExpertReviewWorkspace({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-emerald-950">Publish to student library</CardTitle>
             <CardDescription className="text-xs text-emerald-900/90">
-              Required: title, category, difficulty, and tags. Descriptions use your clinical override above.
+              Library metadata only. Case content (diagnosis, differential, imaging, reflection) is taken from{' '}
+              <strong>Expert clinical override</strong> above — prefilled from the AI answer when you open a review.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
+          <CardContent className="space-y-4">
+            <PromoteClinicalReadiness
+              description={diag}
+              differential={keyText}
+              keyImaging={keyImagingEdit}
+              reflective={reflectiveEdit}
+            />
+            <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs font-semibold text-slate-800">Anatomy site</span>
               <input
@@ -640,7 +692,7 @@ export function ExpertReviewWorkspace({
               />
             </label>
             <label className="space-y-1 sm:col-span-2">
-              <span className="text-xs font-semibold text-slate-800">Title</span>
+              <span className="text-xs font-semibold text-slate-800">Title <span className="text-red-600">*</span></span>
               <input
                 type="text"
                 value={libraryTitle}
@@ -650,7 +702,7 @@ export function ExpertReviewWorkspace({
               />
             </label>
             <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-800">Category</span>
+              <span className="text-xs font-semibold text-slate-800">Category <span className="text-red-600">*</span></span>
               <select
                 value={libraryCategoryId}
                 onChange={(e) => onLibraryCategoryIdChange(e.target.value)}
@@ -666,7 +718,7 @@ export function ExpertReviewWorkspace({
               </select>
             </label>
             <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-800">Difficulty</span>
+              <span className="text-xs font-semibold text-slate-800">Difficulty <span className="text-red-600">*</span></span>
               <select
                 value={libraryDifficulty}
                 onChange={(e) => onLibraryDifficultyChange(e.target.value)}
@@ -679,7 +731,7 @@ export function ExpertReviewWorkspace({
               </select>
             </label>
             <label className="space-y-1 sm:col-span-2">
-              <span className="text-xs font-semibold text-slate-800">Tags (comma-separated)</span>
+              <span className="text-xs font-semibold text-slate-800">Tags (comma-separated) <span className="text-red-600">*</span></span>
               <input
                 type="text"
                 value={libraryTagsCsv}
@@ -689,6 +741,7 @@ export function ExpertReviewWorkspace({
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60"
               />
             </label>
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -703,12 +756,6 @@ export function ExpertReviewWorkspace({
               </span>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
-              {!isEditing ? (
-                <Button type="button" variant="outline" disabled={saving || pairMismatch} onClick={onOpenEdit}>
-                  <Edit3 className="h-4 w-4" />
-                  Edit diagnosis / findings
-                </Button>
-              ) : null}
               <Button
                 type="button"
                 variant="default"

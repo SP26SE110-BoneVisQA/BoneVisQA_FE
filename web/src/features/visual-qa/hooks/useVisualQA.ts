@@ -20,20 +20,8 @@ import {
 import { useVisualQaStore } from '@/features/visual-qa/store/visual-qa-store';
 import { createVisualQaClientRequestId } from '@/features/visual-qa/utils/client-request-id';
 
-/** Skip redundant thread GET when ask-json already returned a mergeable session payload. */
-function shouldRefetchThreadAfterAsk(response: VisualQaAskJsonResponse): boolean {
-  const hasTurns = (response.turns?.length ?? 0) > 0;
-  const hasLatestAnswer = Boolean(
-    response.latest?.answerText?.trim() || response.latest?.assistantMessageId?.trim(),
-  );
-  const hasStructuredAnswer = Boolean(
-    response.diagnosis?.trim() ||
-      (response.findings?.length ?? 0) > 0 ||
-      response.answerText?.trim(),
-  );
-  if (!response.capabilities) return true;
-  if (hasTurns && (hasLatestAnswer || hasStructuredAnswer)) return false;
-  if (hasLatestAnswer || hasStructuredAnswer) return false;
+/** After ask-json succeeds, always refresh the thread so optimistic loading rows are replaced. */
+function shouldRefetchThreadAfterAsk(_response: VisualQaAskJsonResponse): boolean {
   return true;
 }
 

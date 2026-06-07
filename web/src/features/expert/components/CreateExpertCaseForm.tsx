@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Form,
   FormControl,
@@ -44,6 +45,7 @@ import {
 } from '@/lib/api/expert-cases';
 import { applyDicomMetadataToExpertForm } from '@/features/expert/lib/apply-dicom-metadata-to-form';
 import { appToast } from '@/lib/api/errors/app-toast';
+import { queryKeys } from '@/lib/query-keys';
 import type { CreateExpertCaseJsonInput } from '@/lib/api/expert-cases';
 import type { VisualQaDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 import { Loader2 } from 'lucide-react';
@@ -54,6 +56,7 @@ type Props = {
 };
 
 export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
+  const queryClient = useQueryClient();
   const metaQuery = useExpertCaseMeta();
   const profileQuery = useExpertProfile();
   const createMutation = useCreateExpertCase();
@@ -196,6 +199,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
         diagnosisText: values.description || undefined,
         skipApiToast: true,
       });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.expert.cases() });
     }
 
     return { payload, caseId };

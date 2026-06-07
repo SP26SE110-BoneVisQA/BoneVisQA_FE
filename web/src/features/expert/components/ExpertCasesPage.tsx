@@ -201,8 +201,10 @@ export function ExpertCasesPage() {
       <CreateExpertCaseModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(caseId) => {
-          void queryClient.invalidateQueries({ queryKey: queryKeys.expert.cases() });
+        onCreated={async (caseId) => {
+          await queryClient.invalidateQueries({ queryKey: queryKeys.expert.cases() });
+          await queryClient.refetchQueries({ queryKey: queryKeys.expert.cases() });
+          await queryClient.invalidateQueries({ queryKey: queryKeys.expert.dashboard() });
           if (caseId) setAssetsCaseId(caseId);
         }}
       />

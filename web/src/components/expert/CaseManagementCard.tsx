@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { resolveApiAssetUrl } from '@/lib/api/client';
 import { deleteExpertCase, formatCaseDateForDisplay } from '@/lib/api/expert-cases';
-import { EXPERT_DASHBOARD_QUERY_KEY } from '@/lib/api/expert-dashboard';
+import { queryKeys } from '@/lib/query-keys';
 import { getApiProblemDetails } from '@/lib/api/client';
 import { useState } from 'react';
 
@@ -100,9 +100,9 @@ export default function CaseManagementCard({
       const { message } = await deleteExpertCase(id);
       toast.success(message?.trim() || 'Case deleted.');
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: EXPERT_DASHBOARD_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ['expert', 'cases'] }),
-        queryClient.invalidateQueries({ queryKey: ['expert', 'case'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.expert.dashboard() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.expert.cases() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.expert.caseDetail(id) }),
       ]);
     } catch (e) {
       const { title: errTitle, detail } = getApiProblemDetails(e);

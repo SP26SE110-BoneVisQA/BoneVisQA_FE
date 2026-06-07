@@ -13,7 +13,6 @@ import {
   type ExpertCategory,
   type SaveExpertCaseInput,
 } from '@/lib/api/expert-cases';
-import { fetchExpertRecentCases } from '@/lib/api/expert-dashboard';
 import { queryKeys } from '@/lib/query-keys';
 
 export interface ExpertCaseLibraryResponse {
@@ -27,44 +26,16 @@ export function useExpertCaseLibrary(params?: { pageIndex?: number; pageSize?: n
   return useQuery({
     queryKey: queryKeys.expert.cases(),
     queryFn: async (): Promise<ExpertCaseLibraryResponse> => {
-      try {
-        const pagedResult = await fetchExpertCasesPaged(params?.pageIndex ?? 1, params?.pageSize ?? 100);
-        return {
-          items: pagedResult.items,
-          totalCount: pagedResult.totalCount,
-          pageIndex: pagedResult.pageIndex,
-          pageSize: pagedResult.pageSize,
-        };
-      } catch {
-        const cases = await fetchExpertRecentCases(params);
-        return {
-          items: cases.map((c) => ({
-            id: c.id,
-            createdByExpertId: '',
-            categoryId: '',
-            title: c.title,
-            categoryName: c.lesionType,
-            difficulty: c.difficulty === 'advanced' ? 'Hard' : c.difficulty === 'intermediate' ? 'Medium' : 'Easy',
-            status: c.status,
-            isApproved: c.status === 'approved',
-            isActive: c.status === 'pending',
-            addedBy: c.addedBy,
-            expertName: c.addedBy,
-            addedDate: c.addedDate,
-            boneLocation: c.boneLocation,
-            description: '',
-            suggestedDiagnosis: '',
-            reflectiveQuestions: '',
-            keyFindings: '',
-            thumbnailUrl: c.thumbnailUrl ?? undefined,
-          })),
-          totalCount: cases.length,
-          pageIndex: 1,
-          pageSize: 100,
-        };
-      }
+      const pagedResult = await fetchExpertCasesPaged(params?.pageIndex ?? 1, params?.pageSize ?? 100);
+      return {
+        items: pagedResult.items,
+        totalCount: pagedResult.totalCount,
+        pageIndex: pagedResult.pageIndex,
+        pageSize: pagedResult.pageSize,
+      };
     },
-    staleTime: 30_000,
+    staleTime: 15_000,
+    refetchOnMount: true,
   });
 }
 

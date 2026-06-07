@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { ListPageLayout } from '@/components/layouts';
 import { DestructiveConfirmDialog } from '@/components/shared/DestructiveConfirmDialog';
 import { appToast } from '@/lib/api/errors/app-toast';
@@ -147,6 +148,58 @@ function collectTurnAnnotationsForPromote(item: ExpertReviewItem): Array<Record<
   return out;
 }
 
+function prefillClinicalFieldsFromItem(
+  item: ExpertReviewItem,
+  setters: {
+    setDiag: (v: string) => void;
+    setKeyText: (v: string) => void;
+    setKeyImagingEdit: (v: string) => void;
+    setReflectiveEdit: (v: string) => void;
+  },
+): void {
+  setters.setDiag(
+    item.report.suggestedDiagnosis?.trim() ||
+      item.report.diagnosis?.trim() ||
+      item.report.answerText?.trim() ||
+      '',
+  );
+  const differential = item.report.differentialDiagnoses ?? [];
+  setters.setKeyText(
+    differential.length > 0
+      ? differential.map((s) => String(s).trim()).filter(Boolean).join('\n')
+      : (item.report.keyFindings ?? []).join('\n'),
+  );
+  setters.setKeyImagingEdit(
+    item.report.keyImagingFindings?.trim() ?? item.keyImagingFindings?.trim() ?? '',
+  );
+  setters.setReflectiveEdit(reflectiveQuestionsToEditText(item.report, item.reflectiveQuestions));
+}
+
+function prefillLibraryFieldsFromItem(
+  item: ExpertReviewItem,
+  setters: {
+    setLibraryTitle: (v: string) => void;
+    setLibraryCategoryId: (v: string) => void;
+    setLibraryDifficulty: (v: string) => void;
+    setLibraryTagsCsv: (v: string) => void;
+    setLibraryAnatomySite: (v: string) => void;
+    setLibraryModality: (v: string) => void;
+  },
+): void {
+  const derived = deriveExpertCaseFormPrefillFromDicom(item.dicomMetadata);
+  const metadataTags = buildMetadataTagCandidates(item);
+  const seedTitleBase =
+    item.caseTitle?.trim() ||
+    firstStudentQuestion(item) ||
+    [derived.modality, derived.anatomySite].filter(Boolean).join(' ');
+  setters.setLibraryTitle(seedTitleBase.slice(0, 200));
+  setters.setLibraryCategoryId('');
+  setters.setLibraryDifficulty('intermediate');
+  setters.setLibraryTagsCsv(metadataTags.join(', '));
+  setters.setLibraryAnatomySite(derived.anatomySite);
+  setters.setLibraryModality(derived.modality);
+}
+
 function buildMetadataTagCandidates(item: ExpertReviewItem): string[] {
   const metadata = item.dicomMetadata;
   if (!metadata) return [];
@@ -165,7 +218,6 @@ function buildMetadataTagCandidates(item: ExpertReviewItem): string[] {
 function buildPromotePayload(
   item: ExpertReviewItem,
   ctx: {
-    active: ExpertReviewItem | null;
     diag: string;
     keyText: string;
     keyImagingEdit: string;
@@ -177,33 +229,71 @@ function buildPromotePayload(
     categories: ExpertCategory[];
   },
 ): PromoteExpertReviewPayload {
-  const useEdited = ctx.active?.id === item.id;
   const catId = ctx.libraryCategoryId.trim();
   const cat = ctx.categories.find((c) => c.id === catId);
   const tagNames = ctx.libraryTagsCsv
     .split(/[,;]/)
     .map((s) => s.trim())
     .filter(Boolean);
+  const description =
+    ctx.diag.trim() ||
+    structuredDiagnosisForPromote(item, ctx.diag, true);
+  const suggestedDiagnosis =
+    ctx.keyText
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join('\n') || joinDifferentialFromReport(item);
+  const keyFindings =
+    ctx.keyImagingEdit.trim() || joinKeyImagingFindings(item, ctx.keyImagingEdit, true);
+  const reflectiveQuestions =
+    ctx.reflectiveEdit.trim() ||
+    reflectiveQuestionsToEditText(item.report, item.reflectiveQuestions) ||
+    '';
   return {
     title: ctx.libraryTitle.trim(),
     categoryId: catId || undefined,
     categoryName: cat?.name ?? (catId || undefined),
     difficulty: ctx.libraryDifficulty.trim() || 'intermediate',
     tagNames,
-    description: structuredDiagnosisForPromote(item, ctx.diag, useEdited),
-    suggestedDiagnosis: useEdited
-      ? ctx.keyText.split('\n').map((s) => s.trim()).filter(Boolean).join('\n')
-      : joinDifferentialFromReport(item),
-    keyFindings: joinKeyImagingFindings(item, ctx.keyImagingEdit, useEdited),
-    reflectiveQuestions: useEdited
-      ? ctx.reflectiveEdit.trim()
-      : reflectiveQuestionsToEditText(item.report, item.reflectiveQuestions) || '',
+    description,
+    suggestedDiagnosis,
+    keyFindings,
+    reflectiveQuestions,
     turnAnnotations: collectTurnAnnotationsForPromote(item),
   };
 }
 
+function validatePromotePayload(payload: PromoteExpertReviewPayload): string | null {
+  if (!payload.title.trim()) return 'Enter a library case title before promoting.';
+  if (!payload.categoryId) return 'Select a category for the library case.';
+  if (!payload.tagNames.length) return 'Enter at least one tag (comma-separated).';
+  if (!payload.description.trim()) return 'Enter a case description (main diagnosis) before promoting.';
+  if (!payload.suggestedDiagnosis.trim()) {
+    return 'Enter differential diagnoses before promoting.';
+  }
+  if (!payload.keyFindings.trim()) return 'Enter key imaging findings before promoting.';
+  if (!payload.reflectiveQuestions.trim()) return 'Enter reflective questions before promoting.';
+  return null;
+}
+
+async function saveReviewDraftIfNeeded(
+  sessionId: string,
+  note: string | undefined,
+  roi: number[] | null | undefined,
+): Promise<void> {
+  const hasNote = Boolean(note?.trim());
+  const hasRoi = Array.isArray(roi) && roi.length >= 4;
+  if (!hasNote && !hasRoi) return;
+  await putExpertReviewDraft(sessionId, {
+    ...(hasNote ? { reviewNote: note!.trim() } : {}),
+    ...(hasRoi ? { correctedRoiBoundingBox: roi!.slice(0, 4) } : {}),
+  });
+}
+
 export function ExpertReviewsPage() {
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const toast = useToast();
   const [queueTab, setQueueTab] = useState<'Pending' | 'History'>('Pending');
   const queueQuery = useExpertReviewQueue(queueTab);
@@ -287,7 +377,20 @@ export function ExpertReviewsPage() {
         const it = prev.turns ?? [];
         const turns =
           dt.length > it.length ? dt : dt.length > 0 && it.length === 0 ? dt : it;
-        return { ...prev, citations: cite, turns };
+        const merged = {
+          ...prev,
+          ...detail,
+          report: detail.report ?? prev.report,
+          citations: cite,
+          turns,
+        };
+        prefillClinicalFieldsFromItem(merged, {
+          setDiag,
+          setKeyText,
+          setKeyImagingEdit,
+          setReflectiveEdit,
+        });
+        return merged;
       });
     })();
     return () => {
@@ -297,24 +400,21 @@ export function ExpertReviewsPage() {
 
   const openEdit = useCallback((item: ExpertReviewItem) => {
     setActive(item);
-    setDiag(item.report.suggestedDiagnosis || '');
-    setKeyText((item.report.keyFindings ?? []).join('\n'));
-    setKeyImagingEdit(item.report.keyImagingFindings?.trim() ?? item.keyImagingFindings?.trim() ?? '');
-    setReflectiveEdit(reflectiveQuestionsToEditText(item.report, item.reflectiveQuestions));
+    prefillClinicalFieldsFromItem(item, {
+      setDiag,
+      setKeyText,
+      setKeyImagingEdit,
+      setReflectiveEdit,
+    });
     setExpanded(item.id);
-    const derived = deriveExpertCaseFormPrefillFromDicom(item.dicomMetadata);
-    const metadataTags = buildMetadataTagCandidates(item);
-    const seedTitleBase =
-      item.caseTitle?.trim() ||
-      firstStudentQuestion(item) ||
-      [derived.modality, derived.anatomySite].filter(Boolean).join(' ');
-    const seedTitle = seedTitleBase.slice(0, 200);
-    setLibraryTitle(seedTitle);
-    setLibraryCategoryId('');
-    setLibraryDifficulty('intermediate');
-    setLibraryTagsCsv(metadataTags.join(', '));
-    setLibraryAnatomySite(derived.anatomySite);
-    setLibraryModality(derived.modality);
+    prefillLibraryFieldsFromItem(item, {
+      setLibraryTitle,
+      setLibraryCategoryId,
+      setLibraryDifficulty,
+      setLibraryTagsCsv,
+      setLibraryAnatomySite,
+      setLibraryModality,
+    });
   }, []);
 
   useEffect(() => {
@@ -366,7 +466,6 @@ export function ExpertReviewsPage() {
       setLibraryTagsCsv(effectiveLibraryTagsCsv);
     }
     const promotePayload = buildPromotePayload(item, {
-      active,
       diag,
       keyText,
       keyImagingEdit,
@@ -377,35 +476,18 @@ export function ExpertReviewsPage() {
       libraryTagsCsv: effectiveLibraryTagsCsv,
       categories: expertCategories,
     });
-    if (!promotePayload.title.trim()) {
-      toast.error('Enter a library case title before promoting.');
-      return;
-    }
-    if (!promotePayload.categoryId) {
-      toast.error('Select a category for the library case.');
-      return;
-    }
-    if (!promotePayload.tagNames.length) {
-      toast.error('Enter at least one tag (comma-separated).');
-      return;
-    }
-    if (
-      !promotePayload.description.trim() ||
-      !promotePayload.suggestedDiagnosis.trim() ||
-      !promotePayload.keyFindings.trim() ||
-      !promotePayload.reflectiveQuestions.trim()
-    ) {
-      toast.error('Complete AI-mapped fields (diagnosis, differential, imaging findings, reflective questions).');
+    const validationError = validatePromotePayload(promotePayload);
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
     setSaving(true);
+    let approved = false;
     try {
       const note = replyDrafts[item.sessionId]?.trim();
-      await putExpertReviewDraft(item.sessionId, {
-        ...(note ? { reviewNote: note } : {}),
-        ...(Array.isArray(roi) && roi.length >= 4 ? { correctedRoiBoundingBox: roi.slice(0, 4) } : {}),
-      });
+      await saveReviewDraftIfNeeded(item.sessionId, note, roi);
       await approveExpertReview(item.sessionId);
+      approved = true;
       await promoteExpertReview(item.sessionId, promotePayload);
       clearServerReviewDraft(item.sessionId);
       setRoiClearEpochBySession((prev) => ({
@@ -421,9 +503,22 @@ export function ExpertReviewsPage() {
       setItems((prev) => prev.filter((i) => i.id !== rid));
       setExpanded((e) => (e === rid ? null : e));
       if (active?.id === rid) setActive(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.expert.cases() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.expert.dashboard() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.expert.reviews('Pending') }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.expert.reviews('History') }),
+      ]);
       sonnerToast.success('Review approved and published to the case library.', { duration: 6000 });
     } catch (error) {
-      toast.error(toWorkflowFriendlyError(error, 'Approve and promote failed.'));
+      if (approved) {
+        void load();
+        toast.error(
+          `${toWorkflowFriendlyError(error, 'Case was approved but publishing to the library failed. Refresh the queue — contact an administrator if the case is missing from the library.')}`,
+        );
+      } else {
+        toast.error(toWorkflowFriendlyError(error, 'Approve and promote failed.'));
+      }
     } finally {
       setSaving(false);
     }
@@ -511,7 +606,7 @@ export function ExpertReviewsPage() {
       pairMismatch={hasExpertReviewSelectedPairMismatch(item)}
       loading={loading}
       onReloadQueue={() => void load()}
-      isEditing={active?.id === item.id}
+      isEditing={!getWorkflowStatusMeta(item.status).terminal}
       diag={diag}
       keyText={keyText}
       keyImagingEdit={keyImagingEdit}
@@ -681,7 +776,14 @@ export function ExpertReviewsPage() {
                 <div key={item.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
                   <button
                     type="button"
-                    onClick={() => setExpanded(isExp ? null : item.id)}
+                    onClick={() => {
+                      if (isExp) {
+                        setExpanded(null);
+                        setActive(null);
+                      } else {
+                        openEdit(item);
+                      }
+                    }}
                     className="flex w-full items-start gap-3 px-5 py-5 text-left hover:bg-muted/30"
                   >
                     {isExp ? (

@@ -128,6 +128,8 @@
 ## Expert promote case library
 
 - `POST /api/expert/reviews/{sessionId}/promote` — FE gửi thêm (camelCase, BE có thể bỏ qua field chưa hỗ trợ): `title`, `categoryId`, `categoryName`, `difficulty`, `tagNames` (string[]), `description`, `suggestedDiagnosis`, `keyFindings`, `reflectiveQuestions`, `imageAnnotations` / `turnAnnotations` (ROI theo turn).
+- Clinical content trên FE lấy từ **Expert clinical override** (`ReportWorkbench`), prefill từ `report` AI — không form riêng trên publish card.
+- Yêu cầu BE chi tiết (atomic approve+promote, partial fail, draft 409): xem `BE_REQUEST_EXPERT_REVIEW_PROMOTE.md`.
 
 ## Visual QA thread (REST)
 
