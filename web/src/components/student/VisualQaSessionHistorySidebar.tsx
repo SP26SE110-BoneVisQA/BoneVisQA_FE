@@ -68,8 +68,11 @@ type Props = {
   onSelectSession: (sessionId: string, options?: VisualQaHistorySelectOptions) => void;
   /** Bump sau khi tạo phiên chat mới để refetch danh sách không cần reload trang. */
   refreshNonce?: number;
-  /** Tab mặc định khi mở history picker. */
+  /** Tab mặc định khi mở history picker (uncontrolled fallback). */
   defaultStudyMode?: VisualQaStudyMode;
+  /** Controlled history tab — survives sidebar remounts when lifted to the workspace page. */
+  activeStudyMode?: VisualQaStudyMode;
+  onActiveStudyModeChange?: (mode: VisualQaStudyMode) => void;
   className?: string;
 };
 
@@ -115,18 +118,26 @@ export function VisualQaSessionHistorySidebar({
   onSelectSession,
   refreshNonce = 0,
   defaultStudyMode = 'personal_dicom',
+  activeStudyMode,
+  onActiveStudyModeChange,
   className,
 }: Props) {
-  const [activeMode, setActiveMode] = useState<VisualQaStudyMode>(defaultStudyMode);
+  const [internalActiveMode, setInternalActiveMode] = useState<VisualQaStudyMode>(defaultStudyMode);
+  const activeMode = activeStudyMode ?? internalActiveMode;
+  const setActiveMode = useCallback(
+    (mode: VisualQaStudyMode) => {
+      onActiveStudyModeChange?.(mode);
+      if (activeStudyMode === undefined) {
+        setInternalActiveMode(mode);
+      }
+    },
+    [activeStudyMode, onActiveStudyModeChange],
+  );
   const [itemsByMode, setItemsByMode] = useState<Partial<Record<VisualQaStudyMode, VisualQaSessionHistoryItem[]>>>(
     {},
   );
   const [loadingMode, setLoadingMode] = useState<VisualQaStudyMode | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setActiveMode(defaultStudyMode);
-  }, [defaultStudyMode]);
 
   const loadHistoryForMode = useCallback(async (mode: VisualQaStudyMode) => {
     if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
@@ -246,6 +257,7 @@ export function VisualQaSessionHistorySidebar({
                   <button
                     type="button"
                     onClick={() => {
+                      setActiveMode(studyMode);
                       stashSessionPrefillImage(sid, row.imageUrl);
                       onSelectSession(sid, { studyMode, caseId: row.caseId });
                     }}

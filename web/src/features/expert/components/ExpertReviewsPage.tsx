@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/toast';
 import {
-  approveExpertReview,
+  approveAndPromoteExpertReview,
   deleteExpertReviewDraft,
   fetchExpertReviewDetail,
   fetchExpertReviewDraft,
@@ -27,7 +27,6 @@ import {
   type ExpertReviewDraftPayload,
   type ExpertReviewUpdatePayload,
   type PromoteExpertReviewPayload,
-  promoteExpertReview,
   resolveExpertReview,
 } from '@/lib/api/expert-reviews';
 import { fetchExpertCategories, fetchExpertTags, type ExpertCategory, type ExpertTag } from '@/lib/api/expert-cases';
@@ -47,7 +46,11 @@ function toWorkflowFriendlyError(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message === REVIEW_WORKFLOW_CONFLICT) {
     return 'This review state was already updated by another action. Please refresh the queue.';
   }
-  return error instanceof Error ? error.message : fallback;
+  const message = error instanceof Error ? error.message : '';
+  if (/only self-uploaded images/i.test(message)) {
+    return 'The server rejected publishing this student study to the library (student DICOM images require a backend fix). The review was not completed — refresh the queue and contact an administrator if this persists.';
+  }
+  return message || fallback;
 }
 
 function firstStudentQuestion(item: ExpertReviewItem): string {
@@ -468,6 +471,9 @@ function buildPromotePayload(
     pathologyGroup:
       ctx.categories.find((c) => c.id === ctx.libraryCategoryId.trim())?.name || undefined,
     turnAnnotations: collectTurnAnnotationsForPromote(item, ctx.correctedRoi),
+    imageId: item.imageId?.trim() || undefined,
+    fromStudentRequest: true,
+    caseOrigin: 'fromStudentRequest',
   };
 }
 
@@ -745,29 +751,27 @@ export function ExpertReviewsPage() {
       return;
     }
     setSaving(true);
-    let approved = false;
     try {
-      await saveReviewDraftIfNeeded(
-        item.sessionId,
-        buildExpertReviewDraftPayload(item, {
-          diag,
-          keyText,
-          keyImagingEdit,
-          reflectiveEdit,
-          libraryTitle,
-          libraryCategoryId,
-          libraryDifficulty,
-          libraryTagIds,
-          libraryAnatomySite,
-          libraryClinicalDescription,
-          categories: expertCategories,
-          roi,
-          explicitNote: replyDrafts[item.sessionId],
-        }),
-      );
-      await approveExpertReview(item.sessionId);
-      approved = true;
-      await promoteExpertReview(item.sessionId, promotePayload);
+      const draftPayload = buildExpertReviewDraftPayload(item, {
+        diag,
+        keyText,
+        keyImagingEdit,
+        reflectiveEdit,
+        libraryTitle,
+        libraryCategoryId,
+        libraryDifficulty,
+        libraryTagIds,
+        libraryAnatomySite,
+        libraryClinicalDescription,
+        categories: expertCategories,
+        roi,
+        explicitNote: replyDrafts[item.sessionId],
+      });
+      await saveReviewDraftIfNeeded(item.sessionId, draftPayload);
+      await approveAndPromoteExpertReview(item.sessionId, promotePayload, {
+        reviewNote: draftPayload.reviewNote,
+        correctedRoiBoundingBox: roi,
+      });
       clearServerReviewDraft(item.sessionId);
       setRoiClearEpochBySession((prev) => ({
         ...prev,
@@ -795,14 +799,8 @@ export function ExpertReviewsPage() {
       ]);
       sonnerToast.success('Review approved and published to the case library.', { duration: 6000 });
     } catch (error) {
-      if (approved) {
-        void load();
-        toast.error(
-          `${toWorkflowFriendlyError(error, 'Case was approved but publishing to the library failed. Refresh the queue — contact an administrator if the case is missing from the library.')}`,
-        );
-      } else {
-        toast.error(toWorkflowFriendlyError(error, 'Approve and promote failed.'));
-      }
+      void load();
+      toast.error(toWorkflowFriendlyError(error, 'Approve and promote failed.'));
     } finally {
       setSaving(false);
     }

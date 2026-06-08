@@ -71,8 +71,11 @@ export function buildWorkspaceHrefForHistoryItem(
   const mode = inferStudyModeFromHistoryItem(row);
   const base = getVisualQaWorkspaceBasePath(mode);
   const params = new URLSearchParams({ sessionId });
-  if (mode === 'personal_dicom') params.set('flow', 'personal');
-  const caseId = row.caseId?.trim();
-  if (caseId) params.set('caseId', caseId);
+  if (mode === 'personal_dicom') {
+    params.set('flow', 'personal');
+  } else {
+    const caseId = row.caseId?.trim();
+    if (caseId) params.set('caseId', caseId);
+  }
   return `${base}?${params.toString()}`;
 }

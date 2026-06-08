@@ -35,6 +35,7 @@ import {
   buildPersonalWorkspaceHref,
   buildWorkspaceHrefForHistoryItem,
   isCatalogCaseStudyMode,
+  normalizeVisualQaStudyMode,
   VISUAL_QA_CASE_WORKSPACE_PATH,
   VISUAL_QA_PERSONAL_WORKSPACE_PATH,
 } from '@/lib/student/visual-qa-study-mode';
@@ -110,6 +111,37 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     variant === 'catalog' ? VISUAL_QA_CASE_WORKSPACE_PATH : VISUAL_QA_PERSONAL_WORKSPACE_PATH;
   const defaultHistoryStudyMode: VisualQaStudyMode =
     variant === 'catalog' ? 'catalog_case_study' : 'personal_dicom';
+  const historyTabStorageKey =
+    variant === 'catalog' ? 'bonevisqa:vqa-history-tab:catalog' : 'bonevisqa:vqa-history-tab:personal';
+
+  const readPersistedHistoryTab = useCallback((): VisualQaStudyMode => {
+    if (typeof sessionStorage === 'undefined') return defaultHistoryStudyMode;
+    try {
+      const stored = sessionStorage.getItem(historyTabStorageKey);
+      return normalizeVisualQaStudyMode(stored) ?? defaultHistoryStudyMode;
+    } catch {
+      return defaultHistoryStudyMode;
+    }
+  }, [defaultHistoryStudyMode, historyTabStorageKey]);
+
+  const [historyActiveMode, setHistoryActiveMode] = useState<VisualQaStudyMode>(readPersistedHistoryTab);
+
+  useEffect(() => {
+    setHistoryActiveMode(readPersistedHistoryTab());
+  }, [readPersistedHistoryTab]);
+
+  const handleHistoryActiveModeChange = useCallback(
+    (mode: VisualQaStudyMode) => {
+      setHistoryActiveMode(mode);
+      if (typeof sessionStorage === 'undefined') return;
+      try {
+        sessionStorage.setItem(historyTabStorageKey, mode);
+      } catch {
+        /* quota / private mode */
+      }
+    },
+    [historyTabStorageKey],
+  );
 
   const effectiveCaseId = queryCaseId || caseId || '';
   const effectiveSessionId = querySessionId || sessionId || '';
@@ -385,9 +417,10 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     async (targetSessionId: string, options?: VisualQaHistorySelectOptions) => {
       const sid = targetSessionId.trim();
       if (!sid || sid === effectiveSessionId) return;
-      const isCatalog =
-        options?.studyMode === 'catalog_case_study' ||
-        Boolean(options?.caseId?.trim());
+      const studyMode =
+        options?.studyMode ??
+        (options?.caseId?.trim() ? 'catalog_case_study' : 'personal_dicom');
+      const isCatalog = studyMode === 'catalog_case_study';
 
       const href = buildWorkspaceHrefForHistoryItem({
         sessionId: sid,
@@ -402,6 +435,17 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
         (variant === 'personal' && isCatalog);
 
       if (targetIsDifferentWorkspace) {
+        if (typeof sessionStorage !== 'undefined') {
+          try {
+            const targetTabKey =
+              studyMode === 'catalog_case_study'
+                ? 'bonevisqa:vqa-history-tab:catalog'
+                : 'bonevisqa:vqa-history-tab:personal';
+            sessionStorage.setItem(targetTabKey, studyMode);
+          } catch {
+            /* quota / private mode */
+          }
+        }
         router.push(href);
         return;
       }
@@ -603,6 +647,8 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
       onSelectSession={handleSelectHistorySession}
       refreshNonce={historyRefreshNonce}
       defaultStudyMode={defaultHistoryStudyMode}
+      activeStudyMode={historyActiveMode}
+      onActiveStudyModeChange={handleHistoryActiveModeChange}
     />
   );
 
@@ -635,6 +681,8 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
               onSelectSession={handleSelectHistorySession}
               refreshNonce={historyRefreshNonce}
               defaultStudyMode={defaultHistoryStudyMode}
+              activeStudyMode={historyActiveMode}
+              onActiveStudyModeChange={handleHistoryActiveModeChange}
             />
           </>
         ) : null}
@@ -689,6 +737,8 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
                 }}
                 refreshNonce={historyRefreshNonce}
                 defaultStudyMode={defaultHistoryStudyMode}
+                activeStudyMode={historyActiveMode}
+                onActiveStudyModeChange={handleHistoryActiveModeChange}
               />
             </>
           )

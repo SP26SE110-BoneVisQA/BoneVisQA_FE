@@ -914,6 +914,11 @@ export interface PromoteExpertReviewPayload {
   pathologyGroup?: string;
   /** ROI / annotation theo từng turn (JSON tuỳ BE). */
   turnAnnotations?: Array<Record<string, unknown>>;
+  /** Study image from the Visual QA session — required for student-upload promote flows. */
+  imageId?: string | null;
+  /** Signals promote-from-student-request (BE sets caseOrigin = fromStudentRequest). */
+  fromStudentRequest?: boolean;
+  caseOrigin?: 'fromStudentRequest' | 'expertCreated' | string;
 }
 
 export interface PromoteExpertReviewResult {
@@ -923,12 +928,41 @@ export interface PromoteExpertReviewResult {
   tagNames?: string[];
 }
 
-export async function promoteExpertReview(
-  sessionId: string,
-  payload: PromoteExpertReviewPayload,
-): Promise<PromoteExpertReviewResult> {
-  const id = String(sessionId ?? '').trim();
-  if (!id) throw new Error('Session id is required.');
+export type ApproveAndPromoteExpertReviewOptions = {
+  reviewNote?: string | null;
+  correctedRoiBoundingBox?: number[] | null;
+};
+
+function parsePromoteExpertReviewResult(data: unknown): PromoteExpertReviewResult {
+  if (!data || typeof data !== 'object') return { caseId: null };
+  const record = data as Record<string, unknown>;
+  const nestedData = record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : null;
+  const nestedResult =
+    record.result && typeof record.result === 'object' ? (record.result as Record<string, unknown>) : null;
+  const source = nestedData ?? nestedResult ?? record;
+  const direct =
+    source.promotedCaseId ??
+    source.PromotedCaseId ??
+    source.caseId ??
+    source.CaseId ??
+    null;
+  const tagNamesResponse = source.tagNames ?? source.TagNames;
+  return {
+    caseId: direct != null ? String(direct) : null,
+    categoryName:
+      source.categoryName != null
+        ? String(source.categoryName)
+        : source.CategoryName != null
+          ? String(source.CategoryName)
+          : undefined,
+    difficulty: source.difficulty != null ? String(source.difficulty) : undefined,
+    tagNames: Array.isArray(tagNamesResponse)
+      ? tagNamesResponse.map((t) => String(t).trim()).filter(Boolean)
+      : undefined,
+  };
+}
+
+function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<string, unknown> {
   const title = String(payload.title ?? '').trim();
   const difficulty = String(payload.difficulty ?? '').trim();
   const tagIds = Array.isArray(payload.tagIds)
@@ -971,6 +1005,17 @@ export async function promoteExpertReview(
   if (Array.isArray(payload.turnAnnotations) && payload.turnAnnotations.length > 0) {
     body.turnAnnotations = payload.turnAnnotations;
   }
+  const imageId = payload.imageId?.trim();
+  if (imageId) {
+    body.imageId = imageId;
+    body.ImageId = imageId;
+  }
+  if (payload.fromStudentRequest === true) {
+    body.fromStudentRequest = true;
+    body.FromStudentRequest = true;
+    body.caseOrigin = payload.caseOrigin?.trim() || 'fromStudentRequest';
+    body.CaseOrigin = body.caseOrigin;
+  }
   if (!title || !difficulty) {
     throw new Error('Title and difficulty are required to publish to the library.');
   }
@@ -980,41 +1025,69 @@ export async function promoteExpertReview(
   if (!body.description || !body.suggestedDiagnosis || !body.keyFindings || !body.reflectiveQuestions) {
     throw new Error('AI-mapped case fields (description, differential, findings, reflective questions) are required.');
   }
+  return body;
+}
+
+function rethrowPromoteWorkflowError(e: unknown): never {
+  if (axios.isAxiosError(e) && (e.response?.status === 409 || e.response?.status === 412)) {
+    throw new Error(REVIEW_WORKFLOW_CONFLICT);
+  }
+  throw new Error(getApiErrorMessage(e));
+}
+
+export async function promoteExpertReview(
+  sessionId: string,
+  payload: PromoteExpertReviewPayload,
+): Promise<PromoteExpertReviewResult> {
+  const id = String(sessionId ?? '').trim();
+  if (!id) throw new Error('Session id is required.');
+  const body = buildPromoteRequestBody(payload);
   try {
     const { data } = await http.post<unknown>(`/api/expert/reviews/${encodeURIComponent(id)}/promote`, body, {
       headers: { 'Content-Type': 'application/json' },
     });
-    if (!data || typeof data !== 'object') return { caseId: null };
-    const record = data as Record<string, unknown>;
-    const nestedData = record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : null;
-    const nestedResult =
-      record.result && typeof record.result === 'object' ? (record.result as Record<string, unknown>) : null;
-    const source = nestedData ?? nestedResult ?? record;
-    const direct =
-      source.promotedCaseId ??
-      source.PromotedCaseId ??
-      source.caseId ??
-      source.CaseId ??
-      null;
-    const tagNamesResponse = source.tagNames ?? source.TagNames;
-    return {
-      caseId: direct != null ? String(direct) : null,
-      categoryName:
-        source.categoryName != null
-          ? String(source.categoryName)
-          : source.CategoryName != null
-            ? String(source.CategoryName)
-            : undefined,
-      difficulty: source.difficulty != null ? String(source.difficulty) : undefined,
-      tagNames: Array.isArray(tagNamesResponse)
-        ? tagNamesResponse.map((t) => String(t).trim()).filter(Boolean)
-        : undefined,
-    };
+    return parsePromoteExpertReviewResult(data);
   } catch (e) {
-    if (axios.isAxiosError(e) && (e.response?.status === 409 || e.response?.status === 412)) {
-      throw new Error(REVIEW_WORKFLOW_CONFLICT);
+    rethrowPromoteWorkflowError(e);
+  }
+}
+
+/**
+ * Approve + publish to library atomically when BE supports it.
+ * Fallback: promote first, then approve — avoids partial "approved but no case" state.
+ */
+export async function approveAndPromoteExpertReview(
+  sessionId: string,
+  payload: PromoteExpertReviewPayload,
+  options: ApproveAndPromoteExpertReviewOptions = {},
+): Promise<PromoteExpertReviewResult> {
+  const id = String(sessionId ?? '').trim();
+  if (!id) throw new Error('Session id is required.');
+  const body = buildPromoteRequestBody(payload);
+  const reviewNote = options.reviewNote?.trim();
+  if (reviewNote) body.reviewNote = reviewNote;
+  if (Array.isArray(options.correctedRoiBoundingBox) && options.correctedRoiBoundingBox.length >= 4) {
+    body.correctedRoiBoundingBox = options.correctedRoiBoundingBox.slice(0, 4);
+  }
+
+  try {
+    const { data } = await http.post<unknown>(
+      `/api/expert/reviews/${encodeURIComponent(id)}/approve-and-promote`,
+      body,
+      { headers: { 'Content-Type': 'application/json' } },
+    );
+    return parsePromoteExpertReviewResult(data);
+  } catch (e) {
+    if (axios.isAxiosError(e) && e.response?.status === 404) {
+      try {
+        const result = await promoteExpertReview(id, payload);
+        await approveExpertReview(id);
+        return result;
+      } catch (fallbackError) {
+        rethrowPromoteWorkflowError(fallbackError);
+      }
     }
-    throw new Error(getApiErrorMessage(e));
+    rethrowPromoteWorkflowError(e);
   }
 }
 
