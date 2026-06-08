@@ -117,6 +117,13 @@ export interface VisualQaMessage {
 export interface VisualQaSessionReport {
   sessionId: string;
   /**
+   * `false` when GET history returns an empty shell (wiped / stale URL). Default `true` for legacy BE.
+   */
+  sessionExists?: boolean;
+  /** `true` when the linked teaching case was removed from the library. */
+  caseRemoved?: boolean;
+  studyMode?: 'personal_dicom' | 'catalog_case_study' | string | null;
+  /**
    * Root study image on thread (`VisualQaThreadDto`). BE may also send `imageUrl` / `studyImageUrl`
    * with the same value — FE normalizes into this field.
    */
@@ -808,7 +815,7 @@ export interface StudentCaseHistoryItem {
   thumbnailUrl?: string;
   boneLocation: string;
   lesionType: string;
-  difficulty: 'basic' | 'intermediate' | 'advanced';
+  difficulty: 'easy' | 'medium' | 'hard';
   duration?: string;
   progress?: number;
   status?: 'Pending' | 'PendingExpert' | 'Approved' | 'Revised' | string;
@@ -840,14 +847,14 @@ export interface StudentCaseCatalogItem {
   categoryDisplay?: string;
   lesionType: string;
   /**
-   * Tier chuẩn hóa khi map được từ enum BE; `null` khi không khớp — không ép 'basic'.
+   * Tier chuẩn hóa khi map được từ enum BE; `null` khi không khớp — không ép 'easy'.
    * Giữ optional để tương thích code cũ dùng `difficulty`.
    */
-  difficultyTier?: 'basic' | 'intermediate' | 'advanced' | null;
+  difficultyTier?: 'easy' | 'medium' | 'hard' | null;
   /** Nhãn hiển thị độ khó (ưu tiên raw từ BE). */
   difficultyLabel: string;
   /** @deprecated Dùng difficultyLabel + difficultyTier */
-  difficulty?: 'basic' | 'intermediate' | 'advanced';
+  difficulty?: 'easy' | 'medium' | 'hard';
   tags: string[];
   createdAt?: string;
   caseOrigin: StudentCaseCatalogOrigin;

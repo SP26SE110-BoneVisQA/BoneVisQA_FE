@@ -13,6 +13,11 @@ import {
   type Review,
 } from '@/lib/admin/map-expert-case-to-admin-detail';
 import {
+  medicalCaseDifficultyBadgeClass,
+  medicalCaseDifficultyLabel,
+  type MedicalCaseDifficultyTier,
+} from '@/lib/medical-case-difficulty';
+import {
   ArrowLeft,
   CheckCircle,
   Clock,
@@ -47,7 +52,7 @@ const mockCases: Record<string, CaseDetail> = {
     description: 'A 45-year-old female presented to the emergency department after falling onto an outstretched hand. This case demonstrates a classic distal radius fracture with dorsal angulation (Colles fracture).',
     boneLocation: 'Wrist',
     lesionType: 'Fracture',
-    difficulty: 'basic',
+    difficulty: 'easy',
     status: 'approved',
     addedBy: 'Dr. Nguyen Minh',
     addedDate: '2025-08-15',
@@ -75,7 +80,7 @@ const mockCases: Record<string, CaseDetail> = {
     description: 'A 72-year-old female with known osteoporosis presented with acute lower back pain after bending forward. Imaging reveals a compression fracture of the L1 vertebral body.',
     boneLocation: 'Spine',
     lesionType: 'Fracture',
-    difficulty: 'advanced',
+    difficulty: 'hard',
     status: 'hidden',
     addedBy: 'Dr. Nguyen Minh',
     addedDate: '2025-09-05',
@@ -104,7 +109,7 @@ const mockCases: Record<string, CaseDetail> = {
     description: 'A 28-year-old male sustained an injury during a basketball game. The patient fell on an outstretched hand with the elbow in extension. Imaging demonstrates posterior elbow dislocation with an associated radial head fracture.',
     boneLocation: 'Elbow',
     lesionType: 'Dislocation',
-    difficulty: 'intermediate',
+    difficulty: 'medium',
     status: 'hidden',
     addedBy: 'Dr. Nguyen Minh',
     addedDate: '2025-08-30',
@@ -136,7 +141,7 @@ function getDefaultCase(id: string): CaseDetail {
     description: 'Detailed clinical case for musculoskeletal imaging education.',
     boneLocation: 'Unknown',
     lesionType: 'Unknown',
-    difficulty: 'intermediate',
+    difficulty: 'medium',
     status: 'pending',
     addedBy: 'Unknown',
     addedDate: '2025-01-01',
@@ -159,10 +164,10 @@ const statusConfig: Record<CaseStatus, { icon: typeof CheckCircle; color: string
   rejected: { icon: XCircle, color: 'text-destructive', bg: 'bg-destructive/10', label: 'Rejected' },
 };
 
-const difficultyConfig: Record<Difficulty, { color: string; label: string }> = {
-  basic: { color: 'bg-success/10 text-success', label: 'Basic' },
-  intermediate: { color: 'bg-warning/10 text-warning', label: 'Intermediate' },
-  advanced: { color: 'bg-destructive/10 text-destructive', label: 'Advanced' },
+const difficultyConfig: Record<MedicalCaseDifficultyTier, { color: string; label: string }> = {
+  easy: { color: medicalCaseDifficultyBadgeClass('easy'), label: medicalCaseDifficultyLabel('easy') },
+  medium: { color: medicalCaseDifficultyBadgeClass('medium'), label: medicalCaseDifficultyLabel('medium') },
+  hard: { color: medicalCaseDifficultyBadgeClass('hard'), label: medicalCaseDifficultyLabel('hard') },
 };
 
 export function AdminCaseDetailPage({ caseId }: { caseId: string }) {

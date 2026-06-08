@@ -15,13 +15,9 @@ import {
   buildCaseWorkspaceHref,
   buildPersonalWorkspaceHref,
 } from '@/lib/student/visual-qa-study-mode';
+import { MEDICAL_CASE_DIFFICULTY_FILTER_OPTIONS } from '@/lib/medical-case-difficulty';
 
-const difficultyFilters = [
-  { id: 'all', label: 'All levels' },
-  { id: 'basic', label: 'Basic' },
-  { id: 'intermediate', label: 'Intermediate' },
-  { id: 'advanced', label: 'Advanced' },
-] as const;
+const difficultyFilters = MEDICAL_CASE_DIFFICULTY_FILTER_OPTIONS;
 
 type HistoryTab = 'cases' | 'personal';
 

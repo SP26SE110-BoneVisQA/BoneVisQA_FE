@@ -1,5 +1,11 @@
+import type { MedicalCaseDifficultyTier } from '@/lib/medical-case-difficulty';
+import {
+  medicalCaseDifficultyBadgeClass,
+  medicalCaseDifficultyLabel,
+} from '@/lib/medical-case-difficulty';
+
 export type QuizStatus = 'completed' | 'not_started';
-export type Difficulty = 'basic' | 'intermediate' | 'advanced';
+export type Difficulty = MedicalCaseDifficultyTier;
 export type TabKey = 'all' | 'not_started' | 'completed';
 
 export interface Quiz {
@@ -17,9 +23,9 @@ export interface Quiz {
 }
 
 export const difficultyConfig: Record<Difficulty, { color: string; label: string }> = {
-  basic: { color: 'text-success bg-success/10', label: 'Basic' },
-  intermediate: { color: 'text-warning bg-warning/10', label: 'Intermediate' },
-  advanced: { color: 'text-destructive bg-destructive/10', label: 'Advanced' },
+  easy: { color: medicalCaseDifficultyBadgeClass('easy'), label: medicalCaseDifficultyLabel('easy') },
+  medium: { color: medicalCaseDifficultyBadgeClass('medium'), label: medicalCaseDifficultyLabel('medium') },
+  hard: { color: medicalCaseDifficultyBadgeClass('hard'), label: medicalCaseDifficultyLabel('hard') },
 };
 
 export function getScoreColor(score: number) {

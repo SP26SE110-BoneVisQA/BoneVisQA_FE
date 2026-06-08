@@ -457,6 +457,13 @@ function normalizeVisualQaTurn(raw: unknown, fallbackIndex: number): VisualQaTur
 export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionReport {
   const o = normalizeRootPayload(raw);
   const sessionId = asString(pick(o, ['sessionId'])).trim();
+  const sessionExistsRaw = pick(o, ['sessionExists', 'session_exists', 'SessionExists']);
+  const sessionExists = sessionExistsRaw === false ? false : true;
+  const caseRemovedRaw = pick(o, ['caseRemoved', 'case_removed', 'CaseRemoved']);
+  const caseRemoved = caseRemovedRaw === true;
+  const studyMode = asNullableString(
+    pick(o, ['studyMode', 'study_mode', 'StudyMode']),
+  );
   const caseId = asString(pick(o, ['caseId'])).trim() || null;
   const imageId = asString(pick(o, ['imageId'])).trim() || null;
   const status = asString(pick(o, ['status'])).trim() || null;
@@ -574,6 +581,9 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
 
   return {
     sessionId: sessionId || 'session-local',
+    sessionExists,
+    ...(caseRemoved ? { caseRemoved: true } : {}),
+    ...(studyMode ? { studyMode } : {}),
     ...(sessionImageUrl ? { sessionImageUrl } : {}),
     ...(threadRoiBoundingBox ? { roiBoundingBox: threadRoiBoundingBox } : {}),
     clientRequestId: asNullableString(pick(o, ['clientRequestId', 'client_request_id'])),

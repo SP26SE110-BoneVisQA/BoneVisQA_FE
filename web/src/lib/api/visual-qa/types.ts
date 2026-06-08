@@ -78,6 +78,7 @@ export interface VisualQaSessionHistoryItem {
   lastResponderRole?: string | null;
   rejectionReason?: string | null;
   studyMode?: VisualQaStudyMode | string | null;
+  caseRemoved?: boolean;
 }
 
 export interface VisualQaPersonalHistoryResult {

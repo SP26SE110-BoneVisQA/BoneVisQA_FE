@@ -11,6 +11,11 @@ import { deleteExpertCase, formatCaseDateForDisplay } from '@/lib/api/expert-cas
 import { queryKeys } from '@/lib/query-keys';
 import { getApiProblemDetails } from '@/lib/api/client';
 import { useState } from 'react';
+import {
+  medicalCaseDifficultyBorderClass,
+  medicalCaseDifficultyLabel,
+  type MedicalCaseDifficultyTier,
+} from '@/lib/medical-case-difficulty';
 
 const EXPERT_CASE_LIBRARY_SWR_KEY = 'expert-case-library-paged';
 
@@ -19,7 +24,7 @@ interface CaseManagementCardProps {
   title: string;
   boneLocation: string;
   lesionType: string;
-  difficulty: 'basic' | 'intermediate' | 'advanced';
+  difficulty: MedicalCaseDifficultyTier;
   caseOrigin: CaseLibraryOrigin;
   addedBy: string;
   addedDate: string;
@@ -42,15 +47,11 @@ const originConfig: Record<
   },
 };
 
-const difficultyConfig = {
-  basic: 'border-success/25 bg-success/10 text-success',
-  intermediate: 'border-warning/25 bg-warning/10 text-warning',
-  advanced: 'border-destructive/25 bg-destructive/10 text-destructive',
+const difficultyConfig: Record<MedicalCaseDifficultyTier, string> = {
+  easy: medicalCaseDifficultyBorderClass('easy'),
+  medium: medicalCaseDifficultyBorderClass('medium'),
+  hard: medicalCaseDifficultyBorderClass('hard'),
 };
-
-function difficultyLabel(d: CaseManagementCardProps['difficulty']): string {
-  return d.charAt(0).toUpperCase() + d.slice(1);
-}
 
 function shouldShowExpertAttribution(addedBy: string | null | undefined): boolean {
   const value = (addedBy ?? '').trim();
@@ -131,7 +132,7 @@ export default function CaseManagementCard({
           <span
             className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${difficultyConfig[difficulty]}`}
           >
-            {difficultyLabel(difficulty)}
+            {medicalCaseDifficultyLabel(difficulty)}
           </span>
           {!thumbSrc && (
             <span className="ml-auto text-xs text-muted-foreground">No image</span>

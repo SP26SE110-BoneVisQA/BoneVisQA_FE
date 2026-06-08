@@ -2,6 +2,7 @@
 
 import { Filter } from 'lucide-react';
 import type { BoneSpecialtyOption, PathologyCategoryOption } from '@/lib/api/student';
+import { formatMedicalCaseDifficultyFilterOption } from '@/lib/medical-case-difficulty';
 
 type Props = {
   location: string;
@@ -114,7 +115,7 @@ export function CatalogFilter({
             <option value="">All difficulty levels</option>
             {difficulties.map((option) => (
               <option key={option} value={option}>
-                {option}
+                {formatMedicalCaseDifficultyFilterOption(option)}
               </option>
             ))}
           </select>

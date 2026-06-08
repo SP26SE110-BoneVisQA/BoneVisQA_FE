@@ -166,10 +166,10 @@ export function ExpertCasesPage() {
                   lesionType={item.pathologyGroup || item.categoryName}
                   difficulty={
                     item.difficulty === 'Hard'
-                      ? 'advanced'
+                      ? 'hard'
                       : item.difficulty === 'Medium'
-                        ? 'intermediate'
-                        : 'basic'
+                        ? 'medium'
+                        : 'easy'
                   }
                   caseOrigin={item.caseOrigin}
                   addedBy={

@@ -357,7 +357,7 @@ function prefillLibraryFieldsFromItem(
     [derived.modality, derived.anatomySite].filter(Boolean).join(' ');
   setters.setLibraryTitle(seedTitleBase.slice(0, 200));
   setters.setLibraryCategoryId('');
-  setters.setLibraryDifficulty('intermediate');
+  setters.setLibraryDifficulty('Medium');
   setters.setLibraryTagIds(resolveTagIdsFromNames(metadataTags, tags));
   setters.setLibraryAnatomySite(derived.anatomySite);
   setters.setLibraryModality(derived.modality);
@@ -451,7 +451,7 @@ function buildPromotePayload(
     title: ctx.libraryTitle.trim(),
     categoryId: catId || undefined,
     categoryName: cat?.name ?? (catId || undefined),
-    difficulty: ctx.libraryDifficulty.trim() || 'intermediate',
+    difficulty: ctx.libraryDifficulty.trim() || 'Medium',
     tagIds,
     tagNames: tagNames.length > 0 ? tagNames : undefined,
     clinicalDescription: ctx.libraryClinicalDescription.trim() || undefined,
@@ -518,7 +518,7 @@ export function ExpertReviewsPage() {
   const [expertCategories, setExpertCategories] = useState<ExpertCategory[]>([]);
   const [libraryTitle, setLibraryTitle] = useState('');
   const [libraryCategoryId, setLibraryCategoryId] = useState('');
-  const [libraryDifficulty, setLibraryDifficulty] = useState('intermediate');
+  const [libraryDifficulty, setLibraryDifficulty] = useState('Medium');
   const [libraryTagIds, setLibraryTagIds] = useState<string[]>([]);
   const [libraryAnatomySite, setLibraryAnatomySite] = useState('');
   const [libraryModality, setLibraryModality] = useState('');

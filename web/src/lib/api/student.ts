@@ -23,12 +23,14 @@ import type {
   StudentTopicStat,
 } from './types';
 import { isValidNormalizedBoundingBox, parseNormalizedBoundingBox } from '@/lib/utils/annotations';
+import {
+  normalizeMedicalCaseDifficultyDisplay,
+  normalizeMedicalCaseDifficultyTier,
+  type MedicalCaseDifficultyTier,
+} from '@/lib/medical-case-difficulty';
 
-function normalizeDifficulty(raw: unknown): StudentCaseHistoryItem['difficulty'] {
-  const value = String(raw ?? '').toLowerCase();
-  if (value === 'advanced') return 'advanced';
-  if (value === 'intermediate') return 'intermediate';
-  return 'basic';
+function normalizeDifficulty(raw: unknown): MedicalCaseDifficultyTier {
+  return normalizeMedicalCaseDifficultyTier(raw) ?? 'easy';
 }
 
 function pickStringAny(item: Record<string, unknown>, keys: string[]): string | null {
@@ -85,20 +87,12 @@ function parseTagsFromCatalogRow(item: Record<string, unknown>): string[] {
   return [];
 }
 
-/** Không ép mọi giá trị lạ thành Basic — hiển thị raw hoặc "—". */
+/** Không ép mọi giá trị lạ thành Easy — hiển thị raw hoặc "—". */
 function normalizeCatalogDifficultyLabel(raw: unknown): {
-  tier: 'basic' | 'intermediate' | 'advanced' | null;
+  tier: MedicalCaseDifficultyTier | null;
   label: string;
 } {
-  const rawStr = String(raw ?? '').trim();
-  if (!rawStr) return { tier: null, label: '—' };
-  const value = rawStr.toLowerCase();
-  if (value === 'advanced' || value === 'expert') return { tier: 'advanced', label: rawStr };
-  if (value === 'intermediate' || value === 'moderate') return { tier: 'intermediate', label: rawStr };
-  if (value === 'basic' || value === 'beginner' || value === 'intro' || value === 'easy') {
-    return { tier: 'basic', label: rawStr };
-  }
-  return { tier: null, label: rawStr };
+  return normalizeMedicalCaseDifficultyDisplay(raw);
 }
 
 /**

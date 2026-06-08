@@ -1,7 +1,11 @@
 import type { ExpertCase } from '@/lib/api/expert-cases';
+import {
+  normalizeMedicalCaseDifficultyTier,
+  type MedicalCaseDifficultyTier,
+} from '@/lib/medical-case-difficulty';
 
 export type AdminCaseDetailStatus = 'approved' | 'pending' | 'hidden' | 'rejected';
-export type AdminCaseDetailDifficulty = 'basic' | 'intermediate' | 'advanced';
+export type AdminCaseDetailDifficulty = MedicalCaseDifficultyTier;
 
 export interface AdminCaseDetailImage {
   id: string;
@@ -46,9 +50,7 @@ export interface AdminCaseDetailView {
 }
 
 function mapDifficulty(d: ExpertCase['difficulty']): AdminCaseDetailDifficulty {
-  if (d === 'Hard') return 'advanced';
-  if (d === 'Medium') return 'intermediate';
-  return 'basic';
+  return normalizeMedicalCaseDifficultyTier(d) ?? 'easy';
 }
 
 function mapStatus(c: ExpertCase): AdminCaseDetailStatus {

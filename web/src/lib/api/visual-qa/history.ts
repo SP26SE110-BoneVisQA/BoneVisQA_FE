@@ -88,6 +88,8 @@ function normalizeHistoryItem(raw: unknown): VisualQaSessionHistoryItem | null {
       : null;
   const studyModeRaw = pick(['studyMode', 'StudyMode', 'study_mode', 'sessionFlow', 'flow']);
   const studyMode = normalizeVisualQaStudyMode(studyModeRaw) ?? undefined;
+  const caseRemovedRaw = pick(['caseRemoved', 'CaseRemoved', 'case_removed']);
+  const caseRemoved = caseRemovedRaw === true ? true : undefined;
 
   return {
     sessionId,
@@ -101,6 +103,7 @@ function normalizeHistoryItem(raw: unknown): VisualQaSessionHistoryItem | null {
     lastResponderRole,
     rejectionReason,
     studyMode,
+    caseRemoved,
   };
 }
 

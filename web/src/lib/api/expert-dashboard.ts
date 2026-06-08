@@ -1,4 +1,5 @@
 import { inferCaseLibraryOrigin, type CaseLibraryOrigin } from '@/lib/case-origin';
+import { normalizeMedicalCaseDifficultyTier } from '@/lib/medical-case-difficulty';
 import { http, getApiErrorMessage } from './client';
 
 export interface ExpertDashboardStats {
@@ -26,7 +27,7 @@ export interface ExpertRecentCase {
   title: string;
   boneLocation: string;
   lesionType: string;
-  difficulty: 'basic' | 'intermediate' | 'advanced';
+  difficulty: 'easy' | 'medium' | 'hard';
   /** @deprecated Prefer `caseOrigin`. */
   status: 'approved' | 'pending' | 'draft';
   caseOrigin: CaseLibraryOrigin;
@@ -55,11 +56,8 @@ function mapPriority(raw: unknown): 'high' | 'normal' | 'low' {
   return 'normal';
 }
 
-function mapDifficulty(raw: unknown): 'basic' | 'intermediate' | 'advanced' {
-  const val = String(raw ?? '').toLowerCase();
-  if (val === 'advanced') return 'advanced';
-  if (val === 'intermediate') return 'intermediate';
-  return 'basic';
+function mapDifficulty(raw: unknown): 'easy' | 'medium' | 'hard' {
+  return normalizeMedicalCaseDifficultyTier(raw) ?? 'easy';
 }
 
 function pickDisplayStr(value: unknown, fallback: string): string {

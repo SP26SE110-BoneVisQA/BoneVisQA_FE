@@ -126,9 +126,9 @@ export type ExpertAnatomySite = (typeof EXPERT_ANATOMY_SITES)[number];
 const EXPERT_ANATOMY_SITE_SET = new Set<string>(EXPERT_ANATOMY_SITES);
 
 export const EXPERT_DIFFICULTY_OPTIONS = [
-  { value: 'Easy', label: 'Basic' },
-  { value: 'Medium', label: 'Intermediate' },
-  { value: 'Hard', label: 'Advanced' },
+  { value: 'Easy', label: 'Easy' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'Hard', label: 'Hard' },
 ] as const;
 
 export const EXPERT_IMAGE_MODALITIES = DB_IMAGE_MODALITIES;

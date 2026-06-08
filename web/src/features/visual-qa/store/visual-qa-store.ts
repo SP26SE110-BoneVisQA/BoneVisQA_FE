@@ -14,6 +14,7 @@ import {
 } from '@/lib/student/visual-qa-chat-turns';
 import { isBrokenLegacyImageUrl } from '@/lib/api/visual-qa/image-url';
 import { resolveVisualQaStoredCoordinates } from '@/lib/utils/annotations';
+import { staleSessionNotice } from '@/lib/student/visual-qa-thread-state';
 
 export type VisualQaFlow = 'catalog' | 'personal' | null;
 
@@ -36,6 +37,9 @@ export type VisualQaStoreState = VisualQaPersistedSlice & {
   isAsking: boolean;
   isUploading: boolean;
   lastSystemNotice: string | null;
+  /** False after GET history returns `sessionExists: false` (wiped / stale URL). */
+  sessionExists: boolean;
+  caseRemoved: boolean;
 
   setFlow: (flow: VisualQaFlow) => void;
   setLocale: (locale: 'vi' | 'en') => void;
@@ -148,6 +152,8 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
       isAsking: false,
       isUploading: false,
       lastSystemNotice: null,
+      sessionExists: true,
+      caseRemoved: false,
 
       setFlow: (flow) => set({ flow }),
       setLocale: (locale) => set({ locale }),
@@ -211,7 +217,9 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
 
         set((state) => ({
           sessionId,
-          caseId,
+          sessionExists: response.sessionExists !== false,
+          caseRemoved: response.caseRemoved === true,
+          caseId: response.caseRemoved ? null : caseId,
           previewImageUrl: imageUrl,
           imageId: response.imageId?.trim() || state.imageId,
           dicomMetadata,
@@ -231,6 +239,8 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
         if (!id) return;
         set({
           sessionId: id,
+          sessionExists: true,
+          caseRemoved: false,
           caseId: null,
           previewImageUrl: null,
           imageId: null,
@@ -245,6 +255,28 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
       },
 
       hydrateThread: (thread, options) => {
+        if (thread.sessionExists === false) {
+          const preservedCaseId = thread.caseRemoved
+            ? null
+            : thread.caseId?.trim() || get().caseId;
+          set({
+            sessionId: null,
+            sessionExists: false,
+            caseRemoved: thread.caseRemoved === true,
+            caseId: preservedCaseId,
+            previewImageUrl: null,
+            imageId: null,
+            dicomMetadata: null,
+            turns: [],
+            coordinates: null,
+            capabilities: thread.capabilities ?? null,
+            sessionStatus: null,
+            reviewFeedback: null,
+            lastSystemNotice: staleSessionNotice(thread),
+          });
+          return;
+        }
+
         const sessionFields = resolveSessionFields(thread);
         const sessionId = thread.sessionId?.trim() || get().sessionId;
         const preview = resolveThreadPreviewUrl(thread, get().previewImageUrl);
@@ -263,7 +295,9 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
 
           return {
             sessionId,
-            caseId: thread.caseId?.trim() || state.caseId,
+            sessionExists: true,
+            caseRemoved: thread.caseRemoved === true,
+            caseId: thread.caseRemoved ? null : thread.caseId?.trim() || state.caseId,
             previewImageUrl: preview,
             imageId: thread.imageId?.trim() || state.imageId,
             dicomMetadata: thread.dicomMetadata ?? state.dicomMetadata,
@@ -296,6 +330,8 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
           isAsking: false,
           isUploading: false,
           lastSystemNotice: null,
+          sessionExists: true,
+          caseRemoved: false,
         }),
     }),
     {

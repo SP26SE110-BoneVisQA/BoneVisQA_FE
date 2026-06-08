@@ -240,6 +240,7 @@ export function VisualQaSessionHistorySidebar({
               const rel = formatRelativeTime(row.updatedAt ?? null);
               const active = selectedSessionId?.trim() === sid;
               const studyMode = inferStudyModeFromHistoryItem(row);
+              const caseRemoved = row.caseRemoved === true;
               return (
                 <li key={sid}>
                   <button
@@ -257,10 +258,17 @@ export function VisualQaSessionHistorySidebar({
                   >
                     <SessionThumbnail imageUrl={row.imageUrl} />
                     <span className="min-w-0 flex-1">
-                      <span
-                        className={`mb-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${studyModeBadgeClass(studyMode)}`}
-                      >
-                        {studyModeShortLabel(studyMode)}
+                      <span className="mb-1 flex flex-wrap gap-1">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${studyModeBadgeClass(studyMode)}`}
+                        >
+                          {studyModeShortLabel(studyMode)}
+                        </span>
+                        {caseRemoved ? (
+                          <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                            Case removed
+                          </span>
+                        ) : null}
                       </span>
                       <span className="line-clamp-2 font-medium leading-snug">{title}</span>
                       {rel ? (

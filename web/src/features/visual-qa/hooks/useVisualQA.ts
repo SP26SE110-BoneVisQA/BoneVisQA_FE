@@ -20,6 +20,12 @@ import {
 import { useVisualQaStore } from '@/features/visual-qa/store/visual-qa-store';
 import { createVisualQaClientRequestId } from '@/features/visual-qa/utils/client-request-id';
 import { detectVisualQaQuestionLocale } from '@/lib/student/detect-visual-qa-question-locale';
+import { isVisualQaThreadMissing } from '@/lib/student/visual-qa-thread-state';
+import type { VisualQaThreadResponse } from '@/lib/api/visual-qa';
+
+export type HydrateSessionResult =
+  | { status: 'loaded'; thread: VisualQaThreadResponse }
+  | { status: 'missing'; thread: VisualQaThreadResponse };
 
 /** After ask-json succeeds, always refresh the thread so optimistic loading rows are replaced. */
 function shouldRefetchThreadAfterAsk(_response: VisualQaAskJsonResponse): boolean {
@@ -50,6 +56,8 @@ export function useVisualQA() {
   const locale = useVisualQaStore((s) => s.locale);
   const lastSystemNotice = useVisualQaStore((s) => s.lastSystemNotice);
   const dicomMetadata = useVisualQaStore((s) => s.dicomMetadata);
+  const sessionExists = useVisualQaStore((s) => s.sessionExists);
+  const caseRemoved = useVisualQaStore((s) => s.caseRemoved);
 
   const sendQuestion = useCallback(
     async (text: string, options: SendQuestionOptions = {}): Promise<VisualQaAskJsonResponse> => {
@@ -94,6 +102,9 @@ export function useVisualQA() {
           try {
             const thread = await fetchVisualQaThread(refreshSessionId);
             store.hydrateThread(thread, { replace: true });
+            if (isVisualQaThreadMissing(thread)) {
+              return response;
+            }
           } catch {
             // Keep ask-json payload when thread refresh fails.
           }
@@ -160,7 +171,7 @@ export function useVisualQA() {
     [],
   );
 
-  const hydrateSession = useCallback(async (targetSessionId: string) => {
+  const hydrateSession = useCallback(async (targetSessionId: string): Promise<HydrateSessionResult | null> => {
     const id = targetSessionId.trim();
     if (!id) throw new Error('sessionId is required.');
     if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
@@ -172,7 +183,10 @@ export function useVisualQA() {
     try {
       const thread = await fetchVisualQaThread(id);
       useVisualQaStore.getState().hydrateThread(thread, { replace: !softRefresh });
-      return thread;
+      if (isVisualQaThreadMissing(thread)) {
+        return { status: 'missing', thread };
+      }
+      return { status: 'loaded', thread };
     } catch (err) {
       if (axios.isAxiosError(err)) {
         showApiErrorToast(err);
@@ -205,6 +219,8 @@ export function useVisualQA() {
     locale,
     lastSystemNotice,
     dicomMetadata,
+    sessionExists,
+    caseRemoved,
     resetSession,
     setFlow,
     setCaseContext,

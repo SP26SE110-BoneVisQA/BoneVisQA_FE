@@ -39,7 +39,8 @@ import {
   VISUAL_QA_PERSONAL_WORKSPACE_PATH,
 } from '@/lib/student/visual-qa-study-mode';
 import type { VisualQaHistorySelectOptions } from '@/components/student/VisualQaSessionHistorySidebar';
-import type { VisualQaStudyMode } from '@/lib/api/visual-qa';
+import type { VisualQaStudyMode, VisualQaThreadResponse } from '@/lib/api/visual-qa';
+import { buildWorkspaceHrefAfterStaleSession } from '@/lib/student/visual-qa-thread-state';
 
 export type WorkspacePageVariant = 'personal' | 'catalog';
 
@@ -78,6 +79,7 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     isAsking,
     isUploading,
     lastSystemNotice,
+    caseRemoved,
     setFlow,
     setCaseContext,
     sendQuestion,
@@ -125,6 +127,40 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
   const handleReviewRequested = useCallback(() => {
     setHistoryRefreshNonce((n) => n + 1);
   }, []);
+
+  const handleStaleSession = useCallback(
+    async (thread: VisualQaThreadResponse, options?: { preserveCaseId?: string | null }) => {
+      const preserveCaseId = thread.caseRemoved
+        ? null
+        : options?.preserveCaseId?.trim() || queryCaseId || caseId || thread.caseId || null;
+      bootKeyRef.current = null;
+      setSessionLoadError(null);
+      setIsSessionLoading(false);
+      setBootLoading(false);
+      setHistoryRefreshNonce((n) => n + 1);
+
+      if (thread.caseRemoved) {
+        setCaseDetail(null);
+      } else if (variant === 'catalog' && preserveCaseId) {
+        try {
+          const detail = await fetchCaseCatalogDetail(preserveCaseId);
+          setCaseDetail(detail);
+          if (!detail.communityReferenceOnly) {
+            setCaseContext(preserveCaseId, resolveCatalogImageUrl(detail));
+            setFlow('catalog');
+          }
+        } catch {
+          setCaseDetail(null);
+        }
+      }
+
+      router.replace(
+        buildWorkspaceHrefAfterStaleSession({ variant, caseId: preserveCaseId }),
+        { scroll: false },
+      );
+    },
+    [caseId, queryCaseId, router, setCaseContext, setFlow, variant],
+  );
 
   const isCatalogFlow =
     variant === 'catalog' ||
@@ -215,8 +251,14 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
           if (storeSessionId !== querySessionId) {
             useVisualQaStore.getState().beginSessionLoad(querySessionId);
           }
-          await hydrateSession(querySessionId);
+          const hydrateResult = await hydrateSession(querySessionId);
           if (cancelled) return;
+          if (hydrateResult?.status === 'missing') {
+            await handleStaleSession(hydrateResult.thread, {
+              preserveCaseId: queryCaseId || caseId,
+            });
+            return;
+          }
           if (queryFlow === 'personal' || flow === 'personal') {
             setPersonalMeta((prev) => ({
               ...prev,
@@ -236,14 +278,19 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
           setCaseContext(detail.id, imageUrl);
           setFlow('catalog');
         } else if (sessionId?.trim()) {
-          await hydrateSession(sessionId);
+          const hydrateResult = await hydrateSession(sessionId);
+          if (cancelled) return;
+          if (hydrateResult?.status === 'missing') {
+            await handleStaleSession(hydrateResult.thread, { preserveCaseId: queryCaseId || caseId });
+            return;
+          }
         }
         if (!cancelled) bootKeyRef.current = bootKey;
       } catch (err) {
         if (cancelled) return;
         if (isSessionBoot) {
           setSessionLoadError('Could not load this Visual QA session.');
-          if (axios.isAxiosError(err)) {
+          if (axios.isAxiosError(err) && err.response?.status !== 404) {
             showApiErrorToast(err);
           }
         } else if (axios.isAxiosError(err)) {
@@ -268,6 +315,9 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
       cancelled = true;
     };
   }, [
+    caseId,
+    flow,
+    handleStaleSession,
     hydrateSession,
     isEmptyWorkspace,
     queryCaseId,
@@ -276,6 +326,7 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     sessionId,
     setCaseContext,
     setFlow,
+    variant,
   ]);
 
   useEffect(() => {
@@ -328,7 +379,7 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
   );
 
   const handleSelectHistorySession = useCallback(
-    (targetSessionId: string, options?: VisualQaHistorySelectOptions) => {
+    async (targetSessionId: string, options?: VisualQaHistorySelectOptions) => {
       const sid = targetSessionId.trim();
       if (!sid || sid === effectiveSessionId) return;
       const isCatalog =
@@ -348,8 +399,8 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
       if (isCatalog) {
         setFlow('catalog');
         setPersonalMeta(null);
-        const caseId = options?.caseId?.trim();
-        if (caseId) setCaseContext(caseId, resolvedPrefill ?? null);
+        const historyCaseId = options?.caseId?.trim();
+        if (historyCaseId) setCaseContext(historyCaseId, resolvedPrefill ?? null);
       } else {
         setFlow('personal');
         setPersonalMeta((prev) => ({
@@ -364,8 +415,30 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
         studyMode: options?.studyMode,
       });
       router.replace(href, { scroll: false });
+
+      try {
+        const hydrateResult = await hydrateSession(sid);
+        if (hydrateResult?.status === 'missing') {
+          await handleStaleSession(hydrateResult.thread, {
+            preserveCaseId: options?.caseId ?? queryCaseId ?? caseId,
+          });
+        }
+      } catch {
+        setSessionLoadError('Could not load this Visual QA session.');
+      } finally {
+        setIsSessionLoading(false);
+      }
     },
-    [effectiveSessionId, router, setCaseContext, setFlow],
+    [
+      caseId,
+      effectiveSessionId,
+      handleStaleSession,
+      hydrateSession,
+      queryCaseId,
+      router,
+      setCaseContext,
+      setFlow,
+    ],
   );
 
   const handleRetrySessionLoad = useCallback(async () => {
@@ -375,13 +448,17 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     setIsSessionLoading(true);
     bootKeyRef.current = null;
     try {
-      await hydrateSession(sid);
+      const hydrateResult = await hydrateSession(sid);
+      if (hydrateResult?.status === 'missing') {
+        await handleStaleSession(hydrateResult.thread, { preserveCaseId: queryCaseId || caseId });
+        return;
+      }
     } catch {
       setSessionLoadError('Could not load this Visual QA session.');
     } finally {
       setIsSessionLoading(false);
     }
-  }, [effectiveSessionId, hydrateSession]);
+  }, [caseId, effectiveSessionId, handleStaleSession, hydrateSession, queryCaseId]);
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -487,7 +564,35 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     );
   }
 
+  const persistHistorySidebar = variant === 'catalog';
+
+  const historySidebar = (
+    <VisualQaSessionHistorySidebar
+      className={
+        persistHistorySidebar
+          ? 'min-h-0 max-lg:hidden'
+          : 'fixed inset-y-0 left-0 z-[50] flex w-[min(92vw,320px)] rounded-none border-r shadow-xl max-lg:top-14 lg:static lg:z-auto lg:min-h-0 lg:max-lg:hidden'
+      }
+      selectedSessionId={effectiveSessionId || null}
+      onSelectSession={handleSelectHistorySession}
+      refreshNonce={historyRefreshNonce}
+      defaultStudyMode={defaultHistoryStudyMode}
+    />
+  );
+
   if (isEmptyWorkspace) {
+    if (persistHistorySidebar) {
+      return (
+        <div className="relative grid h-full min-h-0 grid-cols-1 overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.10),_transparent_32%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,1))] lg:grid-cols-[minmax(240px,292px)_minmax(0,1fr)]">
+          {historySidebar}
+          <WorkspaceEmptyState
+            variant={variant}
+            onUploaded={(result, file) => handleUploadSuccess(result, file)}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.10),_transparent_32%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,1))]">
         {emptyLandingHistoryOpen ? (
@@ -515,15 +620,18 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     );
   }
 
-  const showHistorySidebar = Boolean(effectiveSessionId) && activeSessionHistoryOpen;
+  const showHistorySidebar = persistHistorySidebar || (Boolean(effectiveSessionId) && activeSessionHistoryOpen);
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.12),_transparent_28%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(241,245,249,0.92))]">
       <WorkspaceFlowBar
         flow={flow}
+        caseRemoved={caseRemoved}
         onNewChat={handleNewSession}
-        onOpenHistory={() => setActiveSessionHistoryOpen((open) => !open)}
-        historyOpen={activeSessionHistoryOpen}
+        onOpenHistory={
+          persistHistorySidebar ? undefined : () => setActiveSessionHistoryOpen((open) => !open)
+        }
+        historyOpen={persistHistorySidebar ? true : activeSessionHistoryOpen}
       />
 
       <div
@@ -535,24 +643,28 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
         )}
       >
         {showHistorySidebar ? (
-          <>
-            <button
-              type="button"
-              className="fixed inset-0 z-[45] bg-black/30 lg:hidden"
-              aria-label="Close chat history"
-              onClick={() => setActiveSessionHistoryOpen(false)}
-            />
-            <VisualQaSessionHistorySidebar
-              className="fixed inset-y-0 left-0 z-[50] flex w-[min(92vw,320px)] rounded-none border-r shadow-xl max-lg:top-14 lg:static lg:z-auto lg:min-h-0 lg:max-lg:hidden"
-              selectedSessionId={effectiveSessionId || null}
-              onSelectSession={(sid, options) => {
-                setActiveSessionHistoryOpen(false);
-                handleSelectHistorySession(sid, options);
-              }}
-              refreshNonce={historyRefreshNonce}
-              defaultStudyMode={defaultHistoryStudyMode}
-            />
-          </>
+          persistHistorySidebar ? (
+            historySidebar
+          ) : (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-[45] bg-black/30 lg:hidden"
+                aria-label="Close chat history"
+                onClick={() => setActiveSessionHistoryOpen(false)}
+              />
+              <VisualQaSessionHistorySidebar
+                className="fixed inset-y-0 left-0 z-[50] flex w-[min(92vw,320px)] rounded-none border-r shadow-xl max-lg:top-14 lg:static lg:z-auto lg:min-h-0 lg:max-lg:hidden"
+                selectedSessionId={effectiveSessionId || null}
+                onSelectSession={(sid, options) => {
+                  setActiveSessionHistoryOpen(false);
+                  handleSelectHistorySession(sid, options);
+                }}
+                refreshNonce={historyRefreshNonce}
+                defaultStudyMode={defaultHistoryStudyMode}
+              />
+            </>
+          )
         ) : null}
 
         <div className="relative min-h-0 min-w-0">

@@ -7,12 +7,19 @@ import type { VisualQaFlow } from '@/features/visual-qa/store/visual-qa-store';
 
 type WorkspaceFlowBarProps = {
   flow: VisualQaFlow | null;
+  caseRemoved?: boolean;
   onNewChat?: () => void;
   onOpenHistory?: () => void;
   historyOpen?: boolean;
 };
 
-export function WorkspaceFlowBar({ flow, onNewChat, onOpenHistory, historyOpen = false }: WorkspaceFlowBarProps) {
+export function WorkspaceFlowBar({
+  flow,
+  caseRemoved = false,
+  onNewChat,
+  onOpenHistory,
+  historyOpen = false,
+}: WorkspaceFlowBarProps) {
   const flowBadge =
     flow === 'personal' ? (
       <Badge className="border-amber-300/60 bg-amber-500/15 text-amber-900">
@@ -29,7 +36,12 @@ export function WorkspaceFlowBar({ flow, onNewChat, onOpenHistory, historyOpen =
   return (
     <div className="px-3 pt-3 sm:px-4">
       <div className="medical-glass-panel flex min-h-14 shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-5">
-        <div className="flex min-w-0 items-center gap-2">{flowBadge}</div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {flowBadge}
+          {caseRemoved ? (
+            <Badge className="border-amber-300/70 bg-amber-500/15 text-amber-950">Case removed</Badge>
+          ) : null}
+        </div>
         <div className="flex shrink-0 items-center gap-2">
           {onOpenHistory ? (
             <Button

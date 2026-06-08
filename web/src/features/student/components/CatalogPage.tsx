@@ -15,6 +15,11 @@ import {
 } from '@/features/student/queries/use-student-catalog';
 import { getQueryErrorMessage } from '@/lib/query-utils';
 import type { StudentCaseCatalogItem } from '@/lib/api/types';
+import {
+  formatMedicalCaseDifficultyFilterOption,
+  medicalCaseDifficultyApiValue,
+  normalizeMedicalCaseDifficultyTier,
+} from '@/lib/medical-case-difficulty';
 import { BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const PAGE_SIZE = 6;
@@ -68,14 +73,22 @@ export function CatalogPage() {
 
   const difficultyOptions = useMemo(() => {
     const fromApi = filtersQuery.data?.difficulties;
-    if (fromApi?.length) return fromApi.map((d) => d.toLowerCase());
-    return Array.from(
-      new Set(
-        items
-          .map((item) => item.difficultyTier ?? item.difficulty ?? item.difficultyLabel)
-          .filter((v): v is string => Boolean(v && String(v).trim() && String(v) !== '—')),
-      ),
-    ).sort();
+    const rawValues = fromApi?.length
+      ? fromApi
+      : Array.from(
+          new Set(
+            items
+              .map((item) => item.difficultyTier ?? item.difficulty ?? item.difficultyLabel)
+              .filter((v): v is string => Boolean(v && String(v).trim() && String(v) !== '—')),
+          ),
+        );
+    return rawValues
+      .map((value) => {
+        const tier = normalizeMedicalCaseDifficultyTier(value);
+        return tier ? medicalCaseDifficultyApiValue(tier) : formatMedicalCaseDifficultyFilterOption(value);
+      })
+      .filter((value, index, arr) => arr.indexOf(value) === index)
+      .sort();
   }, [filtersQuery.data?.difficulties, items]);
 
   const severityOptions = useMemo(() => {

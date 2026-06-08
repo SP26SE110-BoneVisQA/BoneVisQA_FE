@@ -1,12 +1,9 @@
 import React from 'react';
 import { Search, ListFilter, Grid3X3, Filter } from 'lucide-react';
 
-const difficultyFilters = [
-  { id: 'all', label: 'All levels' },
-  { id: 'basic', label: 'Basic' },
-  { id: 'intermediate', label: 'Intermediate' },
-  { id: 'advanced', label: 'Advanced' },
-];
+import { MEDICAL_CASE_DIFFICULTY_FILTER_OPTIONS } from '@/lib/medical-case-difficulty';
+
+const difficultyFilters = MEDICAL_CASE_DIFFICULTY_FILTER_OPTIONS;
 
 const regionFilters = [
   'All regions',

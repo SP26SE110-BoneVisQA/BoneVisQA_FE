@@ -5,13 +5,18 @@ import { BookOpen, CheckCircle2, Clock, Lightbulb, ShieldAlert, TrendingUp } fro
 import { isNextImageRemoteOptimized } from '@/lib/images/remote-image';
 import { formatRelativeTime } from '@/lib/format-relative-time';
 import { stashSessionPrefillImage } from '@/components/student/VisualQaSessionHistorySidebar';
+import {
+  medicalCaseDifficultyBadgeClass,
+  medicalCaseDifficultyLabel,
+  type MedicalCaseDifficultyTier,
+} from '@/lib/medical-case-difficulty';
 
 interface CaseCardProps {
   title: string;
   thumbnail?: string;
   boneLocation: string;
   lesionType: string;
-  difficulty: 'basic' | 'intermediate' | 'advanced';
+  difficulty: MedicalCaseDifficultyTier;
   duration?: string;
   progress?: number;
   status?: string;
@@ -50,19 +55,19 @@ function formatLastResponderRole(raw: string | null | undefined): string | null 
   return `Last reply: ${pretty}`;
 }
 
-const difficultyConfig = {
-  basic: {
-    color: 'text-success bg-success/10',
-    label: 'Basic'
+const difficultyConfig: Record<MedicalCaseDifficultyTier, { color: string; label: string }> = {
+  easy: {
+    color: medicalCaseDifficultyBadgeClass('easy'),
+    label: medicalCaseDifficultyLabel('easy'),
   },
-  intermediate: {
-    color: 'text-warning bg-warning/10',
-    label: 'Intermediate'
+  medium: {
+    color: medicalCaseDifficultyBadgeClass('medium'),
+    label: medicalCaseDifficultyLabel('medium'),
   },
-  advanced: {
-    color: 'text-destructive bg-destructive/10',
-    label: 'Advanced'
-  }
+  hard: {
+    color: medicalCaseDifficultyBadgeClass('hard'),
+    label: medicalCaseDifficultyLabel('hard'),
+  },
 };
 
 export default function CaseCard({
