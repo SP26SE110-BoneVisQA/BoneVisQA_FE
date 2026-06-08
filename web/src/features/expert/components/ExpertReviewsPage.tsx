@@ -780,7 +780,7 @@ export function ExpertReviewsPage() {
       resolvedPathologyGroup,
     });
     const validation = validateExpertPromoteForm(promotePayload, {
-      rawCategoryId: libraryCategoryId,
+      rawCategoryId: resolvedCategoryId || libraryCategoryId,
       promoteCategories,
     });
     if (!validation.ok) {

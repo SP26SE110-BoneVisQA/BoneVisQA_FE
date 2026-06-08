@@ -56,6 +56,16 @@ export function resolveExpertCategoryIdForSubmit(
   if (!trimmed) return null;
   if (isValidGuid(trimmed)) return trimmed;
 
+  const lower = trimmed.toLowerCase();
+
+  for (const category of categories) {
+    const name = category.name?.trim();
+    const id = category.id?.trim();
+    if (!name || !id) continue;
+    if (id.toLowerCase() === lower) return id;
+    if (pathologyGroupToCategoryId(name) === lower) return id;
+  }
+
   const bySlug = new Map<string, string>();
   const byName = new Map<string, string>();
   for (const category of categories) {
@@ -66,10 +76,10 @@ export function resolveExpertCategoryIdForSubmit(
     byName.set(name.toLowerCase(), id);
   }
 
-  const slugMatch = bySlug.get(trimmed);
+  const slugMatch = bySlug.get(lower);
   if (slugMatch) return slugMatch;
 
-  const nameMatch = byName.get(trimmed.toLowerCase());
+  const nameMatch = byName.get(lower);
   if (nameMatch) return nameMatch;
 
   return sanitizeNullableGuid(trimmed);

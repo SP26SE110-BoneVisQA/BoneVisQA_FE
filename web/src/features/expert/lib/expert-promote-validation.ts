@@ -157,16 +157,22 @@ export function validateExpertPromoteForm(
     errors.title = 'Enter a library case title.';
   }
 
+  const normalizedCategoryId =
+    resolvePromoteCategoryIdForDropdown(ctx.rawCategoryId, ctx.promoteCategories) ||
+    ctx.rawCategoryId.trim();
   const pathologyGroup = resolvePromotePathologyGroupForSubmit(
-    ctx.rawCategoryId,
+    normalizedCategoryId,
     ctx.promoteCategories,
   );
-  const categoryId = resolveExpertCategoryIdForSubmit(ctx.rawCategoryId, ctx.promoteCategories);
+  const categoryId =
+    resolveExpertCategoryIdForSubmit(normalizedCategoryId, ctx.promoteCategories) ??
+    ctx.promoteCategories.find((category) => category.name === pathologyGroup)?.id ??
+    (pathologyGroup ? pathologyGroupToCategoryId(pathologyGroup) : null);
 
-  if (!ctx.rawCategoryId.trim()) {
+  if (!normalizedCategoryId) {
     errors.categoryId =
       'Select a pathology category: Trauma, Tumor, Infection, Degenerative, or Congenital.';
-  } else if (!categoryId || !pathologyGroup) {
+  } else if (!pathologyGroup) {
     errors.categoryId =
       'Selected category is not valid for library publish. Choose Trauma, Tumor, Infection, Degenerative, or Congenital.';
   }
