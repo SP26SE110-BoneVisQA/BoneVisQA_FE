@@ -103,6 +103,7 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
   const workbenchScrollLocked =
     pathname?.startsWith('/student/qa/image') ||
     pathname?.startsWith('/student/visual-qa/workspace') ||
+    pathname?.startsWith('/student/visual-qa/case-workspace') ||
     false;
 
   return (

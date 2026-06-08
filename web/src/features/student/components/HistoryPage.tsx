@@ -11,6 +11,10 @@ import { Input } from '@/components/ui/input';
 import { useStudentHistory } from '@/features/student/queries/use-student-history';
 import { getQueryErrorMessage } from '@/lib/query-utils';
 import { BookOpen, Filter, ImageUp, Search, Upload } from 'lucide-react';
+import {
+  buildCaseWorkspaceHref,
+  buildPersonalWorkspaceHref,
+} from '@/lib/student/visual-qa-study-mode';
 
 const difficultyFilters = [
   { id: 'all', label: 'All levels' },
@@ -191,11 +195,15 @@ export function HistoryPage() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 md:gap-5">
           {filtered.map((item) => {
             const sid = item.sessionId?.trim();
-            const flow = activeTab === 'personal' ? 'personal' : 'catalog';
+            const catalogCaseId = item.catalogCaseId?.trim();
             const detailHref = sid
-              ? `/student/visual-qa/workspace?sessionId=${encodeURIComponent(sid)}&flow=${flow}`
-              : activeTab === 'cases' && item.catalogCaseId?.trim()
-                ? `/student/cases/${encodeURIComponent(item.catalogCaseId.trim())}`
+              ? activeTab === 'cases'
+                ? catalogCaseId
+                  ? buildCaseWorkspaceHref(catalogCaseId, sid)
+                  : `/student/visual-qa/case-workspace?sessionId=${encodeURIComponent(sid)}`
+                : buildPersonalWorkspaceHref(sid)
+              : activeTab === 'cases' && catalogCaseId
+                ? `/student/cases/${encodeURIComponent(catalogCaseId)}`
                 : undefined;
             return (
               <CaseCard

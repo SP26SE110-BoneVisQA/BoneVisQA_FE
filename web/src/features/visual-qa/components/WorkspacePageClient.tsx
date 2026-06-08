@@ -31,10 +31,17 @@ import { useDashboardHeader } from '@/components/layouts/dashboard-header-contex
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
+  buildCaseWorkspaceHref,
+  buildPersonalWorkspaceHref,
   buildWorkspaceHrefForHistoryItem,
   isCatalogCaseStudyMode,
+  VISUAL_QA_CASE_WORKSPACE_PATH,
+  VISUAL_QA_PERSONAL_WORKSPACE_PATH,
 } from '@/lib/student/visual-qa-study-mode';
 import type { VisualQaHistorySelectOptions } from '@/components/student/VisualQaSessionHistorySidebar';
+import type { VisualQaStudyMode } from '@/lib/api/visual-qa';
+
+export type WorkspacePageVariant = 'personal' | 'catalog';
 
 function resolveCatalogImageUrl(detail: StudentCaseCatalogDetail): string | null {
   const candidates = [
@@ -49,7 +56,12 @@ function resolveCatalogImageUrl(detail: StudentCaseCatalogDetail): string | null
   return null;
 }
 
-export function WorkspacePageClient() {
+type WorkspacePageClientProps = {
+  /** `personal` = DICOM upload workspace; `catalog` = case library workspace. */
+  variant?: WorkspacePageVariant;
+};
+
+export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryCaseId = searchParams.get('caseId')?.trim() ?? '';
@@ -88,8 +100,14 @@ export function WorkspacePageClient() {
   const storeDicomMetadata = useVisualQaStore((s) => s.dicomMetadata);
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0);
   const [emptyLandingHistoryOpen, setEmptyLandingHistoryOpen] = useState(false);
+  const [activeSessionHistoryOpen, setActiveSessionHistoryOpen] = useState(false);
   const [awaitingNewSession, setAwaitingNewSession] = useState(false);
   const bootKeyRef = useRef<string | null>(null);
+
+  const workspaceBasePath =
+    variant === 'catalog' ? VISUAL_QA_CASE_WORKSPACE_PATH : VISUAL_QA_PERSONAL_WORKSPACE_PATH;
+  const defaultHistoryStudyMode: VisualQaStudyMode =
+    variant === 'catalog' ? 'catalog_case_study' : 'personal_dicom';
 
   const effectiveCaseId = queryCaseId || caseId || '';
   const effectiveSessionId = querySessionId || sessionId || '';
@@ -109,9 +127,23 @@ export function WorkspacePageClient() {
   }, []);
 
   const isCatalogFlow =
+    variant === 'catalog' ||
     isCatalogCaseStudyMode(capabilities, flow) ||
     flow === 'catalog' ||
     queryFlow === 'catalog';
+
+  useEffect(() => {
+    if (variant === 'personal' && (queryCaseId || queryFlow === 'catalog')) {
+      const params = new URLSearchParams();
+      if (querySessionId) params.set('sessionId', querySessionId);
+      if (queryCaseId) params.set('caseId', queryCaseId);
+      router.replace(`${VISUAL_QA_CASE_WORKSPACE_PATH}?${params.toString()}`, { scroll: false });
+      return;
+    }
+    if (variant === 'catalog' && queryFlow === 'personal' && !queryCaseId) {
+      router.replace(buildPersonalWorkspaceHref(querySessionId || undefined), { scroll: false });
+    }
+  }, [queryCaseId, queryFlow, querySessionId, router, variant]);
 
   const {
     expertSupportByAssistantId,
@@ -176,9 +208,7 @@ export function WorkspacePageClient() {
       setBootError(null);
 
       try {
-        if (queryFlow === 'personal' || queryFlow === 'catalog') {
-          setFlow(queryFlow);
-        }
+        setFlow(variant === 'catalog' ? 'catalog' : 'personal');
 
         if (querySessionId) {
           const storeSessionId = useVisualQaStore.getState().sessionId?.trim();
@@ -271,7 +301,7 @@ export function WorkspacePageClient() {
   }, [caseDetail, previewImageUrl]);
 
   const title = headerTitle;
-  const answerVariant = isCatalogFlow ? 'catalog' : 'full';
+  const answerVariant = 'full' as const;
 
   const handleUploadSuccess = useCallback(
     (result: VisualQaUploadPersonalResponse, file?: File) => {
@@ -292,8 +322,7 @@ export function WorkspacePageClient() {
       const bootKey = `${sid}||personal`;
       bootKeyRef.current = bootKey;
 
-      const url = `/student/visual-qa/workspace?sessionId=${encodeURIComponent(sid)}&flow=personal`;
-      router.replace(url, { scroll: false });
+      router.replace(buildPersonalWorkspaceHref(sid), { scroll: false });
     },
     [router, setFlow],
   );
@@ -364,11 +393,10 @@ export function WorkspacePageClient() {
         });
         const newSessionId = response.sessionId?.trim();
         if (newSessionId && !querySessionId) {
-          const params = new URLSearchParams();
-          params.set('sessionId', newSessionId);
-          if (effectiveCaseId) params.set('caseId', effectiveCaseId);
-          params.set('flow', flow === 'personal' ? 'personal' : 'catalog');
-          router.replace(`/student/visual-qa/workspace?${params.toString()}`, { scroll: false });
+          const href = isCatalogFlow
+            ? buildCaseWorkspaceHref(effectiveCaseId, newSessionId)
+            : buildPersonalWorkspaceHref(newSessionId);
+          router.replace(href, { scroll: false });
         }
         if (newSessionId) setHistoryRefreshNonce((n) => n + 1);
       } catch (err) {
@@ -387,10 +415,10 @@ export function WorkspacePageClient() {
     resetSession();
     setCaseDetail(null);
     setPersonalMeta(null);
-    router.replace('/student/visual-qa/workspace');
-  }, [resetSession, router]);
+    router.replace(workspaceBasePath);
+  }, [resetSession, router, workspaceBasePath]);
 
-  const readOnlyImage = isCatalogFlow || capabilities?.isReadOnly === true;
+  const readOnlyImage = capabilities?.isReadOnly === true;
   const composerDisabled =
     isUploading ||
     isSessionLoading ||
@@ -475,19 +503,28 @@ export function WorkspacePageClient() {
               selectedSessionId={null}
               onSelectSession={handleSelectHistorySession}
               refreshNonce={historyRefreshNonce}
+              defaultStudyMode={defaultHistoryStudyMode}
             />
           </>
         ) : null}
-        <WorkspaceEmptyState onUploaded={(result, file) => handleUploadSuccess(result, file)} />
+        <WorkspaceEmptyState
+          variant={variant}
+          onUploaded={(result, file) => handleUploadSuccess(result, file)}
+        />
       </div>
     );
   }
 
-  const showHistorySidebar = flow === 'personal' && Boolean(effectiveSessionId);
+  const showHistorySidebar = Boolean(effectiveSessionId) && activeSessionHistoryOpen;
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.12),_transparent_28%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(241,245,249,0.92))]">
-      <WorkspaceFlowBar flow={flow} onNewChat={handleNewSession} />
+      <WorkspaceFlowBar
+        flow={flow}
+        onNewChat={handleNewSession}
+        onOpenHistory={() => setActiveSessionHistoryOpen((open) => !open)}
+        historyOpen={activeSessionHistoryOpen}
+      />
 
       <div
         className={cn(
@@ -498,12 +535,24 @@ export function WorkspacePageClient() {
         )}
       >
         {showHistorySidebar ? (
-          <VisualQaSessionHistorySidebar
-            className="min-h-0 max-lg:hidden"
-            selectedSessionId={effectiveSessionId || null}
-            onSelectSession={handleSelectHistorySession}
-            refreshNonce={historyRefreshNonce}
-          />
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-[45] bg-black/30 lg:hidden"
+              aria-label="Close chat history"
+              onClick={() => setActiveSessionHistoryOpen(false)}
+            />
+            <VisualQaSessionHistorySidebar
+              className="fixed inset-y-0 left-0 z-[50] flex w-[min(92vw,320px)] rounded-none border-r shadow-xl max-lg:top-14 lg:static lg:z-auto lg:min-h-0 lg:max-lg:hidden"
+              selectedSessionId={effectiveSessionId || null}
+              onSelectSession={(sid, options) => {
+                setActiveSessionHistoryOpen(false);
+                handleSelectHistorySession(sid, options);
+              }}
+              refreshNonce={historyRefreshNonce}
+              defaultStudyMode={defaultHistoryStudyMode}
+            />
+          </>
         ) : null}
 
         <div className="relative min-h-0 min-w-0">

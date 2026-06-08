@@ -86,19 +86,17 @@ export function WorkspaceImagePanel({
           <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300">
             {catalogMode ? 'Teaching case' : 'DICOM viewer'}
           </span>
-          {!catalogMode ? (
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                hasActiveRoi
-                  ? 'bg-cyan-400/15 text-cyan-100'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              {hasActiveRoi ? 'ROI selected' : readOnly ? 'View only' : 'Draw ROI'}
-            </span>
-          ) : null}
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              hasActiveRoi
+                ? 'bg-cyan-400/15 text-cyan-100'
+                : 'bg-slate-800 text-slate-400'
+            }`}
+          >
+            {hasActiveRoi ? 'ROI selected' : readOnly ? 'View only' : 'Draw ROI'}
+          </span>
         </div>
-        {!readOnly && !catalogMode ? (
+        {!readOnly ? (
           <span className="hidden text-[10px] text-slate-500 lg:inline">
             Scroll/pinch zoom · Pan with hand tool
           </span>

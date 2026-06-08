@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ImageOff, Loader2, MessageSquare, RefreshCw } from 'lucide-react';
 import {
-  fetchVisualQaCombinedHistory,
+  fetchVisualQaCaseHistoryNormalized,
+  fetchVisualQaPersonalHistory,
   resolveStudyImageSrc,
   type VisualQaSessionHistoryItem,
   type VisualQaStudyMode,
@@ -67,6 +68,8 @@ type Props = {
   onSelectSession: (sessionId: string, options?: VisualQaHistorySelectOptions) => void;
   /** Bump sau khi tạo phiên chat mới để refetch danh sách không cần reload trang. */
   refreshNonce?: number;
+  /** Tab mặc định khi mở history picker. */
+  defaultStudyMode?: VisualQaStudyMode;
   className?: string;
 };
 
@@ -94,53 +97,80 @@ function SessionThumbnail({ imageUrl }: { imageUrl?: string | null }) {
   );
 }
 
+const HISTORY_MODE_TABS: { mode: VisualQaStudyMode; label: string; description: string }[] = [
+  {
+    mode: 'personal_dicom',
+    label: 'DICOM upload',
+    description: 'Sessions from your uploaded studies',
+  },
+  {
+    mode: 'catalog_case_study',
+    label: 'Case study',
+    description: 'Teaching case library Q&A sessions',
+  },
+];
+
 export function VisualQaSessionHistorySidebar({
   selectedSessionId,
   onSelectSession,
   refreshNonce = 0,
+  defaultStudyMode = 'personal_dicom',
   className,
 }: Props) {
-  const [items, setItems] = useState<VisualQaSessionHistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activeMode, setActiveMode] = useState<VisualQaStudyMode>(defaultStudyMode);
+  const [itemsByMode, setItemsByMode] = useState<Partial<Record<VisualQaStudyMode, VisualQaSessionHistoryItem[]>>>(
+    {},
+  );
+  const [loadingMode, setLoadingMode] = useState<VisualQaStudyMode | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadHistory = useCallback(async () => {
+  useEffect(() => {
+    setActiveMode(defaultStudyMode);
+  }, [defaultStudyMode]);
+
+  const loadHistoryForMode = useCallback(async (mode: VisualQaStudyMode) => {
     if (typeof window !== 'undefined' && !localStorage.getItem('token')) {
-      setItems([]);
-      setLoading(false);
+      setItemsByMode((prev) => ({ ...prev, [mode]: [] }));
+      setLoadingMode(null);
       setError(null);
       return;
     }
-    setLoading(true);
+    setLoadingMode(mode);
     setError(null);
     try {
-      const rows = await fetchVisualQaCombinedHistory({ limit: 20, offset: 0 });
-      setItems(rows);
+      const result =
+        mode === 'personal_dicom'
+          ? await fetchVisualQaPersonalHistory({ limit: 20, offset: 0 })
+          : await fetchVisualQaCaseHistoryNormalized({ limit: 20, offset: 0 });
+      setItemsByMode((prev) => ({ ...prev, [mode]: result.items }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load session history.');
     } finally {
-      setLoading(false);
+      setLoadingMode(null);
     }
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      await loadHistory();
+      await loadHistoryForMode(activeMode);
       if (cancelled) return;
     })();
     return () => {
       cancelled = true;
     };
-  }, [loadHistory, refreshNonce]);
+  }, [activeMode, loadHistoryForMode, refreshNonce]);
 
   const sorted = useMemo(() => {
+    const items = itemsByMode[activeMode] ?? [];
     return [...items].sort((a, b) => {
       const ta = new Date(a.updatedAt ?? 0).getTime();
       const tb = new Date(b.updatedAt ?? 0).getTime();
       return tb - ta;
     });
-  }, [items]);
+  }, [activeMode, itemsByMode]);
+
+  const activeTabMeta = HISTORY_MODE_TABS.find((tab) => tab.mode === activeMode);
 
   return (
     <aside
@@ -150,11 +180,34 @@ export function VisualQaSessionHistorySidebar({
       )}
     >
       <div className="shrink-0 border-b border-slate-200/70 px-4 py-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Study history</p>
-        <p className="mt-1 text-xs text-slate-500">DICOM uploads and case-library Q&amp;A sessions</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Chat history</p>
+        <p className="mt-1 text-xs text-slate-500">Choose a session type, then open a past conversation.</p>
+        <div className="mt-3 grid grid-cols-2 gap-1.5 rounded-2xl border border-slate-200/80 bg-slate-50/90 p-1">
+          {HISTORY_MODE_TABS.map((tab) => {
+            const active = tab.mode === activeMode;
+            return (
+              <button
+                key={tab.mode}
+                type="button"
+                onClick={() => setActiveMode(tab.mode)}
+                className={cn(
+                  'rounded-xl px-2 py-2 text-left text-[11px] font-semibold transition-all',
+                  active
+                    ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80'
+                    : 'text-slate-500 hover:bg-white/70 hover:text-slate-700',
+                )}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+        {activeTabMeta ? (
+          <p className="mt-2 text-[11px] text-slate-500">{activeTabMeta.description}</p>
+        ) : null}
       </div>
       <div className="app-scroll-y min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {loading ? (
+        {loadingMode === activeMode ? (
           <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             Loading…
@@ -167,7 +220,7 @@ export function VisualQaSessionHistorySidebar({
               variant="outline"
               size="sm"
               className="mt-3 h-8 gap-1.5 text-xs"
-              onClick={() => void loadHistory()}
+              onClick={() => void loadHistoryForMode(activeMode)}
             >
               <RefreshCw className="h-3.5 w-3.5" aria-hidden />
               Retry
@@ -175,7 +228,9 @@ export function VisualQaSessionHistorySidebar({
           </div>
         ) : sorted.length === 0 ? (
           <p className="px-3 py-6 text-center text-xs text-slate-500">
-            No sessions yet. Upload a DICOM study or ask questions about a teaching case.
+            {activeMode === 'personal_dicom'
+              ? 'No DICOM upload sessions yet. Upload a study to start.'
+              : 'No case study sessions yet. Open a teaching case from the library.'}
           </p>
         ) : (
           <ul className="space-y-2">

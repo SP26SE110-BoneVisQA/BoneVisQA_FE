@@ -19,6 +19,7 @@ import {
 } from '@/lib/api/visual-qa';
 import { useVisualQaStore } from '@/features/visual-qa/store/visual-qa-store';
 import { createVisualQaClientRequestId } from '@/features/visual-qa/utils/client-request-id';
+import { detectVisualQaQuestionLocale } from '@/lib/student/detect-visual-qa-question-locale';
 
 /** After ask-json succeeds, always refresh the thread so optimistic loading rows are replaced. */
 function shouldRefetchThreadAfterAsk(_response: VisualQaAskJsonResponse): boolean {
@@ -82,7 +83,7 @@ export function useVisualQA() {
             clientRequestId,
             dicomMetadata: state.dicomMetadata ?? null,
           },
-          { locale: state.locale, skipApiToast: true },
+          { locale: detectVisualQaQuestionLocale(questionText), skipApiToast: true },
         );
 
         const store = useVisualQaStore.getState();

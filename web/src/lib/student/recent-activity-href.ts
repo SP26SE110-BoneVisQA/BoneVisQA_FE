@@ -1,4 +1,8 @@
 import type { StudentRecentActivityItem } from '@/lib/api/types';
+import {
+  buildCaseWorkspaceHref,
+  buildPersonalWorkspaceHref,
+} from '@/lib/student/visual-qa-study-mode';
 
 /** Normalize backend shortcuts that omit the `/student` prefix. */
 function normalizeAppPath(path: string): string {
@@ -34,14 +38,13 @@ export function resolveStudentRecentActivityHref(activity: StudentRecentActivity
   const t = activity.type?.trim().toLowerCase() ?? '';
   const sid = activity.sessionId?.trim();
 
-  if (t === 'visual_qa' || t === 'visual_qa_lecturer_reply' || t.includes('visual_qa')) {
-    if (sid) {
-      const params = new URLSearchParams({ sessionId: sid, flow: 'personal' });
-      return `/student/visual-qa/workspace?${params.toString()}`;
-    }
-    return '/student/visual-qa/workspace';
-  }
   const caseId = activity.caseId?.trim();
+
+  if (t === 'visual_qa' || t === 'visual_qa_lecturer_reply' || t.includes('visual_qa')) {
+    if (sid && caseId) return buildCaseWorkspaceHref(caseId, sid);
+    if (sid) return buildPersonalWorkspaceHref(sid);
+    return caseId ? buildCaseWorkspaceHref(caseId) : buildPersonalWorkspaceHref();
+  }
   const quizId = activity.quizId?.trim();
 
   if (t.includes('quiz') || t.includes('attempt')) {

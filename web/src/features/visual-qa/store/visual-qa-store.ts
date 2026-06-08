@@ -187,6 +187,7 @@ export const useVisualQaStore = create<VisualQaStoreState>()(
                 turnsUsed: capabilities.turnsUsed,
                 turnLimit: capabilities.turnLimit,
                 reviewRoute: capabilities.reviewRoute,
+                studyMode: capabilities.studyMode ?? null,
                 blockingReason: capabilities.blockingReason ?? null,
                 reason: capabilities.reason ?? capabilities.blockingReason ?? null,
               }

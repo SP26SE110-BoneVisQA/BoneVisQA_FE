@@ -50,5 +50,9 @@ export default async function LegacyStudentQaImageRedirect({
   }
 
   const qs = params.toString();
-  redirect(qs ? `/student/visual-qa/workspace?${qs}` : '/student/visual-qa/workspace');
+  const isCaseStudy = params.has('caseId') || params.get('flow') === 'catalog';
+  const base = isCaseStudy ? '/student/visual-qa/case-workspace' : '/student/visual-qa/workspace';
+  if (isCaseStudy) params.delete('flow');
+  const nextQs = params.toString();
+  redirect(nextQs ? `${base}?${nextQs}` : base);
 }

@@ -71,7 +71,7 @@ export function CaseDetailPage() {
 
   const displayImages = useMemo(() => (item ? catalogImagesForDisplay(item) : []), [item]);
 
-  const qaHref = `/student/visual-qa/workspace?caseId=${encodeURIComponent(caseId)}&flow=catalog`;
+  const qaHref = `/student/visual-qa/case-workspace?caseId=${encodeURIComponent(caseId)}`;
 
   const lockAskAi = Boolean(item?.communityReferenceOnly);
   const isCommunity = item?.caseOrigin === 'communityPromoted';

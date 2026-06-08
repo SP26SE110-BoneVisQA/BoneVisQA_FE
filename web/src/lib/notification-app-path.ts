@@ -37,12 +37,20 @@ function resolveNotificationRouteAlias(path: string): string {
       params.get('id')?.trim() ||
       pathname.split('/').filter(Boolean).pop();
     if (sessionId) {
-      const next = new URLSearchParams({ sessionId, flow: params.get('flow')?.trim() || 'personal' });
       const caseId = params.get('caseId')?.trim();
+      const flow = params.get('flow')?.trim().toLowerCase();
+      const isCaseStudy = Boolean(caseId) || flow === 'catalog' || flow === 'case_study';
+      const base = isCaseStudy ? '/student/visual-qa/case-workspace' : '/student/visual-qa/workspace';
+      const next = new URLSearchParams({ sessionId });
+      if (!isCaseStudy) next.set('flow', flow || 'personal');
       if (caseId) next.set('caseId', caseId);
-      return `/student/visual-qa/workspace?${next.toString()}`;
+      return `${base}?${next.toString()}`;
     }
     return '/student/visual-qa/workspace';
+  }
+
+  if (lower === '/student/visual-qa/case-workspace') {
+    return appendQuery('/student/visual-qa/case-workspace', params);
   }
 
   if (lower.startsWith('/student/cases/')) {

@@ -105,7 +105,7 @@ export function WorkspaceChatPanel({
           placeholder={
             isCatalogFlow
               ? 'Ask a question about this teaching case…'
-              : 'Ask a question about this study image or marked region…'
+              : 'Ask a question about your uploaded X-ray study…'
           }
         />
       </div>

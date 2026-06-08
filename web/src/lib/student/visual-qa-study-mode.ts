@@ -40,14 +40,39 @@ export function studyModeBadgeClass(mode: VisualQaStudyMode): string {
     : 'border-sky-200 bg-sky-50 text-sky-800';
 }
 
+export const VISUAL_QA_PERSONAL_WORKSPACE_PATH = '/student/visual-qa/workspace';
+export const VISUAL_QA_CASE_WORKSPACE_PATH = '/student/visual-qa/case-workspace';
+
+export function getVisualQaWorkspaceBasePath(mode: VisualQaStudyMode): string {
+  return mode === 'catalog_case_study'
+    ? VISUAL_QA_CASE_WORKSPACE_PATH
+    : VISUAL_QA_PERSONAL_WORKSPACE_PATH;
+}
+
+export function buildCaseWorkspaceHref(caseId: string, sessionId?: string | null): string {
+  const params = new URLSearchParams({ caseId: caseId.trim() });
+  const sid = sessionId?.trim();
+  if (sid) params.set('sessionId', sid);
+  return `${VISUAL_QA_CASE_WORKSPACE_PATH}?${params.toString()}`;
+}
+
+export function buildPersonalWorkspaceHref(sessionId?: string | null): string {
+  const sid = sessionId?.trim();
+  if (!sid) return VISUAL_QA_PERSONAL_WORKSPACE_PATH;
+  const params = new URLSearchParams({ sessionId: sid, flow: 'personal' });
+  return `${VISUAL_QA_PERSONAL_WORKSPACE_PATH}?${params.toString()}`;
+}
+
 /** Build workspace deep-link for a history row (catalog vs personal). */
 export function buildWorkspaceHrefForHistoryItem(
   row: Pick<VisualQaSessionHistoryItem, 'sessionId' | 'caseId' | 'studyMode'>,
 ): string {
   const sessionId = row.sessionId.trim();
   const mode = inferStudyModeFromHistoryItem(row);
-  const params = new URLSearchParams({ sessionId, flow: mode === 'catalog_case_study' ? 'catalog' : 'personal' });
+  const base = getVisualQaWorkspaceBasePath(mode);
+  const params = new URLSearchParams({ sessionId });
+  if (mode === 'personal_dicom') params.set('flow', 'personal');
   const caseId = row.caseId?.trim();
   if (caseId) params.set('caseId', caseId);
-  return `/student/visual-qa/workspace?${params.toString()}`;
+  return `${base}?${params.toString()}`;
 }

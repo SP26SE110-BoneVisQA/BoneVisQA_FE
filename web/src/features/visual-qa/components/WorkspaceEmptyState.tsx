@@ -13,9 +13,12 @@ import { isNextImageRemoteOptimized } from '@/lib/images/remote-image';
 import { SkeletonBlock } from '@/components/shared/DashboardSkeletons';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { buildCaseWorkspaceHref } from '@/lib/student/visual-qa-study-mode';
+import type { WorkspacePageVariant } from '@/features/visual-qa/components/WorkspacePageClient';
 
 type Props = {
   onUploaded: (result: VisualQaUploadPersonalResponse, file?: File) => void;
+  variant?: WorkspacePageVariant;
 };
 
 function FeaturedCaseTile({ item, onSelect }: { item: StudentCaseCatalogItem; onSelect: (id: string) => void }) {
@@ -64,38 +67,57 @@ function FeaturedCaseTile({ item, onSelect }: { item: StudentCaseCatalogItem; on
   );
 }
 
-export function WorkspaceEmptyState({ onUploaded }: Props) {
+export function WorkspaceEmptyState({ onUploaded, variant = 'personal' }: Props) {
   const router = useRouter();
   const catalogQuery = useStudentCatalog({ location: '', lesionType: '', difficulty: '' });
   const featured = (catalogQuery.data ?? []).slice(0, 4);
+  const isCatalogWorkspace = variant === 'catalog';
 
   const startCatalogCase = (caseId: string) => {
-    router.push(`/student/visual-qa/workspace?caseId=${encodeURIComponent(caseId)}&flow=catalog`);
+    router.push(buildCaseWorkspaceHref(caseId));
   };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_35%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,1))]">
-      <section className="px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
-        <div className="mx-auto flex w-full max-w-3xl flex-col items-center">
-          <div className="medical-bento-card w-full p-5 sm:p-6 lg:p-7">
-            <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-                <UploadCloud className="h-4 w-4" aria-hidden />
-                Upload DICOM
+      {!isCatalogWorkspace ? (
+        <section className="px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
+          <div className="mx-auto flex w-full max-w-3xl flex-col items-center">
+            <div className="medical-bento-card w-full p-5 sm:p-6 lg:p-7">
+              <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+                  <UploadCloud className="h-4 w-4" aria-hidden />
+                  Upload DICOM
+                </div>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-3xl">
+                  Start from your own DICOM archive
+                </h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
+                  Upload a study archive to begin a private Visual QA session, or pick a featured case below.
+                </p>
               </div>
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-3xl">
-                Start from your own DICOM archive
-              </h2>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
-                Upload a study archive to begin a private Visual QA session, or pick a featured case below.
-              </p>
-            </div>
-            <div className="mx-auto mt-5 w-full max-w-xl">
-              <WorkspacePersonalUpload onUploaded={onUploaded} className="w-full" />
+              <div className="mx-auto mt-5 w-full max-w-xl">
+                <WorkspacePersonalUpload onUploaded={onUploaded} className="w-full" />
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <section className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-800">
+              <BookOpen className="h-4 w-4" aria-hidden />
+              Case study workspace
+            </div>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-3xl">
+              Ask AI about a teaching case
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Pick a curated case from the library to start a case-study Q&amp;A session. DICOM uploads use the
+              separate upload workspace.
+            </p>
+          </div>
+        </section>
+      )}
 
       <section className="px-4 pb-6 sm:px-6 lg:px-8 lg:pb-8">
         <div className="mx-auto max-w-7xl">
