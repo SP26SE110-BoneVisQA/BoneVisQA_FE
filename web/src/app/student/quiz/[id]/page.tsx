@@ -285,8 +285,10 @@ export default function QuizSessionPage({
       }
     });
     setAnswerStates(newStates);
-    // Only auto-show feedback in Practice Mode; in Exam Mode, wait for lecturer to release answers
-    const shouldShowFeedback = isPracticeMode || quizInfo?.answersReleased === true;
+    // Show feedback ONLY when:
+    // 1. It's Practice Mode (quizMode === 2), AND
+    // 2. Lecturer has released the answers (answersReleased === true)
+    const shouldShowFeedback = isPracticeMode && quizInfo?.answersReleased === true;
     setShowFeedback(shouldShowFeedback);
     setReviewPage(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -340,11 +342,12 @@ export default function QuizSessionPage({
     return () => clearInterval(pollInterval);
   }, [quizId, quizInfo?.isCompleted]);
 
-  // Handle answers release after submission in Exam Mode
+  // Handle answers release after submission in Practice Mode
   // When student has submitted and lecturer releases answers, show feedback
+  // This ensures feedback only shows in Practice Mode after lecturer releases answers
   useEffect(() => {
     if (!submitted) return;
-    if (isPracticeMode) return; // Practice mode already shows feedback immediately
+    if (!isPracticeMode) return; // Exam Mode should use the /review page
     if (quizInfo?.answersReleased === true && !showFeedback) {
       setShowFeedback(true);
     }
