@@ -169,6 +169,7 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     queryFlow === 'catalog';
 
   useEffect(() => {
+    // Redirect wrong-workspace URLs to the correct workspace.
     if (variant === 'personal' && (queryCaseId || queryFlow === 'catalog')) {
       const params = new URLSearchParams();
       if (querySessionId) params.set('sessionId', querySessionId);
@@ -176,8 +177,10 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
       router.replace(`${VISUAL_QA_CASE_WORKSPACE_PATH}?${params.toString()}`, { scroll: false });
       return;
     }
-    if (variant === 'catalog' && queryFlow === 'personal' && !queryCaseId) {
-      router.replace(buildPersonalWorkspaceHref(querySessionId || undefined), { scroll: false });
+    // Only redirect catalog→personal when there is an explicit flow=personal param AND no
+    // caseId present. We do NOT redirect when flow param is absent (catalog page default).
+    if (variant === 'catalog' && queryFlow === 'personal' && !queryCaseId && querySessionId) {
+      router.replace(buildPersonalWorkspaceHref(querySessionId), { scroll: false });
     }
   }, [queryCaseId, queryFlow, querySessionId, router, variant]);
 
@@ -385,6 +388,24 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
       const isCatalog =
         options?.studyMode === 'catalog_case_study' ||
         Boolean(options?.caseId?.trim());
+
+      const href = buildWorkspaceHrefForHistoryItem({
+        sessionId: sid,
+        caseId: options?.caseId,
+        studyMode: options?.studyMode,
+      });
+
+      // If the selected session belongs to the OTHER workspace type, navigate there —
+      // don't try to load a DICOM session in the catalog workspace or vice versa.
+      const targetIsDifferentWorkspace =
+        (variant === 'catalog' && !isCatalog) ||
+        (variant === 'personal' && isCatalog);
+
+      if (targetIsDifferentWorkspace) {
+        router.push(href);
+        return;
+      }
+
       setAwaitingNewSession(false);
       setEmptyLandingHistoryOpen(false);
       setSessionLoadError(null);
@@ -409,11 +430,6 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
           uploadedAt: prev?.uploadedAt,
         }));
       }
-      const href = buildWorkspaceHrefForHistoryItem({
-        sessionId: sid,
-        caseId: options?.caseId,
-        studyMode: options?.studyMode,
-      });
       router.replace(href, { scroll: false });
 
       try {
@@ -438,6 +454,7 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
       router,
       setCaseContext,
       setFlow,
+      variant,
     ],
   );
 
@@ -485,6 +502,10 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     [effectiveCaseId, effectiveSessionId, flow, querySessionId, router, sendQuestion],
   );
 
+  /**
+   * "New chat" in case-workspace → clear state but stay in case-workspace (pick new case).
+   * "New chat" in personal-workspace → clear state and go back to upload landing.
+   */
   const handleNewSession = useCallback(() => {
     clearSessionPrefillImages();
     bootKeyRef.current = null;
@@ -494,6 +515,11 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
     setPersonalMeta(null);
     router.replace(workspaceBasePath);
   }, [resetSession, router, workspaceBasePath]);
+
+  /** Shortcut from case-workspace flow bar to create a fresh DICOM upload session. */
+  const handleGoToPersonalUpload = useCallback(() => {
+    router.push(VISUAL_QA_PERSONAL_WORKSPACE_PATH);
+  }, [router]);
 
   const readOnlyImage = capabilities?.isReadOnly === true;
   const composerDisabled =
@@ -628,6 +654,7 @@ export function WorkspacePageClient({ variant = 'personal' }: WorkspacePageClien
         flow={flow}
         caseRemoved={caseRemoved}
         onNewChat={handleNewSession}
+        onGoToPersonalUpload={variant === 'catalog' ? handleGoToPersonalUpload : undefined}
         onOpenHistory={
           persistHistorySidebar ? undefined : () => setActiveSessionHistoryOpen((open) => !open)
         }
