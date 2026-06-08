@@ -20,10 +20,8 @@ import {
   approveAndPromoteExpertReview,
   deleteExpertReviewDraft,
   fetchExpertReviewDetail,
-  fetchExpertReviewDraft,
   flagRagChunk,
   hasExpertReviewSelectedPairMismatch,
-  putExpertReviewDraft,
   REVIEW_WORKFLOW_CONFLICT,
   type ExpertReviewDraftPayload,
   type ExpertReviewUpdatePayload,
@@ -304,8 +302,7 @@ async function resolveExpertReviewSavedDraft(
   item: ExpertReviewItem,
 ): Promise<ExpertReviewSavedDraft | null> {
   if (item.savedDraft) return item.savedDraft;
-  if (getWorkflowStatusMeta(item.status).terminal) return null;
-  return fetchExpertReviewDraft(item.sessionId);
+  return null;
 }
 
 function applyExpertReviewSavedDraft(
@@ -511,13 +508,6 @@ function buildPromotePayload(
   };
 }
 
-async function saveReviewDraftIfNeeded(
-  sessionId: string,
-  payload: ExpertReviewDraftPayload,
-): Promise<void> {
-  await putExpertReviewDraft(sessionId, payload);
-}
-
 export function ExpertReviewsPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -588,6 +578,14 @@ export function ExpertReviewsPage() {
     () => resolvePromoteCategories(expertCategories),
     [expertCategories],
   );
+
+  useEffect(() => {
+    if (!active?.sessionId || promoteCategories.length === 0) return;
+    setLibraryCategoryId((current) => {
+      if (!current.trim()) return current;
+      return resolvePromoteCategoryIdForDropdown(current, promoteCategories) || current;
+    });
+  }, [active?.sessionId, promoteCategories]);
 
   const applySavedDraftForItem = useCallback(
     async (item: ExpertReviewItem, merged?: ExpertReviewItem) => {
@@ -667,6 +665,10 @@ export function ExpertReviewsPage() {
         promoteCategories,
       );
       await applySavedDraftForItem(merged, merged);
+      setLibraryCategoryId((current) => {
+        const normalized = resolvePromoteCategoryIdForDropdown(current, promoteCategories);
+        return normalized || current;
+      });
     })();
     return () => {
       cancelled = true;
@@ -698,45 +700,6 @@ export function ExpertReviewsPage() {
     }
   }, [items, searchParams, openEdit]);
 
-  const saveDraftForItem = async (
-    item: ExpertReviewItem,
-    roi?: number[] | null,
-    options?: { silent?: boolean },
-  ) => {
-    if (hasExpertReviewSelectedPairMismatch(item)) {
-      toast.error('Selected pair mismatch. Refresh the queue and open this case again.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await putExpertReviewDraft(
-        item.sessionId,
-        buildExpertReviewDraftPayload(item, {
-          diag,
-          keyText,
-          keyImagingEdit,
-          reflectiveEdit,
-          libraryTitle,
-          libraryCategoryId,
-          libraryDifficulty,
-          libraryTagIds,
-          libraryAnatomySite,
-          libraryClinicalDescription,
-          categories: expertCategories,
-          roi,
-          explicitNote: replyDrafts[item.sessionId],
-        }),
-      );
-      if (!options?.silent) toast.success('Draft saved.');
-    } catch (e) {
-      if (!options?.silent) {
-        toast.error(e instanceof Error ? e.message : 'Failed to save draft');
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const approveAndPromoteForItem = async (item: ExpertReviewItem, roi?: number[] | null) => {
     if (hasExpertReviewSelectedPairMismatch(item)) {
       toast.error('Selected pair mismatch. Refresh the queue before approving.');
@@ -761,7 +724,7 @@ export function ExpertReviewsPage() {
       resolvePromoteCategoryIdForDropdown(libraryCategoryId, promoteCategories) ||
       libraryCategoryId.trim();
     const resolvedPathologyGroup =
-      resolvePromotePathologyGroupForSubmit(libraryCategoryId, promoteCategories) ?? '';
+      resolvePromotePathologyGroupForSubmit(resolvedCategoryId, promoteCategories) ?? '';
     const promotePayload = buildPromotePayload(item, {
       diag,
       keyText,
@@ -811,7 +774,6 @@ export function ExpertReviewsPage() {
         roi,
         explicitNote: replyDrafts[item.sessionId],
       });
-      await saveReviewDraftIfNeeded(item.sessionId, draftPayload);
       await approveAndPromoteExpertReview(item.sessionId, finalPromotePayload, {
         reviewNote: draftPayload.reviewNote,
         correctedRoiBoundingBox: roi,
@@ -986,7 +948,6 @@ export function ExpertReviewsPage() {
       roiClearEpoch={roiClearEpochBySession[item.sessionId] ?? 0}
       initialCorrectedRoiBoundingBox={draftRoiBySession[item.sessionId]}
       onOpenEdit={() => openEdit(item)}
-      onSaveDraft={(roi, opts) => void saveDraftForItem(item, roi, opts)}
       onApproveAndPromote={(roi) => void approveAndPromoteForItem(item, roi)}
       onRejectRequest={() => openRejectModal(item)}
       saving={saving}

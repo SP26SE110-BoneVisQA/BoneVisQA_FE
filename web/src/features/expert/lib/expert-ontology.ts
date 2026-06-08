@@ -82,6 +82,15 @@ export function resolveExpertCategoryIdForSubmit(
   const nameMatch = byName.get(lower);
   if (nameMatch) return nameMatch;
 
+  const promotePathologySlugs = new Set([
+    'congenital',
+    'degenerative',
+    'infection',
+    'trauma',
+    'tumor',
+  ]);
+  if (promotePathologySlugs.has(lower)) return trimmed;
+
   return sanitizeNullableGuid(trimmed);
 }
 

@@ -25,6 +25,9 @@ import { normalizeDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 
 export const REVIEW_WORKFLOW_CONFLICT = 'REVIEW_WORKFLOW_CONFLICT';
 
+/** BE has not deployed GET/PUT/DELETE `/api/expert/reviews/{id}/draft` yet — keep false to avoid 405 noise. */
+export const EXPERT_REVIEW_DRAFT_API_ENABLED = false;
+
 function normalizeReviewMessageId(raw: string | null | undefined): string {
   if (raw == null) return '';
   let s = String(raw).trim();
@@ -764,6 +767,7 @@ export function parseExpertReviewDraftPayload(raw: unknown): ExpertReviewDraftPa
 export async function fetchExpertReviewDraft(
   sessionId: string,
 ): Promise<ExpertReviewDraftPayload | null> {
+  if (!EXPERT_REVIEW_DRAFT_API_ENABLED) return null;
   const id = String(sessionId ?? '').trim();
   if (!id) return null;
   try {
@@ -815,6 +819,7 @@ export async function putExpertReviewDraft(
   sessionId: string,
   payload: ExpertReviewDraftPayload,
 ): Promise<void> {
+  if (!EXPERT_REVIEW_DRAFT_API_ENABLED) return;
   const id = String(sessionId ?? '').trim();
   if (!id) throw new Error('Session id is required.');
   const body = reviewDraftBody(payload);
@@ -828,6 +833,7 @@ export async function putExpertReviewDraft(
 }
 
 export async function deleteExpertReviewDraft(sessionId: string): Promise<void> {
+  if (!EXPERT_REVIEW_DRAFT_API_ENABLED) return;
   const id = String(sessionId ?? '').trim();
   if (!id) throw new Error('Session id is required.');
   try {

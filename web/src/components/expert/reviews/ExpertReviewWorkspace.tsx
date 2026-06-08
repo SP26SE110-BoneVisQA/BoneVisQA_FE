@@ -53,7 +53,6 @@ import {
   Link2,
   Loader2,
   RefreshCw,
-  Save,
   XCircle,
 } from 'lucide-react';
 import { FlagRagChunkDialog } from '@/components/expert/reviews/FlagRagChunkDialog';
@@ -533,10 +532,6 @@ export type ExpertReviewWorkspaceProps = {
   roiClearEpoch?: number;
   initialCorrectedRoiBoundingBox?: number[];
   onOpenEdit: () => void;
-  onSaveDraft: (
-    correctedRoiBoundingBox?: number[] | null,
-    options?: { silent?: boolean },
-  ) => void;
   onApproveAndPromote: (correctedRoiBoundingBox?: number[] | null) => void;
   onRejectRequest: () => void;
   saving: boolean;
@@ -581,7 +576,6 @@ export function ExpertReviewWorkspace({
   roiClearEpoch,
   initialCorrectedRoiBoundingBox,
   onOpenEdit,
-  onSaveDraft,
   onApproveAndPromote,
   onRejectRequest,
   saving,
@@ -628,21 +622,6 @@ export function ExpertReviewWorkspace({
     acc[type].push(tag);
     return acc;
   }, {});
-
-  useEffect(() => {
-    if (pairMismatch || saving) return;
-    const sid = item.sessionId;
-    const hasRoi = correctedRoi !== null && isValidNormalizedBoundingBox(correctedRoi);
-    if (!hasRoi) return;
-    const timer = window.setTimeout(() => {
-      const roiPayload =
-        correctedRoi !== null && isValidNormalizedBoundingBox(correctedRoi)
-          ? [correctedRoi.x, correctedRoi.y, correctedRoi.width, correctedRoi.height]
-          : undefined;
-      onSaveDraft(roiPayload ?? null, { silent: true });
-    }, 1600);
-    return () => window.clearTimeout(timer);
-  }, [correctedRoi, item.sessionId, onSaveDraft, pairMismatch, saving]);
 
   const statusMeta = getWorkflowStatusMeta(item.status);
   const catalogCase = item.caseId != null && String(item.caseId).trim() !== '';
@@ -993,21 +972,6 @@ export function ExpertReviewWorkspace({
               </span>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
-              <Button
-                type="button"
-                variant="default"
-                disabled={saving || pairMismatch}
-                onClick={() =>
-                  onSaveDraft(
-                    correctedRoi && isValidNormalizedBoundingBox(correctedRoi)
-                      ? [correctedRoi.x, correctedRoi.y, correctedRoi.width, correctedRoi.height]
-                      : undefined,
-                  )
-                }
-              >
-                <Save className="h-4 w-4" />
-                Save draft
-              </Button>
               <Button
                 type="button"
                 disabled={saving || pairMismatch}

@@ -164,10 +164,10 @@ export function validateExpertPromoteForm(
     normalizedCategoryId,
     ctx.promoteCategories,
   );
-  const categoryId =
-    resolveExpertCategoryIdForSubmit(normalizedCategoryId, ctx.promoteCategories) ??
-    ctx.promoteCategories.find((category) => category.name === pathologyGroup)?.id ??
-    (pathologyGroup ? pathologyGroupToCategoryId(pathologyGroup) : null);
+  const categoryId = pathologyGroup
+    ? ctx.promoteCategories.find((category) => category.name === pathologyGroup)?.id ??
+      pathologyGroupToCategoryId(pathologyGroup)
+    : null;
 
   if (!normalizedCategoryId) {
     errors.categoryId =
