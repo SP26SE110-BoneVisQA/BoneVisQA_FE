@@ -28,6 +28,14 @@ export interface QuestionReview {
   imageUrl?: string | null;
   /** Case title associated with this question */
   caseTitle?: string | null;
+  /** Option A text */
+  optionA?: string | null;
+  /** Option B text */
+  optionB?: string | null;
+  /** Option C text */
+  optionC?: string | null;
+  /** Option D text */
+  optionD?: string | null;
 }
 
 export interface RelatedCase {

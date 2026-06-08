@@ -19,9 +19,30 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { quizExtensionsApi, type DetailedReview, type RelatedCase } from '@/lib/api/quiz-extensions';
+import { quizExtensionsApi, type DetailedReview, type RelatedCase, type QuestionReview } from '@/lib/api/quiz-extensions';
 import { getAssignedQuizzes } from '@/lib/api/student';
 import { resolveApiAssetUrl } from '@/lib/api/client';
+
+// Helper function to get full option text from option key (A, B, C, D)
+function getOptionTextForReview(q: QuestionReview, optionKey: string): string | null {
+  const key = optionKey.toUpperCase();
+  if (key === 'A') return q.optionA ?? null;
+  if (key === 'B') return q.optionB ?? null;
+  if (key === 'C') return q.optionC ?? null;
+  if (key === 'D') return q.optionD ?? null;
+  return null;
+}
+
+// Format answer to show both key and text (e.g., "C. Elevated ESR/CRP")
+function formatAnswerWithText(q: QuestionReview, answer: string | null | undefined): string {
+  if (!answer) return 'N/A';
+  const trimmed = answer.trim().toUpperCase();
+  const optionText = getOptionTextForReview(q, trimmed);
+  if (optionText && optionText.trim()) {
+    return `${trimmed}. ${optionText}`;
+  }
+  return trimmed;
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -314,12 +335,12 @@ export default function QuizDetailedReviewPage({ params }: PageProps) {
                   }`}
                 >
                   <p className="text-sm font-semibold mb-2 text-muted-foreground">Your Answer</p>
-                  <p className="font-medium">{currentQuestion.studentAnswer || 'No answer'}</p>
+                  <p className="font-medium">{formatAnswerWithText(currentQuestion, currentQuestion.studentAnswer)}</p>
                 </div>
                 {!currentQuestion.isCorrect && currentQuestion.correctAnswer && (
                   <div className="p-4 rounded-lg bg-success/10 border border-success/20">
                     <p className="text-sm font-semibold mb-2 text-muted-foreground">Correct Answer</p>
-                    <p className="font-medium text-success">{currentQuestion.correctAnswer}</p>
+                    <p className="font-medium text-success">{formatAnswerWithText(currentQuestion, currentQuestion.correctAnswer)}</p>
                   </div>
                 )}
               </div>
