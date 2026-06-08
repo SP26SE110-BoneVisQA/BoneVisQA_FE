@@ -910,7 +910,10 @@ export interface PromoteExpertReviewPayload {
   title: string;
   description: string;
   difficulty: string;
+  /** BE promote accepts a category GUID when available. */
   categoryId?: string | null;
+  /** Required by promote when `categoryId` is not a GUID (e.g. Trauma, Tumor). */
+  categoryName: string;
   pathologyGroup: string;
   anatomySite?: string | null;
   modality?: string | null;
@@ -972,13 +975,14 @@ function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<st
   }
 
   const tagIds = [...new Set(sanitizeGuidList(payload.tagIds))];
-  const categoryId = isValidGuid(payload.categoryId) ? payload.categoryId!.trim() : null;
+  const categoryName = (payload.categoryName?.trim() || pathologyGroup).trim();
+  const categoryIdGuid = isValidGuid(payload.categoryId) ? payload.categoryId!.trim() : null;
 
   const body = buildCreateExpertCaseRequestBody({
     title: payload.title,
     description: payload.description,
     difficulty: payload.difficulty,
-    categoryId,
+    categoryId: categoryIdGuid,
     anatomySite: payload.anatomySite ?? null,
     pathologyGroup,
     modality: payload.modality ?? null,
@@ -989,11 +993,22 @@ function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<st
     medicalImages: null,
   });
 
+  // Promote validator requires categoryId (GUID) or categoryName — pathologyGroup alone is not enough.
+  body.categoryName = categoryName;
+  if (categoryIdGuid) {
+    body.categoryId = categoryIdGuid;
+  }
+
   const imageId = isValidGuid(payload.imageId) ? payload.imageId!.trim() : undefined;
   if (imageId) {
     body.imageId = imageId;
   }
 
+  if (!categoryName && !categoryIdGuid) {
+    throw new ExpertPromoteValidationError(
+      'Select a pathology category: Trauma, Tumor, Infection, Degenerative, or Congenital.',
+    );
+  }
   if (!String(body.title ?? '').trim() || !String(body.difficulty ?? '').trim()) {
     throw new ExpertPromoteValidationError('Title and difficulty are required to publish to the library.');
   }

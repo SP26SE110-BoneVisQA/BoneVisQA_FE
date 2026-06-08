@@ -29,7 +29,7 @@ import {
   resolveExpertReview,
 } from '@/lib/api/expert-reviews';
 import { fetchExpertCategories, fetchExpertTags, type ExpertCategory, type ExpertTag } from '@/lib/api/expert-cases';
-import { isValidGuid, sanitizeGuidList } from '@/lib/api/sanitize-guids';
+import { sanitizeGuidList } from '@/lib/api/sanitize-guids';
 import type { ExpertReviewItem, ExpertReviewSavedDraft } from '@/lib/api/types';
 import { getWorkflowStatusMeta, normalizeWorkflowStatus } from '@/lib/visual-qa-workflow';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
@@ -44,6 +44,7 @@ import {
   resolvePromotePathologyGroupForSubmit,
   validateExpertPromoteForm,
 } from '@/features/expert/lib/expert-promote-validation';
+import { resolveExpertCategoryIdForSubmit } from '@/features/expert/lib/expert-ontology';
 import { CheckCircle, ChevronDown, ChevronRight, Clock, Inbox, RefreshCw, User, XCircle } from 'lucide-react';
 
 function clearServerReviewDraft(sessionId: string) {
@@ -425,17 +426,18 @@ function buildPromotePayload(
     ctx.reflectiveEdit.trim() ||
     reflectiveQuestionsToEditText(item.report, item.reflectiveQuestions) ||
     '';
-  const categoryId = isValidGuid(ctx.resolvedCategoryId) ? ctx.resolvedCategoryId.trim() : null;
   const tagIds = [...new Set(sanitizeGuidList(ctx.libraryTagIds))];
   const modality =
     ctx.libraryModality?.trim() || item.dicomMetadata?.modality?.trim() || null;
+  const pathologyGroup = ctx.resolvedPathologyGroup.trim();
 
   return {
     title: ctx.libraryTitle.trim(),
     description,
     difficulty: ctx.libraryDifficulty.trim() || 'Medium',
-    categoryId,
-    pathologyGroup: ctx.resolvedPathologyGroup,
+    categoryId: null,
+    categoryName: pathologyGroup,
+    pathologyGroup,
     anatomySite: anatomySite || null,
     modality,
     suggestedDiagnosis,
@@ -689,7 +691,8 @@ export function ExpertReviewsPage() {
     setPromoteFieldErrors({});
     const finalPromotePayload: PromoteExpertReviewPayload = {
       ...promotePayload,
-      categoryId: validation.categoryId,
+      categoryId: resolveExpertCategoryIdForSubmit(validation.categoryId, promoteCategories),
+      categoryName: validation.pathologyGroup,
       pathologyGroup: validation.pathologyGroup,
     };
     setSaving(true);

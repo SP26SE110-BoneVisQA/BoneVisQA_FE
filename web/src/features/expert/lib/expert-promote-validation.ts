@@ -223,6 +223,7 @@ export function validateExpertPromoteForm(
 export function isExpertPromoteUserErrorMessage(message: string): boolean {
   const normalized = message.trim().toLowerCase();
   if (!normalized) return false;
+  if (/categoryid or categoryname/i.test(message)) return true;
   if (/pathologygroup must be one of/i.test(message)) return true;
   if (/select a pathology category/i.test(message)) return true;
   if (/complete all required library fields/i.test(message)) return true;
