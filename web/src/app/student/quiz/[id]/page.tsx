@@ -60,6 +60,37 @@ type AnswerState = 'unanswered' | 'correct' | 'incorrect';
 
 const ZOOM_LEVELS = [1, 1.25, 1.5, 2, 2.5];
 
+// Helper function to get full option text from option key (A, B, C, D)
+function getOptionText(question: QuizModeQuestion, optionKey: string): string | null {
+  const key = optionKey.toUpperCase();
+  if (key === 'A') return question.optionA;
+  if (key === 'B') return question.optionB;
+  if (key === 'C') return question.optionC;
+  if (key === 'D') return question.optionD;
+  return null;
+}
+
+// Format correct answer to show both key and text
+function formatCorrectAnswerWithText(question: QuizModeQuestion, answer: string | null | undefined): string {
+  if (!answer) return 'N/A';
+  const trimmed = answer.trim();
+  const optionText = getOptionText(question, trimmed);
+  if (optionText) {
+    return `${trimmed}. ${optionText}`;
+  }
+  return trimmed;
+}
+
+// Format multiple correct answers to show keys and texts
+function formatMultiCorrectAnswersWithText(question: QuizModeQuestion, correctAnswers: string[]): string {
+  if (!correctAnswers || correctAnswers.length === 0) return 'N/A';
+  return correctAnswers.map(key => {
+    const trimmed = key.trim().toUpperCase();
+    const optionText = getOptionText(question, trimmed);
+    return optionText ? `${trimmed}. ${optionText}` : trimmed;
+  }).join(', ');
+}
+
 // Image enhancement state
 interface ImageEnhancement {
   brightness: number;
@@ -1472,10 +1503,10 @@ export default function QuizSessionPage({
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="rounded-xl border border-success/30 bg-success/10 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wider text-success mb-1">Correct Answer</p>
-                    <p className="text-lg font-bold text-success">
+                    <p className="text-lg font-bold text-success leading-tight">
                       {currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select'
-                        ? (currentQ.correctAnswers ? JSON.parse(currentQ.correctAnswers).join(', ') : 'N/A')
-                        : currentQ.correctAnswer || 'N/A'}
+                        ? formatMultiCorrectAnswersWithText(currentQ, currentQ.correctAnswers ? JSON.parse(currentQ.correctAnswers) : [])
+                        : formatCorrectAnswerWithText(currentQ, currentQ.correctAnswer)}
                     </p>
                   </div>
                   <div className={`rounded-xl border p-4 ${
@@ -1492,14 +1523,20 @@ export default function QuizSessionPage({
                           ? 'text-destructive'
                           : 'text-on-surface-variant'
                     }`}>Your Answer</p>
-                    <p className={`text-lg font-bold ${
+                    <p className={`text-lg font-bold leading-tight ${
                       currentState === 'correct'
                         ? 'text-success'
                         : currentState === 'incorrect'
                           ? 'text-destructive'
                           : 'text-on-surface-variant'
                     }`}>
-                      {currentAnswer || 'Not answered'}
+                      {currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select'
+                        ? (multiSelectAnswers[currentQ.questionId]?.length
+                            ? formatMultiCorrectAnswersWithText(currentQ, multiSelectAnswers[currentQ.questionId])
+                            : 'Not answered')
+                        : (currentAnswer
+                            ? formatCorrectAnswerWithText(currentQ, currentAnswer)
+                            : 'Not answered')}
                     </p>
                   </div>
                 </div>
