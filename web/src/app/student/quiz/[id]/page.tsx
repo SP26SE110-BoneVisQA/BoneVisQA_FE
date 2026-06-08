@@ -224,6 +224,9 @@ export default function QuizSessionPage({
   const scoreUpdateNotifiedRef = useRef(false);
   const submitInProgressRef = useRef(false); // Prevent multiple simultaneous submissions
 
+  // Practice Mode: quizMode = 2, không hiển thị timer
+  const isPracticeMode = (session?.quizMode ?? quizInfo?.quizMode) === 2;
+
   // Tải lại thông tin quiz từ server để lấy trạng thái cập nhật (isCompleted, score)
   const reloadQuizInfo = useCallback(async () => {
     try {
@@ -268,6 +271,8 @@ export default function QuizSessionPage({
   }, [submitted, reloadQuizInfo]);
 
   // Auto-reveal feedback after submit: populate answerStates and show feedback
+  // In Practice Mode: show feedback immediately after submit
+  // In Exam Mode: only show feedback when lecturer has released answers
   useEffect(() => {
     if (!submitted || !session) return;
     // Build answer states based on session's correctAnswer (Practice Mode)
@@ -280,14 +285,17 @@ export default function QuizSessionPage({
       }
     });
     setAnswerStates(newStates);
-    setShowFeedback(true);
+    // Only auto-show feedback in Practice Mode; in Exam Mode, wait for lecturer to release answers
+    const shouldShowFeedback = isPracticeMode || quizInfo?.answersReleased === true;
+    setShowFeedback(shouldShowFeedback);
     setReviewPage(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submitted, session?.attemptId]);
 
-  // Auto-refresh mechanism: detect when score changes (e.g., after lecturer edits)
+  // Auto-refresh mechanism: detect when score or answersReleased changes (e.g., after lecturer edits)
   const lastScoreRef = useRef<number | null>(null);
   const lastIsCompletedRef = useRef<boolean | null>(null);
+  const lastAnswersReleasedRef = useRef<boolean | null>(null);
   const toastRef = useRef(toast);
   toastRef.current = toast;
 
@@ -303,18 +311,24 @@ export default function QuizSessionPage({
         if (quiz) {
           const scoreChanged = quiz.score !== lastScoreRef.current;
           const isCompletedChanged = quiz.isCompleted !== lastIsCompletedRef.current;
+          const answersReleasedChanged = quiz.answersReleased !== lastAnswersReleasedRef.current;
 
           // Only update state if something actually changed
-          if (scoreChanged || isCompletedChanged) {
-            // Score or completion status has been updated! Refresh the quiz info
+          if (scoreChanged || isCompletedChanged || answersReleasedChanged) {
+            // Score, completion status, or answers release has been updated! Refresh the quiz info
             lastScoreRef.current = quiz.score ?? null;
             lastIsCompletedRef.current = quiz.isCompleted ?? null;
+            lastAnswersReleasedRef.current = quiz.answersReleased ?? null;
             setQuizInfo(quiz);
 
             // Show notification about the score change only once
             if (scoreChanged && lastScoreRef.current !== null && !scoreUpdateNotifiedRef.current) {
               scoreUpdateNotifiedRef.current = true;
               toastRef.current.success('Score has been updated by your lecturer!');
+            }
+            // Show notification when answers are released
+            if (answersReleasedChanged && quiz.answersReleased) {
+              toastRef.current.success('Answers have been released! You can now view the correct answers.');
             }
           }
         }
@@ -325,6 +339,16 @@ export default function QuizSessionPage({
 
     return () => clearInterval(pollInterval);
   }, [quizId, quizInfo?.isCompleted]);
+
+  // Handle answers release after submission in Exam Mode
+  // When student has submitted and lecturer releases answers, show feedback
+  useEffect(() => {
+    if (!submitted) return;
+    if (isPracticeMode) return; // Practice mode already shows feedback immediately
+    if (quizInfo?.answersReleased === true && !showFeedback) {
+      setShowFeedback(true);
+    }
+  }, [submitted, isPracticeMode, quizInfo?.answersReleased, showFeedback]);
 
   // Xử lý yêu cầu làm lại quiz từ tham số URL
   useEffect(() => {
@@ -405,9 +429,6 @@ export default function QuizSessionPage({
   })();
   const positionPct = totalQ > 0 ? Math.round(((currentIndex + 1) / totalQ) * 100) : 0;
   const moduleLabel = session?.topic ?? quizInfo?.className ?? 'Clinical module';
-
-  // Practice Mode: quizMode = 2, khong hien thi timer
-  const isPracticeMode = (session?.quizMode ?? quizInfo?.quizMode) === 2;
 
   const rawTimeLimit = session?.timeLimit ?? quizInfo?.timeLimit;
   const timeLimitMinutes =
