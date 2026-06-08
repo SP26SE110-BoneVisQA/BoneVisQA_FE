@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ import {
   deleteExpertReviewDraft,
   fetchExpertReviewDetail,
   fetchExpertReviewDraft,
+  flagRagChunk,
   hasExpertReviewSelectedPairMismatch,
   putExpertReviewDraft,
   REVIEW_WORKFLOW_CONFLICT,
@@ -36,6 +37,15 @@ import { toast as sonnerToast } from 'sonner';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import { deriveExpertCaseFormPrefillFromDicom } from '@/features/expert/lib/apply-dicom-metadata-to-form';
+import {
+  type ExpertPromoteFieldErrors,
+  inferPromoteCategoryIdFromReviewContent,
+  isExpertPromoteUserErrorMessage,
+  resolvePromoteCategories,
+  resolvePromoteCategoryIdForDropdown,
+  resolvePromotePathologyGroupForSubmit,
+  validateExpertPromoteForm,
+} from '@/features/expert/lib/expert-promote-validation';
 import { CheckCircle, ChevronDown, ChevronRight, Clock, Inbox, RefreshCw, User, XCircle } from 'lucide-react';
 
 function clearServerReviewDraft(sessionId: string) {
@@ -47,10 +57,14 @@ function toWorkflowFriendlyError(error: unknown, fallback: string): string {
     return 'This review state was already updated by another action. Please refresh the queue.';
   }
   const message = error instanceof Error ? error.message : '';
+  if (isExpertPromoteUserErrorMessage(message)) {
+    return message;
+  }
   if (/only self-uploaded images/i.test(message)) {
     return 'The server rejected publishing this student study to the library (student DICOM images require a backend fix). The review was not completed — refresh the queue and contact an administrator if this persists.';
   }
-  return message || fallback;
+  if (message) return message;
+  return `System error: ${fallback} If this continues, contact an administrator.`;
 }
 
 function firstStudentQuestion(item: ExpertReviewItem): string {
@@ -310,6 +324,7 @@ function applyExpertReviewSavedDraft(
     setLibraryClinicalDescription: (v: string) => void;
     setReplyDraft: (sid: string, note: string) => void;
   },
+  promoteCategories: ExpertCategory[],
 ): number[] | undefined {
   if (draft.structuredDiagnosis?.trim()) {
     setters.setDiag(draft.structuredDiagnosis.trim());
@@ -326,7 +341,13 @@ function applyExpertReviewSavedDraft(
     setters.setReflectiveEdit(String(draft.reflectiveQuestions).trim());
   }
   if (draft.libraryTitle?.trim()) setters.setLibraryTitle(draft.libraryTitle.trim());
-  if (draft.libraryCategoryId?.trim()) setters.setLibraryCategoryId(draft.libraryCategoryId.trim());
+  if (draft.libraryCategoryId?.trim()) {
+    const normalizedCategoryId = resolvePromoteCategoryIdForDropdown(
+      draft.libraryCategoryId,
+      promoteCategories,
+    );
+    if (normalizedCategoryId) setters.setLibraryCategoryId(normalizedCategoryId);
+  }
   if (draft.libraryDifficulty?.trim()) setters.setLibraryDifficulty(draft.libraryDifficulty.trim());
   if (draft.libraryTagIds?.length) {
     setters.setLibraryTagIds(draft.libraryTagIds.map((id) => String(id).trim()).filter(Boolean));
@@ -351,6 +372,7 @@ function prefillLibraryFieldsFromItem(
     setLibraryClinicalDescription: (v: string) => void;
   },
   tags: ExpertTag[],
+  promoteCategories: ExpertCategory[],
 ): void {
   const derived = deriveExpertCaseFormPrefillFromDicom(item.dicomMetadata);
   const metadataTags = buildMetadataTagCandidates(item);
@@ -359,7 +381,18 @@ function prefillLibraryFieldsFromItem(
     firstStudentQuestion(item) ||
     [derived.modality, derived.anatomySite].filter(Boolean).join(' ');
   setters.setLibraryTitle(seedTitleBase.slice(0, 200));
-  setters.setLibraryCategoryId('');
+  const inferredCategoryId = inferPromoteCategoryIdFromReviewContent(
+    [
+      item.report.suggestedDiagnosis,
+      item.report.diagnosis,
+      item.report.answerText,
+      item.question,
+      firstStudentQuestion(item),
+      item.keyImagingFindings,
+    ],
+    promoteCategories,
+  );
+  setters.setLibraryCategoryId(inferredCategoryId);
   setters.setLibraryDifficulty('Medium');
   setters.setLibraryTagIds(resolveTagIdsFromNames(metadataTags, tags));
   setters.setLibraryAnatomySite(derived.anatomySite);
@@ -424,13 +457,15 @@ function buildPromotePayload(
     libraryTagIds: string[];
     libraryClinicalDescription: string;
     libraryAnatomySite?: string;
-    categories: ExpertCategory[];
+    promoteCategories: ExpertCategory[];
     tags: ExpertTag[];
     correctedRoi?: number[] | null;
+    resolvedCategoryId: string;
+    resolvedPathologyGroup: string;
   },
 ): PromoteExpertReviewPayload {
-  const catId = ctx.libraryCategoryId.trim();
-  const cat = ctx.categories.find((c) => c.id === catId);
+  const catId = ctx.resolvedCategoryId.trim();
+  const cat = ctx.promoteCategories.find((c) => c.id === catId);
   const tagIds = ctx.libraryTagIds.filter(Boolean);
   const tagNames = tagIds
     .map((id) => ctx.tags.find((tag) => tag.id === id)?.name ?? '')
@@ -468,28 +503,12 @@ function buildPromotePayload(
     referencesAndCitations: formatReferencesFromReviewItem(item) || undefined,
     anatomySite: ctx.libraryAnatomySite?.trim() || undefined,
     boneLocation: ctx.libraryAnatomySite?.trim() || undefined,
-    pathologyGroup:
-      ctx.categories.find((c) => c.id === ctx.libraryCategoryId.trim())?.name || undefined,
+    pathologyGroup: ctx.resolvedPathologyGroup,
     turnAnnotations: collectTurnAnnotationsForPromote(item, ctx.correctedRoi),
     imageId: item.imageId?.trim() || undefined,
     fromStudentRequest: true,
     caseOrigin: 'fromStudentRequest',
   };
-}
-
-function validatePromotePayload(payload: PromoteExpertReviewPayload): string | null {
-  if (!payload.title.trim()) return 'Enter a library case title before promoting.';
-  if (!payload.categoryId) return 'Select a category for the library case.';
-  if (!payload.tagIds.length && !(payload.tagNames?.length ?? 0)) {
-    return 'Select at least one tag before promoting.';
-  }
-  if (!payload.description.trim()) return 'Enter a clinical description before promoting.';
-  if (!payload.suggestedDiagnosis.trim()) {
-    return 'Enter differential diagnoses before promoting.';
-  }
-  if (!payload.keyFindings.trim()) return 'Enter key imaging findings before promoting.';
-  if (!payload.reflectiveQuestions.trim()) return 'Enter reflective questions before promoting.';
-  return null;
 }
 
 async function saveReviewDraftIfNeeded(
@@ -529,6 +548,8 @@ export function ExpertReviewsPage() {
   const [libraryAnatomySite, setLibraryAnatomySite] = useState('');
   const [libraryModality, setLibraryModality] = useState('');
   const [libraryClinicalDescription, setLibraryClinicalDescription] = useState('');
+  const [promoteFieldErrors, setPromoteFieldErrors] = useState<ExpertPromoteFieldErrors>({});
+  const [flaggingChunkId, setFlaggingChunkId] = useState<string | null>(null);
 
   const categoriesQuery = useQuery({
     queryKey: queryKeys.expert.caseMeta(),
@@ -563,6 +584,11 @@ export function ExpertReviewsPage() {
     if (categoriesQuery.data) setExpertCategories(categoriesQuery.data);
   }, [categoriesQuery.data]);
 
+  const promoteCategories = useMemo(
+    () => resolvePromoteCategories(expertCategories),
+    [expertCategories],
+  );
+
   const applySavedDraftForItem = useCallback(
     async (item: ExpertReviewItem, merged?: ExpertReviewItem) => {
       const source = merged ?? item;
@@ -581,12 +607,12 @@ export function ExpertReviewsPage() {
         setLibraryClinicalDescription,
         setReplyDraft: (sid, note) =>
           setReplyDrafts((prev) => (prev[sid] === note ? prev : { ...prev, [sid]: note })),
-      });
+      }, promoteCategories);
       if (roi?.length === 4) {
         setDraftRoiBySession((prev) => ({ ...prev, [source.sessionId]: roi }));
       }
     },
-    [],
+    [promoteCategories],
   );
 
   /** Bổ sung citations/turns đầy đủ khi BE chỉ trả tóm tắt trên queue list. */
@@ -638,6 +664,7 @@ export function ExpertReviewsPage() {
           setLibraryClinicalDescription,
         },
         expertTags,
+        promoteCategories,
       );
       await applySavedDraftForItem(merged, merged);
     })();
@@ -730,6 +757,11 @@ export function ExpertReviewsPage() {
     if (!libraryModality && derived.modality) {
       setLibraryModality(derived.modality);
     }
+    const resolvedCategoryId =
+      resolvePromoteCategoryIdForDropdown(libraryCategoryId, promoteCategories) ||
+      libraryCategoryId.trim();
+    const resolvedPathologyGroup =
+      resolvePromotePathologyGroupForSubmit(libraryCategoryId, promoteCategories) ?? '';
     const promotePayload = buildPromotePayload(item, {
       diag,
       keyText,
@@ -741,15 +773,27 @@ export function ExpertReviewsPage() {
       libraryTagIds: effectiveLibraryTagIds,
       libraryClinicalDescription,
       libraryAnatomySite,
-      categories: expertCategories,
+      promoteCategories,
       tags: expertTags,
       correctedRoi: roi,
+      resolvedCategoryId,
+      resolvedPathologyGroup,
     });
-    const validationError = validatePromotePayload(promotePayload);
-    if (validationError) {
-      toast.error(validationError);
+    const validation = validateExpertPromoteForm(promotePayload, {
+      rawCategoryId: libraryCategoryId,
+      promoteCategories,
+    });
+    if (!validation.ok) {
+      setPromoteFieldErrors(validation.errors);
+      toast.error(validation.message);
       return;
     }
+    setPromoteFieldErrors({});
+    const finalPromotePayload: PromoteExpertReviewPayload = {
+      ...promotePayload,
+      categoryId: validation.categoryId,
+      pathologyGroup: validation.pathologyGroup,
+    };
     setSaving(true);
     try {
       const draftPayload = buildExpertReviewDraftPayload(item, {
@@ -768,7 +812,7 @@ export function ExpertReviewsPage() {
         explicitNote: replyDrafts[item.sessionId],
       });
       await saveReviewDraftIfNeeded(item.sessionId, draftPayload);
-      await approveAndPromoteExpertReview(item.sessionId, promotePayload, {
+      await approveAndPromoteExpertReview(item.sessionId, finalPromotePayload, {
         reviewNote: draftPayload.reviewNote,
         correctedRoiBoundingBox: roi,
       });
@@ -886,6 +930,43 @@ export function ExpertReviewsPage() {
     [expanded, openEdit],
   );
 
+  const markCitationFlagged = useCallback((sessionId: string, chunkId: string) => {
+    const applyFlag = (citations: ExpertReviewItem['citations']) =>
+      (citations ?? []).map((citation) =>
+        citation.chunkId?.trim() === chunkId ? { ...citation, flagged: true } : citation,
+      );
+
+    setItems((prev) =>
+      prev.map((row) =>
+        row.sessionId === sessionId ? { ...row, citations: applyFlag(row.citations) } : row,
+      ),
+    );
+    setActive((prev) =>
+      prev?.sessionId === sessionId ? { ...prev, citations: applyFlag(prev.citations) } : prev,
+    );
+  }, []);
+
+  const handleFlagCitation = useCallback(
+    async (chunkId: string, reason: string) => {
+      const sid = active?.sessionId?.trim();
+      const normalizedChunkId = chunkId.trim();
+      if (!sid || !normalizedChunkId) return;
+
+      setFlaggingChunkId(normalizedChunkId);
+      try {
+        await flagRagChunk(normalizedChunkId, { reason, isFlagged: true });
+        markCitationFlagged(sid, normalizedChunkId);
+        sonnerToast.success('Chunk flagged. Admins can acknowledge it on Flagged chunks.');
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not flag this chunk.');
+        throw error;
+      } finally {
+        setFlaggingChunkId(null);
+      }
+    },
+    [active?.sessionId, markCitationFlagged, toast],
+  );
+
   const workspaceForItem = (item: ExpertReviewItem) => (
     <ExpertReviewWorkspace
       key={item.id}
@@ -916,17 +997,35 @@ export function ExpertReviewsPage() {
       libraryAnatomySite={libraryAnatomySite}
       libraryModality={libraryModality}
       libraryClinicalDescription={libraryClinicalDescription}
-      categories={expertCategories}
+      categories={promoteCategories}
       tags={expertTags}
+      libraryFieldErrors={promoteFieldErrors}
       studentQuestion={firstStudentQuestion(item)}
       mainDiagnosis={diag}
       differentialText={keyText}
       referencesText={formatReferencesFromReviewItem(item)}
-      onLibraryTitleChange={setLibraryTitle}
-      onLibraryCategoryIdChange={setLibraryCategoryId}
-      onLibraryDifficultyChange={setLibraryDifficulty}
-      onLibraryTagIdsChange={setLibraryTagIds}
-      onLibraryClinicalDescriptionChange={setLibraryClinicalDescription}
+      onLibraryTitleChange={(value) => {
+        setLibraryTitle(value);
+        setPromoteFieldErrors((prev) => ({ ...prev, title: undefined }));
+      }}
+      onLibraryCategoryIdChange={(value) => {
+        setLibraryCategoryId(value);
+        setPromoteFieldErrors((prev) => ({ ...prev, categoryId: undefined }));
+      }}
+      onLibraryDifficultyChange={(value) => {
+        setLibraryDifficulty(value);
+        setPromoteFieldErrors((prev) => ({ ...prev, difficulty: undefined }));
+      }}
+      onLibraryTagIdsChange={(value) => {
+        setLibraryTagIds(value);
+        setPromoteFieldErrors((prev) => ({ ...prev, tagIds: undefined }));
+      }}
+      onLibraryClinicalDescriptionChange={(value) => {
+        setLibraryClinicalDescription(value);
+        setPromoteFieldErrors((prev) => ({ ...prev, clinicalDescription: undefined }));
+      }}
+      onFlagCitation={handleFlagCitation}
+      flaggingChunkId={flaggingChunkId}
     />
   );
 

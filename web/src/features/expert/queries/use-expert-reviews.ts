@@ -6,6 +6,7 @@ import {
   deleteExpertReviewDraft,
   fetchExpertReviewDetail,
   fetchExpertReviewQueue,
+  flagRagChunk,
   promoteExpertReview,
   putExpertReviewDraft,
   resolveExpertReview,
@@ -67,6 +68,20 @@ export function useResolveExpertReview() {
       void queryClient.invalidateQueries({ queryKey: [...queryKeys.expert.all, 'reviews'] });
       void deleteExpertReviewDraft(sessionId).catch(() => {});
     },
+  });
+}
+
+export function useFlagRagChunk() {
+  return useMutation({
+    mutationFn: ({
+      chunkId,
+      reason,
+      isFlagged = true,
+    }: {
+      chunkId: string;
+      reason: string;
+      isFlagged?: boolean;
+    }) => flagRagChunk(chunkId, { reason, isFlagged }),
   });
 }
 

@@ -1,4 +1,9 @@
 import axios from 'axios';
+import {
+  ExpertPromoteValidationError,
+  isExpertPromoteUserErrorMessage,
+  normalizeToPromotePathologyGroup,
+} from '@/features/expert/lib/expert-promote-validation';
 import { http, getApiErrorMessage } from './client';
 import type { ExpertPendingReview } from './expert-dashboard';
 import { fetchExpertPendingReviews } from './expert-dashboard';
@@ -768,7 +773,12 @@ export async function fetchExpertReviewDraft(
     );
     return parseExpertReviewDraftPayload(data);
   } catch (e) {
-    if (axios.isAxiosError(e) && e.response?.status === 404) return null;
+    if (
+      axios.isAxiosError(e) &&
+      (e.response?.status === 404 || e.response?.status === 405)
+    ) {
+      return null;
+    }
     return null;
   }
 }
@@ -1000,8 +1010,14 @@ function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<st
     body.anatomySite = anatomy;
     body.boneLocation = anatomy;
   }
-  const pathologyGroup = payload.pathologyGroup?.trim();
-  if (pathologyGroup) body.pathologyGroup = pathologyGroup;
+  const pathologyGroup = normalizeToPromotePathologyGroup(payload.pathologyGroup ?? '');
+  if (!pathologyGroup) {
+    throw new ExpertPromoteValidationError(
+      'Select a pathology category: Trauma, Tumor, Infection, Degenerative, or Congenital.',
+    );
+  }
+  body.pathologyGroup = pathologyGroup;
+  body.PathologyGroup = pathologyGroup;
   if (Array.isArray(payload.turnAnnotations) && payload.turnAnnotations.length > 0) {
     body.turnAnnotations = payload.turnAnnotations;
   }
@@ -1029,10 +1045,24 @@ function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<st
 }
 
 function rethrowPromoteWorkflowError(e: unknown): never {
+  if (e instanceof ExpertPromoteValidationError) {
+    throw e;
+  }
   if (axios.isAxiosError(e) && (e.response?.status === 409 || e.response?.status === 412)) {
     throw new Error(REVIEW_WORKFLOW_CONFLICT);
   }
-  throw new Error(getApiErrorMessage(e));
+  const message = getApiErrorMessage(e);
+  if (isExpertPromoteUserErrorMessage(message)) {
+    throw new Error(message);
+  }
+  if (axios.isAxiosError(e) && e.response?.status === 400) {
+    throw new Error(message || 'The library publish request was rejected. Check required fields and try again.');
+  }
+  throw new Error(
+    message
+      ? `System error: ${message}`
+      : 'System error: Could not publish to the library. Try again or contact an administrator.',
+  );
 }
 
 export async function promoteExpertReview(
@@ -1096,11 +1126,15 @@ export async function flagRagChunk(
   payload: { reason: string; isFlagged?: boolean },
 ): Promise<void> {
   try {
-    await http.post(`/api/expert/documents/chunks/${chunkId}/flag`, {
-      reason: payload.reason,
-      isFlagged: payload.isFlagged ?? true,
-      IsFlagged: payload.isFlagged ?? true,
-    });
+    await http.post(
+      `/api/expert/documents/chunks/${encodeURIComponent(chunkId.trim())}/flag`,
+      {
+        reason: payload.reason,
+        isFlagged: payload.isFlagged ?? true,
+        IsFlagged: payload.isFlagged ?? true,
+      },
+      { skipApiToast: true },
+    );
   } catch (e) {
     throw new Error(getApiErrorMessage(e));
   }

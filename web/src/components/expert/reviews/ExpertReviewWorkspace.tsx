@@ -16,6 +16,7 @@ import type {
   VisualQaReport,
 } from '@/lib/api/types';
 import type { ExpertCategory, ExpertTag } from '@/lib/api/expert-cases';
+import type { ExpertPromoteFieldErrors } from '@/features/expert/lib/expert-promote-validation';
 import { resolveApiAssetUrl } from '@/lib/api/client';
 import { isValidNormalizedBoundingBox } from '@/lib/utils/annotations';
 
@@ -32,6 +33,12 @@ function roiArrayToNormalizedBox(raw: number[] | undefined | null): NormalizedIm
   };
   return isValidNormalizedBoundingBox(candidate) ? candidate : null;
 }
+
+function PromoteFieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-xs font-medium text-red-600">{message}</p>;
+}
+
 import { withPageAnchor } from '@/components/student/VisualQaRichAnswer';
 import { splitLearningBullets } from '@/lib/utils/learning-text';
 import { getWorkflowStatusMeta, normalizeWorkflowStatus, type WorkflowStatusTone } from '@/lib/visual-qa-workflow';
@@ -41,12 +48,15 @@ import { useEffect, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle,
+  Flag,
   Library,
   Link2,
+  Loader2,
   RefreshCw,
   Save,
   XCircle,
 } from 'lucide-react';
+import { FlagRagChunkDialog } from '@/components/expert/reviews/FlagRagChunkDialog';
 
 function formatExpertAskedAt(raw: string): string {
   const d = new Date(raw);
@@ -172,18 +182,27 @@ function PromoteClinicalReadiness({
 function EvidencePanel({
   citations,
   queueSummary,
+  onFlagCitation,
+  flaggingChunkId,
+  pairMismatch,
 }: {
   citations: ExpertReviewCitation[];
   /** Hàng từ dashboard pending: thường không có chunk đầy đủ tới khi queue chính tải. */
   queueSummary?: boolean;
+  onFlagCitation?: (chunkId: string, reason: string) => Promise<void>;
+  flaggingChunkId?: string | null;
+  pairMismatch?: boolean;
 }) {
+  const [dialogChunk, setDialogChunk] = useState<{ id: string; label: string } | null>(null);
+
   return (
     <section className="scrollbar-hide [&::-webkit-scrollbar]:hidden rounded-xl border border-slate-300 bg-slate-50 p-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h4 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-900">RAG evidence & citations</h4>
           <p className="mt-1 text-sm font-medium text-slate-800">
-            Review the exact evidence chunks the model used before approving this answer.
+            Review the exact evidence chunks the model used before approving this answer. Flag any chunk
+            that is inaccurate so admins can acknowledge it.
           </p>
         </div>
       </div>
@@ -196,16 +215,22 @@ function EvidencePanel({
         </div>
       ) : (
         <div className="scrollbar-hide max-h-[640px] space-y-3 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden">
-          {citations.map((citation, index) => (
-            <article
-              key={`${citation.chunkId}-${index}`}
-              className={`rounded-xl border p-4 shadow-sm ${
-                citation.flagged
-                  ? 'border-red-400 bg-red-50'
-                  : 'border-slate-300 bg-white'
-              }`}
-            >
-              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
+          {citations.map((citation, index) => {
+            const chunkId = citation.chunkId?.trim() ?? '';
+            const chunkLabel = `Chunk ${index + 1}${
+              citation.pageNumber != null ? ` (page ${citation.pageNumber})` : ''
+            }`;
+            const isFlagging = Boolean(chunkId && flaggingChunkId === chunkId);
+            const canFlag = Boolean(onFlagCitation && chunkId && !citation.flagged && !pairMismatch);
+
+            return (
+              <article
+                key={`${chunkId || 'chunk'}-${index}`}
+                className={`rounded-xl border p-4 shadow-sm ${
+                  citation.flagged ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-white'
+                }`}
+              >
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
                   <span className="rounded-md bg-slate-800 px-2 py-1 font-medium text-white">
                     Chunk {index + 1}
                   </span>
@@ -219,33 +244,84 @@ function EvidencePanel({
                   ) : null}
                 </div>
 
-              <blockquote className="rounded-lg border-y border-r border-slate-200 border-l-4 border-l-blue-600 bg-slate-100 px-4 py-3 text-sm font-medium leading-relaxed text-slate-900 shadow-inner">
-                {citation.sourceText}
-              </blockquote>
+                <blockquote className="rounded-lg border-y border-r border-slate-200 border-l-4 border-l-blue-600 bg-slate-100 px-4 py-3 text-sm font-medium leading-relaxed text-slate-900 shadow-inner">
+                  {citation.sourceText}
+                </blockquote>
 
-              {citation.referenceUrl ? (
-                <a
-                  href={withPageAnchor(
-                    citation.referenceUrl.replace(/#.*$/, ''),
-                    citation.pageNumber != null && Number.isFinite(Number(citation.pageNumber))
-                      ? Math.floor(Number(citation.pageNumber))
-                      : undefined,
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {citation.referenceUrl ? (
+                    <a
+                      href={withPageAnchor(
+                        citation.referenceUrl.replace(/#.*$/, ''),
+                        citation.pageNumber != null && Number.isFinite(Number(citation.pageNumber))
+                          ? Math.floor(Number(citation.pageNumber))
+                          : undefined,
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-blue-950 shadow-sm underline decoration-blue-800 underline-offset-4 hover:bg-slate-50"
+                    >
+                      <Link2 className="h-4 w-4 shrink-0" />
+                      Open PDF
+                      {citation.pageNumber != null ? ` (page ${citation.pageNumber})` : ''}
+                    </a>
+                  ) : (
+                    <p className="text-xs font-medium text-slate-800">
+                      No reference URL was supplied for this chunk.
+                    </p>
                   )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-blue-950 shadow-sm underline decoration-blue-800 underline-offset-4 hover:bg-slate-50"
-                >
-                  <Link2 className="h-4 w-4 shrink-0" />
-                  Open PDF
-                  {citation.pageNumber != null ? ` (page ${citation.pageNumber})` : ''}
-                </a>
-              ) : (
-                <p className="mt-3 text-xs font-medium text-slate-800">No reference URL was supplied for this chunk.</p>
-              )}
-            </article>
-          ))}
+
+                  {onFlagCitation ? (
+                    citation.flagged ? (
+                      <span className="text-xs font-medium text-red-800">
+                        Flag sent — admins have been notified.
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!canFlag || isFlagging}
+                        className="h-8 gap-1.5 border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100"
+                        title={
+                          !chunkId
+                            ? 'Chunk id unavailable — cannot flag this row.'
+                            : pairMismatch
+                              ? 'Resolve pair mismatch before flagging.'
+                              : undefined
+                        }
+                        onClick={() => {
+                          if (!chunkId) return;
+                          setDialogChunk({ id: chunkId, label: chunkLabel });
+                        }}
+                      >
+                        {isFlagging ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        ) : (
+                          <Flag className="h-3.5 w-3.5" aria-hidden />
+                        )}
+                        Flag chunk
+                      </Button>
+                    )
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
+
+      <FlagRagChunkDialog
+        open={dialogChunk != null}
+        chunkLabel={dialogChunk?.label ?? 'this chunk'}
+        saving={Boolean(dialogChunk && flaggingChunkId === dialogChunk.id)}
+        onClose={() => setDialogChunk(null)}
+        onSubmit={async (reason) => {
+          if (!dialogChunk || !onFlagCitation) return;
+          await onFlagCitation(dialogChunk.id, reason);
+          setDialogChunk(null);
+        }}
+      />
     </section>
   );
 }
@@ -474,6 +550,7 @@ export type ExpertReviewWorkspaceProps = {
   libraryClinicalDescription: string;
   categories: ExpertCategory[];
   tags: ExpertTag[];
+  libraryFieldErrors?: ExpertPromoteFieldErrors;
   studentQuestion: string;
   mainDiagnosis: string;
   differentialText: string;
@@ -483,6 +560,8 @@ export type ExpertReviewWorkspaceProps = {
   onLibraryDifficultyChange: (v: string) => void;
   onLibraryTagIdsChange: (v: string[]) => void;
   onLibraryClinicalDescriptionChange: (v: string) => void;
+  onFlagCitation?: (chunkId: string, reason: string) => Promise<void>;
+  flaggingChunkId?: string | null;
 };
 
 export function ExpertReviewWorkspace({
@@ -515,6 +594,7 @@ export function ExpertReviewWorkspace({
   libraryClinicalDescription,
   categories,
   tags,
+  libraryFieldErrors = {},
   studentQuestion,
   mainDiagnosis,
   differentialText,
@@ -524,6 +604,8 @@ export function ExpertReviewWorkspace({
   onLibraryDifficultyChange,
   onLibraryTagIdsChange,
   onLibraryClinicalDescriptionChange,
+  onFlagCitation,
+  flaggingChunkId = null,
 }: ExpertReviewWorkspaceProps) {
   const [correctedRoi, setCorrectedRoi] = useState<NormalizedImageBoundingBox | null>(() =>
     roiArrayToNormalizedBox(initialCorrectedRoiBoundingBox),
@@ -679,6 +761,9 @@ export function ExpertReviewWorkspace({
         <EvidencePanel
           citations={item.citations ?? []}
           queueSummary={item.queueSource === 'dashboard-summary'}
+          onFlagCitation={onFlagCitation}
+          flaggingChunkId={flaggingChunkId}
+          pairMismatch={pairMismatch}
         />
 
         <Card className="border-primary/20 shadow-sm">
@@ -699,6 +784,22 @@ export function ExpertReviewWorkspace({
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {libraryFieldErrors.suggestedDiagnosis ||
+            libraryFieldErrors.keyFindings ||
+            libraryFieldErrors.reflectiveQuestions ? (
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                <p className="font-semibold">Complete Expert clinical override before publishing:</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {libraryFieldErrors.suggestedDiagnosis ? (
+                    <li>{libraryFieldErrors.suggestedDiagnosis}</li>
+                  ) : null}
+                  {libraryFieldErrors.keyFindings ? <li>{libraryFieldErrors.keyFindings}</li> : null}
+                  {libraryFieldErrors.reflectiveQuestions ? (
+                    <li>{libraryFieldErrors.reflectiveQuestions}</li>
+                  ) : null}
+                </ul>
+              </div>
+            ) : null}
             <ReportWorkbench
               report={item.report}
               isEditing={isEditing}
@@ -764,8 +865,12 @@ export function ExpertReviewWorkspace({
                 value={libraryTitle}
                 onChange={(e) => onLibraryTitleChange(e.target.value)}
                 disabled={pairMismatch}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60"
+                aria-invalid={Boolean(libraryFieldErrors.title)}
+                className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60 ${
+                  libraryFieldErrors.title ? 'border-red-400' : 'border-slate-300'
+                }`}
               />
+              <PromoteFieldError message={libraryFieldErrors.title} />
             </label>
             <label className="space-y-1 sm:col-span-2">
               <span className="text-xs font-semibold text-slate-800">
@@ -777,24 +882,34 @@ export function ExpertReviewWorkspace({
                 disabled={pairMismatch}
                 rows={4}
                 placeholder="Summary for learners — clinical context, presentation, and teaching focus"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60"
+                aria-invalid={Boolean(libraryFieldErrors.clinicalDescription)}
+                className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60 ${
+                  libraryFieldErrors.clinicalDescription ? 'border-red-400' : 'border-slate-300'
+                }`}
               />
+              <PromoteFieldError message={libraryFieldErrors.clinicalDescription} />
             </label>
             <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-800">Category <span className="text-red-600">*</span></span>
+              <span className="text-xs font-semibold text-slate-800">
+                Pathology category <span className="text-red-600">*</span>
+              </span>
               <select
                 value={libraryCategoryId}
                 onChange={(e) => onLibraryCategoryIdChange(e.target.value)}
                 disabled={pairMismatch}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60"
+                aria-invalid={Boolean(libraryFieldErrors.categoryId)}
+                className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60 ${
+                  libraryFieldErrors.categoryId ? 'border-red-400' : 'border-slate-300'
+                }`}
               >
-                <option value="">— Select category —</option>
+                <option value="">— Select pathology category —</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
               </select>
+              <PromoteFieldError message={libraryFieldErrors.categoryId} />
             </label>
             <label className="space-y-1">
               <span className="text-xs font-semibold text-slate-800">Difficulty <span className="text-red-600">*</span></span>
@@ -802,12 +917,16 @@ export function ExpertReviewWorkspace({
                 value={libraryDifficulty}
                 onChange={(e) => onLibraryDifficultyChange(e.target.value)}
                 disabled={pairMismatch}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60"
+                aria-invalid={Boolean(libraryFieldErrors.difficulty)}
+                className={`w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-60 ${
+                  libraryFieldErrors.difficulty ? 'border-red-400' : 'border-slate-300'
+                }`}
               >
                 <option value="Easy">Easy</option>
                 <option value="Medium">Medium</option>
                 <option value="Hard">Hard</option>
               </select>
+              <PromoteFieldError message={libraryFieldErrors.difficulty} />
             </label>
             <label className="space-y-1 sm:col-span-2">
               <span className="text-xs font-semibold text-slate-800">Student question</span>
@@ -857,6 +976,7 @@ export function ExpertReviewWorkspace({
                   ))}
                 </div>
               )}
+              <PromoteFieldError message={libraryFieldErrors.tagIds} />
             </label>
             </div>
           </CardContent>
