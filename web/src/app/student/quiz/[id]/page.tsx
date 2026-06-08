@@ -63,19 +63,19 @@ const ZOOM_LEVELS = [1, 1.25, 1.5, 2, 2.5];
 // Helper function to get full option text from option key (A, B, C, D)
 function getOptionText(question: QuizModeQuestion, optionKey: string): string | null {
   const key = optionKey.toUpperCase();
-  if (key === 'A') return question.optionA;
-  if (key === 'B') return question.optionB;
-  if (key === 'C') return question.optionC;
-  if (key === 'D') return question.optionD;
+  if (key === 'A') return question.optionA ?? null;
+  if (key === 'B') return question.optionB ?? null;
+  if (key === 'C') return question.optionC ?? null;
+  if (key === 'D') return question.optionD ?? null;
   return null;
 }
 
 // Format correct answer to show both key and text
 function formatCorrectAnswerWithText(question: QuizModeQuestion, answer: string | null | undefined): string {
   if (!answer) return 'N/A';
-  const trimmed = answer.trim();
+  const trimmed = answer.trim().toUpperCase();
   const optionText = getOptionText(question, trimmed);
-  if (optionText) {
+  if (optionText && optionText.trim()) {
     return `${trimmed}. ${optionText}`;
   }
   return trimmed;
@@ -1490,10 +1490,12 @@ export default function QuizSessionPage({
             )}
 
             {/* ================================================================
-                ANSWER & EXPLANATION - Hiển thị khi đã Reveal Answers
+                ANSWER & EXPLANATION - Hiển thị sau khi submit
+                - Practice Mode: Hiển thị ngay sau submit
+                - Exam Mode: Hiển thị khi đã Reveal Answers
                 ================================================================ */}
-            {submitted && showFeedback && currentQ && !isPracticeMode && (currentQ.explanation || currentQ.correctAnswer) && (
-              <div className="mt-6 space-y-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-6">
+            {submitted && currentQ && (
+              <div className={`mt-6 space-y-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-6 ${isPracticeMode ? '' : (showFeedback ? '' : 'hidden')}`}>
                 <div className="flex items-center gap-2 mb-3">
                   <Lightbulb className="h-5 w-5 text-primary" />
                   <h4 className="font-headline text-base font-bold text-on-surface">Answer & Explanation</h4>
@@ -1504,9 +1506,20 @@ export default function QuizSessionPage({
                   <div className="rounded-xl border border-success/30 bg-success/10 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wider text-success mb-1">Correct Answer</p>
                     <p className="text-lg font-bold text-success leading-tight">
-                      {currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select'
-                        ? formatMultiCorrectAnswersWithText(currentQ, currentQ.correctAnswers ? JSON.parse(currentQ.correctAnswers) : [])
-                        : formatCorrectAnswerWithText(currentQ, currentQ.correctAnswer)}
+                      {(() => {
+                        const q = currentQ;
+                        const ans = q.correctAnswer?.trim().toUpperCase();
+                        if (!ans) return 'N/A';
+                        if (q.type?.toLowerCase() === 'multiselect' || q.type?.toLowerCase() === 'multi-select') {
+                          const keys = q.correctAnswers ? JSON.parse(q.correctAnswers) : [];
+                          return keys.map((k: string) => {
+                            const txt = k === 'A' ? q.optionA : k === 'B' ? q.optionB : k === 'C' ? q.optionC : k === 'D' ? q.optionD : null;
+                            return txt ? `${k}. ${txt}` : k;
+                          }).join(', ');
+                        }
+                        const txt = ans === 'A' ? q.optionA : ans === 'B' ? q.optionB : ans === 'C' ? q.optionC : ans === 'D' ? q.optionD : null;
+                        return txt ? `${ans}. ${txt}` : ans;
+                      })()}
                     </p>
                   </div>
                   <div className={`rounded-xl border p-4 ${
@@ -1530,13 +1543,14 @@ export default function QuizSessionPage({
                           ? 'text-destructive'
                           : 'text-on-surface-variant'
                     }`}>
-                      {currentQ.type?.toLowerCase() === 'multiselect' || currentQ.type?.toLowerCase() === 'multi-select'
-                        ? (multiSelectAnswers[currentQ.questionId]?.length
-                            ? formatMultiCorrectAnswersWithText(currentQ, multiSelectAnswers[currentQ.questionId])
-                            : 'Not answered')
-                        : (currentAnswer
-                            ? formatCorrectAnswerWithText(currentQ, currentAnswer)
-                            : 'Not answered')}
+                      {currentAnswer
+                        ? (() => {
+                            const q = currentQ;
+                            const ans = currentAnswer.trim().toUpperCase();
+                            const txt = ans === 'A' ? q.optionA : ans === 'B' ? q.optionB : ans === 'C' ? q.optionC : ans === 'D' ? q.optionD : null;
+                            return txt ? `${ans}. ${txt}` : ans;
+                          })()
+                        : 'Not answered'}
                     </p>
                   </div>
                 </div>
