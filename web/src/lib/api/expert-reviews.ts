@@ -851,6 +851,7 @@ export async function resolveExpertReview(
   try {
     await http.post(`/api/expert/reviews/${sessionId}/resolve`, body, {
       headers: { 'Content-Type': 'application/json' },
+      skipApiToast: true,
     });
   } catch (e) {
     if (axios.isAxiosError(e) && (e.response?.status === 409 || e.response?.status === 412)) {
@@ -892,6 +893,7 @@ export async function approveExpertReview(sessionId: string): Promise<void> {
   try {
     await http.post(`/api/expert/reviews/${encodeURIComponent(id)}/approve`, {}, {
       headers: { 'Content-Type': 'application/json' },
+      skipApiToast: true,
     });
   } catch (e) {
     if (axios.isAxiosError(e) && (e.response?.status === 409 || e.response?.status === 412)) {
@@ -1081,6 +1083,7 @@ export async function promoteExpertReview(
   try {
     const { data } = await http.post<unknown>(`/api/expert/reviews/${encodeURIComponent(id)}/promote`, body, {
       headers: { 'Content-Type': 'application/json' },
+      skipApiToast: true,
     });
     return parsePromoteExpertReviewResult(data);
   } catch (e) {
@@ -1089,40 +1092,22 @@ export async function promoteExpertReview(
 }
 
 /**
- * Approve + publish to library atomically when BE supports it.
- * Fallback: promote first, then approve — avoids partial "approved but no case" state.
+ * Publish to library, then approve the review.
+ * Uses promote → approve (not approve-and-promote): BE currently returns 400
+ * "Request body must be JSON with approve-and-promote fields" for the atomic endpoint.
  */
 export async function approveAndPromoteExpertReview(
   sessionId: string,
   payload: PromoteExpertReviewPayload,
-  options: ApproveAndPromoteExpertReviewOptions = {},
+  _options: ApproveAndPromoteExpertReviewOptions = {},
 ): Promise<PromoteExpertReviewResult> {
   const id = String(sessionId ?? '').trim();
   if (!id) throw new Error('Session id is required.');
-  const body = buildPromoteRequestBody(payload);
-  const reviewNote = options.reviewNote?.trim();
-  if (reviewNote) body.reviewNote = reviewNote;
-  if (Array.isArray(options.correctedRoiBoundingBox) && options.correctedRoiBoundingBox.length >= 4) {
-    body.correctedRoiBoundingBox = options.correctedRoiBoundingBox.slice(0, 4);
-  }
-
   try {
-    const { data } = await http.post<unknown>(
-      `/api/expert/reviews/${encodeURIComponent(id)}/approve-and-promote`,
-      body,
-      { headers: { 'Content-Type': 'application/json' } },
-    );
-    return parsePromoteExpertReviewResult(data);
+    const result = await promoteExpertReview(id, payload);
+    await approveExpertReview(id);
+    return result;
   } catch (e) {
-    if (axios.isAxiosError(e) && e.response?.status === 404) {
-      try {
-        const result = await promoteExpertReview(id, payload);
-        await approveExpertReview(id);
-        return result;
-      } catch (fallbackError) {
-        rethrowPromoteWorkflowError(fallbackError);
-      }
-    }
     rethrowPromoteWorkflowError(e);
   }
 }

@@ -31,7 +31,6 @@ import {
 import { fetchExpertCategories, fetchExpertTags, type ExpertCategory, type ExpertTag } from '@/lib/api/expert-cases';
 import type { ExpertReviewItem, ExpertReviewSavedDraft } from '@/lib/api/types';
 import { getWorkflowStatusMeta, normalizeWorkflowStatus } from '@/lib/visual-qa-workflow';
-import { toast as sonnerToast } from 'sonner';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import { deriveExpertCaseFormPrefillFromDicom } from '@/features/expert/lib/apply-dicom-metadata-to-form';
@@ -803,7 +802,7 @@ export function ExpertReviewsPage() {
         queryClient.invalidateQueries({ queryKey: queryKeys.expert.reviews('Pending') }),
         queryClient.invalidateQueries({ queryKey: queryKeys.expert.reviews('History') }),
       ]);
-      sonnerToast.success('Review approved and published to the case library.', { duration: 6000 });
+      appToast.success('Review approved and published to the case library.');
     } catch (error) {
       void load();
       toast.error(toWorkflowFriendlyError(error, 'Approve and promote failed.'));
@@ -866,10 +865,10 @@ export function ExpertReviewsPage() {
       setExpanded((e) => (e === jid ? null : e));
       if (active?.id === jid) setActive(null);
       closeRejectModal();
-      sonnerToast.message('Review recorded', {
-        description: 'The student will be notified. This item is removed from your pending queue.',
-        duration: 5000,
-      });
+      appToast.success(
+        'Review recorded',
+        'The student will be notified. This item is removed from your pending queue.',
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Update failed');
     } finally {
@@ -918,7 +917,7 @@ export function ExpertReviewsPage() {
       try {
         await flagRagChunk(normalizedChunkId, { reason, isFlagged: true });
         markCitationFlagged(sid, normalizedChunkId);
-        sonnerToast.success('Chunk flagged. Admins can acknowledge it on Flagged chunks.');
+        appToast.success('Chunk flagged. Admins can acknowledge it on Flagged chunks.');
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Could not flag this chunk.');
         throw error;

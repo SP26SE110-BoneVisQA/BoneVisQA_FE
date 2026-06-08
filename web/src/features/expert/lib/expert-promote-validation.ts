@@ -236,6 +236,7 @@ export function isExpertPromoteUserErrorMessage(message: string): boolean {
   if (/enter key imaging/i.test(message)) return true;
   if (/enter reflective/i.test(message)) return true;
   if (/only self-uploaded images/i.test(message)) return true;
+  if (/approve-and-promote fields/i.test(message)) return true;
   return false;
 }
 
