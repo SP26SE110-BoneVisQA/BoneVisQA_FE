@@ -30,7 +30,6 @@ export const navByRole: Record<AppRoleKey, NavItem[]> = {
     { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
     { label: 'Medical Student Verification', href: '/admin/verifications', icon: GraduationCap },
     { label: 'User Management', href: '/admin/users', icon: Users },
-    { label: 'Classifications', href: '/admin/classifications', icon: Stethoscope },
     { label: 'Class Management', href: '/admin/classes', icon: GraduationCap },
     { label: 'Knowledge Base', href: '/admin/documents', icon: Database },
     { label: 'Flagged chunks', href: '/admin/flagged-chunks', icon: Flag },

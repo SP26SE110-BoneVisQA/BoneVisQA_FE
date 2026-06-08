@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Plus, X, BookOpen, Loader2 } from 'lucide-react';
 import { ListPageLayout } from '@/components/layouts';
 import { ClassManagementTable } from '@/components/admin/classes/ClassManagementTable';
-import { ClassSpecialtyDialog } from '@/components/admin/classes/ClassSpecialtyDialog';
 import { DestructiveConfirmDialog } from '@/components/shared/DestructiveConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,9 +25,6 @@ export function AdminClassesPage() {
   const [editName, setEditName] = useState('');
   const [editSemester, setEditSemester] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminClassModel | null>(null);
-  const [specialtyDialogOpen, setSpecialtyDialogOpen] = useState(false);
-  const [specialtyDialogClass, setSpecialtyDialogClass] = useState<AdminClassModel | null>(null);
-  const [filterSpecialtyId, setFilterSpecialtyId] = useState<string | null>(null);
 
   const classesQuery = useAdminClasses();
   const createMutation = useCreateAdminClass();
@@ -116,12 +112,6 @@ export function AdminClassesPage() {
         classes={classes}
         onEdit={openEdit}
         onDelete={(cls) => setDeleteTarget(cls)}
-        onManageSpecialty={(cls) => {
-          setSpecialtyDialogClass(cls);
-          setSpecialtyDialogOpen(true);
-        }}
-        filterSpecialtyId={filterSpecialtyId}
-        onFilterSpecialtyChange={setFilterSpecialtyId}
       />
 
       {createOpen ? (
@@ -255,18 +245,6 @@ export function AdminClassesPage() {
           </div>
         </div>
       ) : null}
-
-      <ClassSpecialtyDialog
-        open={specialtyDialogOpen}
-        onOpenChange={(open) => {
-          setSpecialtyDialogOpen(open);
-          if (!open) {
-            setSpecialtyDialogClass(null);
-            void classesQuery.refetch();
-          }
-        }}
-        classData={specialtyDialogClass}
-      />
 
       <DestructiveConfirmDialog
         open={Boolean(deleteTarget)}
