@@ -9,6 +9,8 @@ type WorkspaceFlowBarProps = {
   flow: VisualQaFlow | null;
   caseRemoved?: boolean;
   onNewChat?: () => void;
+  /** Case-workspace only: navigates to the DICOM upload workspace. */
+  onGoToPersonalUpload?: () => void;
   onOpenHistory?: () => void;
   historyOpen?: boolean;
 };
@@ -17,6 +19,7 @@ export function WorkspaceFlowBar({
   flow,
   caseRemoved = false,
   onNewChat,
+  onGoToPersonalUpload,
   onOpenHistory,
   historyOpen = false,
 }: WorkspaceFlowBarProps) {
@@ -54,6 +57,19 @@ export function WorkspaceFlowBar({
             >
               <History className="h-3.5 w-3.5" aria-hidden />
               Chat history
+            </Button>
+          ) : null}
+          {onGoToPersonalUpload ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 rounded-2xl border-amber-300/60 bg-amber-50/80 text-xs text-amber-900 shadow-sm hover:bg-amber-100"
+              onClick={onGoToPersonalUpload}
+              title="Switch to DICOM upload workspace"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Upload DICOM
             </Button>
           ) : null}
           {onNewChat ? (
