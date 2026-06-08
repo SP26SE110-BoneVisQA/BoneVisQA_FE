@@ -22,6 +22,7 @@ import {
   parsePercentageBoundingBox,
 } from '@/lib/utils/annotations';
 import { normalizeDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
+import { isValidGuid, sanitizeGuidList } from '@/lib/api/sanitize-guids';
 
 export const REVIEW_WORKFLOW_CONFLICT = 'REVIEW_WORKFLOW_CONFLICT';
 
@@ -983,9 +984,8 @@ function parsePromoteExpertReviewResult(data: unknown): PromoteExpertReviewResul
 function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<string, unknown> {
   const title = String(payload.title ?? '').trim();
   const difficulty = String(payload.difficulty ?? '').trim();
-  const tagIds = Array.isArray(payload.tagIds)
-    ? payload.tagIds.map((t) => String(t).trim()).filter(Boolean)
-    : [];
+  const tagIds = sanitizeGuidList(payload.tagIds);
+  const categoryId = isValidGuid(payload.categoryId) ? payload.categoryId!.trim() : undefined;
   const tagNames = Array.isArray(payload.tagNames)
     ? payload.tagNames.map((t) => String(t).trim()).filter(Boolean)
     : [];
@@ -994,8 +994,8 @@ function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<st
     : [];
   const body: Record<string, unknown> = {
     title,
-    categoryId: payload.categoryId?.trim() || undefined,
-    categoryName: payload.categoryName?.trim() || undefined,
+    categoryId,
+    categoryName: payload.categoryName?.trim() || payload.pathologyGroup?.trim() || undefined,
     difficulty,
     tagIds,
     tagNames: tagNames.length > 0 ? tagNames : undefined,
@@ -1008,8 +1008,8 @@ function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<st
     reflectiveQuestions: String(payload.reflectiveQuestions ?? '').trim(),
     studentQuestion: payload.studentQuestion?.trim() || undefined,
     referencesAndCitations: payload.referencesAndCitations?.trim() || undefined,
-    CategoryId: payload.categoryId?.trim() || undefined,
-    CategoryName: payload.categoryName?.trim() || undefined,
+    CategoryId: categoryId,
+    CategoryName: payload.categoryName?.trim() || payload.pathologyGroup?.trim() || undefined,
     TagIds: tagIds,
     TagNames: tagNames.length > 0 ? tagNames : undefined,
   };
@@ -1029,7 +1029,7 @@ function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<st
   if (Array.isArray(payload.turnAnnotations) && payload.turnAnnotations.length > 0) {
     body.turnAnnotations = payload.turnAnnotations;
   }
-  const imageId = payload.imageId?.trim();
+  const imageId = isValidGuid(payload.imageId) ? payload.imageId!.trim() : undefined;
   if (imageId) {
     body.imageId = imageId;
     body.ImageId = imageId;

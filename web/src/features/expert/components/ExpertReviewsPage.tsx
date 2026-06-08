@@ -805,7 +805,7 @@ export function ExpertReviewsPage() {
       appToast.success('Review approved and published to the case library.');
     } catch (error) {
       void load();
-      toast.error(toWorkflowFriendlyError(error, 'Approve and promote failed.'));
+      appToast.error(toWorkflowFriendlyError(error, 'Approve and promote failed.'));
     } finally {
       setSaving(false);
     }
