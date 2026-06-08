@@ -181,9 +181,7 @@ export function validateExpertPromoteForm(
     errors.difficulty = 'Select a difficulty level.';
   }
 
-  const hasTags =
-    (payload.tagIds?.length ?? 0) > 0 || (payload.tagNames?.length ?? 0) > 0;
-  if (!hasTags) {
+  if ((payload.tagIds?.length ?? 0) === 0) {
     errors.tagIds = 'Select at least one tag.';
   }
 
@@ -191,7 +189,7 @@ export function validateExpertPromoteForm(
     errors.clinicalDescription = 'Enter a clinical description.';
   }
   if (!payload.suggestedDiagnosis?.trim()) {
-    errors.suggestedDiagnosis = 'Enter differential diagnoses.';
+    errors.suggestedDiagnosis = 'Enter suggested main diagnosis in Expert clinical override.';
   }
   if (!payload.keyFindings?.trim()) {
     errors.keyFindings = 'Enter key imaging findings.';
@@ -232,7 +230,8 @@ export function isExpertPromoteUserErrorMessage(message: string): boolean {
   if (/select at least one tag/i.test(message)) return true;
   if (/required to publish/i.test(message)) return true;
   if (/enter a clinical description/i.test(message)) return true;
-  if (/enter differential/i.test(message)) return true;
+  if (/enter suggested main diagnosis/i.test(message)) return true;
+  if (/complete clinical description/i.test(message)) return true;
   if (/enter key imaging/i.test(message)) return true;
   if (/enter reflective/i.test(message)) return true;
   if (/only self-uploaded images/i.test(message)) return true;

@@ -571,25 +571,37 @@ function parseCreatedCaseId(data: unknown): string | undefined {
   return id != null && String(id).trim() ? String(id) : undefined;
 }
 
+/** Shared JSON body for `POST /api/expert/cases` and review promote (same case fields). */
+export function buildCreateExpertCaseRequestBody(
+  input: CreateExpertCaseJsonInput,
+): Record<string, unknown> {
+  const tagIds = Array.isArray(input.tagIds)
+    ? [...new Set(input.tagIds.map((id) => String(id).trim()).filter(Boolean))]
+    : [];
+  const body: Record<string, unknown> = {
+    title: input.title.trim(),
+    description: input.description.trim(),
+    difficulty: input.difficulty?.trim() || null,
+    suggestedDiagnosis: input.suggestedDiagnosis?.trim() || null,
+    reflectiveQuestions: input.reflectiveQuestions?.trim() || null,
+    keyFindings: input.keyFindings?.trim() || null,
+    medicalImages: input.medicalImages ?? null,
+  };
+  const categoryId = input.categoryId?.trim();
+  if (categoryId) {
+    body.categoryId = categoryId;
+  }
+  if (tagIds.length > 0) {
+    body.tagIds = tagIds;
+  }
+  appendCaseOntologyFields(body, input);
+  return body;
+}
+
 /** Creates a case via `application/json` (public image URLs + polygon coordinates). */
 export async function createExpertCase(input: CreateExpertCaseJsonInput): Promise<string | undefined> {
   try {
-    const body: Record<string, unknown> = {
-      title: input.title,
-      description: input.description,
-      difficulty: input.difficulty ?? null,
-      suggestedDiagnosis: input.suggestedDiagnosis ?? null,
-      reflectiveQuestions: input.reflectiveQuestions ?? null,
-      keyFindings: input.keyFindings ?? null,
-      medicalImages: input.medicalImages ?? null,
-    };
-    if (input.categoryId != null && String(input.categoryId).trim()) {
-      body.categoryId = input.categoryId;
-    }
-    if (input.tagIds != null && input.tagIds.length > 0) {
-      body.tagIds = input.tagIds;
-    }
-    appendCaseOntologyFields(body, input);
+    const body = buildCreateExpertCaseRequestBody(input);
     const { data } = await http.post<unknown>('/api/expert/cases', body, {
       headers: { 'Content-Type': 'application/json' },
     });

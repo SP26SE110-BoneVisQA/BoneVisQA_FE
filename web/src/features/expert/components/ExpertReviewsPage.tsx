@@ -29,6 +29,7 @@ import {
   resolveExpertReview,
 } from '@/lib/api/expert-reviews';
 import { fetchExpertCategories, fetchExpertTags, type ExpertCategory, type ExpertTag } from '@/lib/api/expert-cases';
+import { isValidGuid, sanitizeGuidList } from '@/lib/api/sanitize-guids';
 import type { ExpertReviewItem, ExpertReviewSavedDraft } from '@/lib/api/types';
 import { getWorkflowStatusMeta, normalizeWorkflowStatus } from '@/lib/visual-qa-workflow';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
@@ -124,12 +125,6 @@ function buildResolvePayload(
   };
 }
 
-function joinDifferentialFromReport(item: ExpertReviewItem): string {
-  const d = item.report.differentialDiagnoses ?? [];
-  if (d.length) return d.map((s) => String(s).trim()).filter(Boolean).join('\n');
-  return (item.report.keyFindings ?? []).join('\n');
-}
-
 function joinKeyImagingFindings(item: ExpertReviewItem, keyImagingEdit: string, useEdited: boolean): string {
   if (useEdited && keyImagingEdit.trim()) return keyImagingEdit.trim();
   const k = item.report.keyImagingFindings?.trim();
@@ -145,45 +140,6 @@ function structuredDiagnosisForPromote(item: ExpertReviewItem, diag: string, use
     item.report.answerText?.trim() ||
     ''
   );
-}
-
-function collectTurnAnnotationsForPromote(
-  item: ExpertReviewItem,
-  correctedRoi?: number[] | null,
-): Array<Record<string, unknown>> {
-  const turns = item.turns ?? [];
-  const out: Array<Record<string, unknown>> = [];
-  const expertRoi =
-    Array.isArray(correctedRoi) && correctedRoi.length >= 4 ? correctedRoi.slice(0, 4) : null;
-
-  for (let i = 0; i < turns.length; i++) {
-    const t = turns[i];
-    const studentRoi = t.roiBoundingBox ?? t.questionCoordinates ?? null;
-    const roi = i === 0 && expertRoi ? expertRoi : studentRoi;
-    if (!roi) continue;
-    out.push({
-      turnIndex: t.turnIndex,
-      turnId: t.turnId,
-      userMessageId: t.userMessageId,
-      assistantMessageId: t.assistantMessageId,
-      roiBoundingBox: roi,
-      ...(i === 0 && expertRoi ? { source: 'expert_corrected' } : {}),
-    });
-  }
-
-  if (out.length === 0 && expertRoi) {
-    const first = turns[0];
-    out.push({
-      turnIndex: first?.turnIndex ?? 0,
-      turnId: first?.turnId,
-      userMessageId: first?.userMessageId,
-      assistantMessageId: first?.assistantMessageId,
-      roiBoundingBox: expertRoi,
-      source: 'expert_corrected',
-    });
-  }
-
-  return out;
 }
 
 function buildExpertReviewDraftPayload(
@@ -444,66 +400,49 @@ function buildPromotePayload(
   item: ExpertReviewItem,
   ctx: {
     diag: string;
-    keyText: string;
     keyImagingEdit: string;
     reflectiveEdit: string;
     libraryTitle: string;
-    libraryCategoryId: string;
     libraryDifficulty: string;
     libraryTagIds: string[];
     libraryClinicalDescription: string;
     libraryAnatomySite?: string;
-    promoteCategories: ExpertCategory[];
-    tags: ExpertTag[];
-    correctedRoi?: number[] | null;
+    libraryModality?: string;
     resolvedCategoryId: string;
     resolvedPathologyGroup: string;
   },
 ): PromoteExpertReviewPayload {
-  const catId = ctx.resolvedCategoryId.trim();
-  const cat = ctx.promoteCategories.find((c) => c.id === catId);
-  const tagIds = ctx.libraryTagIds.filter(Boolean);
-  const tagNames = tagIds
-    .map((id) => ctx.tags.find((tag) => tag.id === id)?.name ?? '')
-    .filter(Boolean);
-  const mainDiagnosis = structuredDiagnosisForPromote(item, ctx.diag, true);
-  const differentialLines = ctx.keyText
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const differentialText =
-    differentialLines.join('\n') || joinDifferentialFromReport(item);
+  const clinical = ctx.libraryClinicalDescription.trim();
+  const anatomySite = ctx.libraryAnatomySite?.trim() || '';
   const description =
-    ctx.libraryClinicalDescription.trim() || mainDiagnosis || item.report.answerText?.trim() || '';
+    anatomySite && clinical && !clinical.includes(anatomySite)
+      ? `${clinical}\n\nAnatomy site: ${anatomySite}`
+      : clinical;
+  const suggestedDiagnosis = structuredDiagnosisForPromote(item, ctx.diag, true);
   const keyFindings =
     ctx.keyImagingEdit.trim() || joinKeyImagingFindings(item, ctx.keyImagingEdit, true);
   const reflectiveQuestions =
     ctx.reflectiveEdit.trim() ||
     reflectiveQuestionsToEditText(item.report, item.reflectiveQuestions) ||
     '';
+  const categoryId = isValidGuid(ctx.resolvedCategoryId) ? ctx.resolvedCategoryId.trim() : null;
+  const tagIds = [...new Set(sanitizeGuidList(ctx.libraryTagIds))];
+  const modality =
+    ctx.libraryModality?.trim() || item.dicomMetadata?.modality?.trim() || null;
+
   return {
     title: ctx.libraryTitle.trim(),
-    categoryId: catId || undefined,
-    categoryName: cat?.name ?? (catId || undefined),
-    difficulty: ctx.libraryDifficulty.trim() || 'Medium',
-    tagIds,
-    tagNames: tagNames.length > 0 ? tagNames : undefined,
-    clinicalDescription: ctx.libraryClinicalDescription.trim() || undefined,
     description,
-    suggestedMainDiagnosis: mainDiagnosis || undefined,
-    suggestedDiagnosis: differentialText,
-    differentialDiagnoses: differentialLines.length > 0 ? differentialLines : undefined,
+    difficulty: ctx.libraryDifficulty.trim() || 'Medium',
+    categoryId,
+    pathologyGroup: ctx.resolvedPathologyGroup,
+    anatomySite: anatomySite || null,
+    modality,
+    suggestedDiagnosis,
     keyFindings,
     reflectiveQuestions,
-    studentQuestion: item.question?.trim() || firstStudentQuestion(item) || undefined,
-    referencesAndCitations: formatReferencesFromReviewItem(item) || undefined,
-    anatomySite: ctx.libraryAnatomySite?.trim() || undefined,
-    boneLocation: ctx.libraryAnatomySite?.trim() || undefined,
-    pathologyGroup: ctx.resolvedPathologyGroup,
-    turnAnnotations: collectTurnAnnotationsForPromote(item, ctx.correctedRoi),
-    imageId: item.imageId?.trim() || undefined,
-    fromStudentRequest: true,
-    caseOrigin: 'fromStudentRequest',
+    tagIds,
+    imageId: item.imageId?.trim() || null,
   };
 }
 
@@ -706,9 +645,10 @@ export function ExpertReviewsPage() {
     }
     const derived = deriveExpertCaseFormPrefillFromDicom(item.dicomMetadata);
     const metadataTags = buildMetadataTagCandidates(item);
-    let effectiveLibraryTagIds = libraryTagIds.filter(Boolean);
+    let effectiveLibraryTagIds = [...new Set(sanitizeGuidList(libraryTagIds))];
     if (effectiveLibraryTagIds.length === 0) {
       effectiveLibraryTagIds = resolveTagIdsFromNames(metadataTags, expertTags);
+      effectiveLibraryTagIds = [...new Set(sanitizeGuidList(effectiveLibraryTagIds))];
       if (effectiveLibraryTagIds.length > 0) {
         setLibraryTagIds(effectiveLibraryTagIds);
       }
@@ -726,18 +666,14 @@ export function ExpertReviewsPage() {
       resolvePromotePathologyGroupForSubmit(resolvedCategoryId, promoteCategories) ?? '';
     const promotePayload = buildPromotePayload(item, {
       diag,
-      keyText,
       keyImagingEdit,
       reflectiveEdit,
       libraryTitle,
-      libraryCategoryId,
       libraryDifficulty,
       libraryTagIds: effectiveLibraryTagIds,
       libraryClinicalDescription,
       libraryAnatomySite,
-      promoteCategories,
-      tags: expertTags,
-      correctedRoi: roi,
+      libraryModality,
       resolvedCategoryId,
       resolvedPathologyGroup,
     });

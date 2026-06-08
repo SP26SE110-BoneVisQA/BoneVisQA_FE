@@ -4,6 +4,7 @@ import {
   isExpertPromoteUserErrorMessage,
   normalizeToPromotePathologyGroup,
 } from '@/features/expert/lib/expert-promote-validation';
+import { buildCreateExpertCaseRequestBody } from '@/lib/api/expert-cases';
 import { http, getApiErrorMessage } from './client';
 import type { ExpertPendingReview } from './expert-dashboard';
 import { fetchExpertPendingReviews } from './expert-dashboard';
@@ -904,40 +905,21 @@ export async function approveExpertReview(sessionId: string): Promise<void> {
   }
 }
 
+/** Same fields as `CreateExpertCaseJsonInput` — used for review → library publish. */
 export interface PromoteExpertReviewPayload {
-  /** Tiêu đề case thư viện — bắt buộc trước khi promote (BE có thể map sang `title` / `caseTitle`). */
   title: string;
-  categoryId?: string;
-  categoryName?: string;
-  difficulty: string;
-  /** Preferred — UUID tags from GET /api/expert/tags. */
-  tagIds: string[];
-  /** Fallback when tagIds unavailable (legacy BE). */
-  tagNames?: string[];
-  /** Clinical narrative for learners (publish form). */
-  clinicalDescription?: string;
-  /** Main case description / clinical context stored on case. */
   description: string;
-  /** Suggested main diagnosis from expert override. */
-  suggestedMainDiagnosis?: string;
-  /** BE field name — differential diagnoses (newline-separated). */
+  difficulty: string;
+  categoryId?: string | null;
+  pathologyGroup: string;
+  anatomySite?: string | null;
+  modality?: string | null;
   suggestedDiagnosis: string;
-  differentialDiagnoses?: string[];
-  /** Key imaging findings on case. */
   keyFindings: string;
   reflectiveQuestions: string;
-  studentQuestion?: string;
-  referencesAndCitations?: string;
-  anatomySite?: string;
-  boneLocation?: string;
-  pathologyGroup?: string;
-  /** ROI / annotation theo từng turn (JSON tuỳ BE). */
-  turnAnnotations?: Array<Record<string, unknown>>;
-  /** Study image from the Visual QA session — required for student-upload promote flows. */
+  tagIds: string[];
+  /** Visual QA study image — only sent when a valid GUID is available. */
   imageId?: string | null;
-  /** Signals promote-from-student-request (BE sets caseOrigin = fromStudentRequest). */
-  fromStudentRequest?: boolean;
-  caseOrigin?: 'fromStudentRequest' | 'expertCreated' | string;
 }
 
 export interface PromoteExpertReviewResult {
@@ -982,73 +964,48 @@ function parsePromoteExpertReviewResult(data: unknown): PromoteExpertReviewResul
 }
 
 function buildPromoteRequestBody(payload: PromoteExpertReviewPayload): Record<string, unknown> {
-  const title = String(payload.title ?? '').trim();
-  const difficulty = String(payload.difficulty ?? '').trim();
-  const tagIds = sanitizeGuidList(payload.tagIds);
-  const categoryId = isValidGuid(payload.categoryId) ? payload.categoryId!.trim() : undefined;
-  const tagNames = Array.isArray(payload.tagNames)
-    ? payload.tagNames.map((t) => String(t).trim()).filter(Boolean)
-    : [];
-  const differentialDiagnoses = Array.isArray(payload.differentialDiagnoses)
-    ? payload.differentialDiagnoses.map((t) => String(t).trim()).filter(Boolean)
-    : [];
-  const body: Record<string, unknown> = {
-    title,
-    categoryId,
-    categoryName: payload.categoryName?.trim() || payload.pathologyGroup?.trim() || undefined,
-    difficulty,
-    tagIds,
-    tagNames: tagNames.length > 0 ? tagNames : undefined,
-    clinicalDescription: payload.clinicalDescription?.trim() || undefined,
-    description: String(payload.description ?? '').trim(),
-    suggestedMainDiagnosis: payload.suggestedMainDiagnosis?.trim() || undefined,
-    suggestedDiagnosis: String(payload.suggestedDiagnosis ?? '').trim(),
-    differentialDiagnoses: differentialDiagnoses.length > 0 ? differentialDiagnoses : undefined,
-    keyFindings: String(payload.keyFindings ?? '').trim(),
-    reflectiveQuestions: String(payload.reflectiveQuestions ?? '').trim(),
-    studentQuestion: payload.studentQuestion?.trim() || undefined,
-    referencesAndCitations: payload.referencesAndCitations?.trim() || undefined,
-    CategoryId: categoryId,
-    CategoryName: payload.categoryName?.trim() || payload.pathologyGroup?.trim() || undefined,
-    TagIds: tagIds,
-    TagNames: tagNames.length > 0 ? tagNames : undefined,
-  };
-  const anatomy = payload.anatomySite?.trim() || payload.boneLocation?.trim();
-  if (anatomy) {
-    body.anatomySite = anatomy;
-    body.boneLocation = anatomy;
-  }
   const pathologyGroup = normalizeToPromotePathologyGroup(payload.pathologyGroup ?? '');
   if (!pathologyGroup) {
     throw new ExpertPromoteValidationError(
       'Select a pathology category: Trauma, Tumor, Infection, Degenerative, or Congenital.',
     );
   }
-  body.pathologyGroup = pathologyGroup;
-  body.PathologyGroup = pathologyGroup;
-  if (Array.isArray(payload.turnAnnotations) && payload.turnAnnotations.length > 0) {
-    body.turnAnnotations = payload.turnAnnotations;
-  }
+
+  const tagIds = [...new Set(sanitizeGuidList(payload.tagIds))];
+  const categoryId = isValidGuid(payload.categoryId) ? payload.categoryId!.trim() : null;
+
+  const body = buildCreateExpertCaseRequestBody({
+    title: payload.title,
+    description: payload.description,
+    difficulty: payload.difficulty,
+    categoryId,
+    anatomySite: payload.anatomySite ?? null,
+    pathologyGroup,
+    modality: payload.modality ?? null,
+    suggestedDiagnosis: payload.suggestedDiagnosis,
+    reflectiveQuestions: payload.reflectiveQuestions,
+    keyFindings: payload.keyFindings,
+    tagIds: tagIds.length > 0 ? tagIds : null,
+    medicalImages: null,
+  });
+
   const imageId = isValidGuid(payload.imageId) ? payload.imageId!.trim() : undefined;
   if (imageId) {
     body.imageId = imageId;
-    body.ImageId = imageId;
   }
-  if (payload.fromStudentRequest === true) {
-    body.fromStudentRequest = true;
-    body.FromStudentRequest = true;
-    body.caseOrigin = payload.caseOrigin?.trim() || 'fromStudentRequest';
-    body.CaseOrigin = body.caseOrigin;
+
+  if (!String(body.title ?? '').trim() || !String(body.difficulty ?? '').trim()) {
+    throw new ExpertPromoteValidationError('Title and difficulty are required to publish to the library.');
   }
-  if (!title || !difficulty) {
-    throw new Error('Title and difficulty are required to publish to the library.');
-  }
-  if (tagIds.length === 0 && tagNames.length === 0) {
-    throw new Error('Select at least one tag before publishing to the library.');
+  if (!Array.isArray(body.tagIds) || body.tagIds.length === 0) {
+    throw new ExpertPromoteValidationError('Select at least one tag before publishing to the library.');
   }
   if (!body.description || !body.suggestedDiagnosis || !body.keyFindings || !body.reflectiveQuestions) {
-    throw new Error('AI-mapped case fields (description, differential, findings, reflective questions) are required.');
+    throw new ExpertPromoteValidationError(
+      'Complete clinical description, suggested diagnosis, key findings, and reflective questions.',
+    );
   }
+
   return body;
 }
 
@@ -1062,6 +1019,11 @@ function rethrowPromoteWorkflowError(e: unknown): never {
   const message = getApiErrorMessage(e);
   if (isExpertPromoteUserErrorMessage(message)) {
     throw new Error(message);
+  }
+  if (/cannot be tracked|CaseTag/i.test(message)) {
+    throw new Error(
+      'System error: the server failed while saving case tags. Try again with fewer tags or contact an administrator.',
+    );
   }
   if (axios.isAxiosError(e) && e.response?.status === 400) {
     throw new Error(message || 'The library publish request was rejected. Check required fields and try again.');
