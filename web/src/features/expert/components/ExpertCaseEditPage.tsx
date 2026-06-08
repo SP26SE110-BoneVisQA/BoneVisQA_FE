@@ -34,6 +34,7 @@ import {
   EXPERT_DIFFICULTY_OPTIONS,
   EXPERT_IMAGE_MODALITIES,
   resolveExpertCategoryIdForSubmit,
+  resolveExpertPathologyGroupForSubmit,
   parseAnatomySiteFromDescription,
   stripAnatomySiteNote,
 } from '@/features/expert/lib/expert-ontology';
@@ -44,17 +45,18 @@ import {
 } from '@/features/expert/queries/use-expert-cases';
 import { useExpertProfile } from '@/features/expert/queries/use-expert-profile';
 import {
-  createExpertCaseImage,
   deleteExpertCaseImage,
+  uploadExpertCaseDicomArchive,
+  validateExpertStudyArchive,
   type ExpertCase,
 } from '@/lib/api/expert-cases';
+import { DicomMetadataSummary } from '@/components/shared/DicomMetadataSummary';
 import { getPublicApiOrigin } from '@/lib/api/client';
 import { appToast } from '@/lib/api/errors/app-toast';
 import { queryKeys } from '@/lib/query-keys';
-import { uploadExpertWorkbenchImage } from '@/lib/supabase/upload-medical-case-image';
-import { Loader2, X, ImagePlus, Upload } from 'lucide-react';
-
-const MAX_IMAGE_BYTES = 100 * 1024 * 1024;
+import type { VisualQaDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
+import { applyDicomMetadataToExpertForm } from '@/features/expert/lib/apply-dicom-metadata-to-form';
+import { Loader2, X, ImagePlus } from 'lucide-react';
 
 const getBackendBaseUrl = () => getPublicApiOrigin() || 'http://localhost:5046';
 
@@ -75,10 +77,10 @@ export function ExpertCaseEditPage() {
   const queryClient = useQueryClient();
   const id = String(params?.id ?? '');
 
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [dicomIngestBusy, setDicomIngestBusy] = useState(false);
   const [deleteImageId, setDeleteImageId] = useState<string | null>(null);
-  const [uploadModality, setUploadModality] = useState<string>('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [extractedMetadata, setExtractedMetadata] = useState<VisualQaDicomMetadata | null>(null);
+  const dicomInputRef = useRef<HTMLInputElement>(null);
 
   const caseQuery = useExpertCaseDetail(id);
   const metaQuery = useExpertCaseMeta();
@@ -123,9 +125,22 @@ export function ExpertCaseEditPage() {
       keyFindings: c.keyFindings ?? '',
       isActive: c.isActive,
       isApproved: c.isApproved,
-      tagIds: [],
+      tagIds: (c.tags ?? []).map((t) => t.id).filter(Boolean),
     });
+    if (c.dicomMetadata) setExtractedMetadata(c.dicomMetadata);
   }, [caseQuery.data, form]);
+
+  const categories = metaQuery.data?.categories ?? [];
+  const tags = metaQuery.data?.tags ?? [];
+
+  useEffect(() => {
+    if (!extractedMetadata) return;
+    applyDicomMetadataToExpertForm(
+      form.setValue as unknown as Parameters<typeof applyDicomMetadataToExpertForm>[0],
+      extractedMetadata,
+      categories,
+    );
+  }, [extractedMetadata, categories, form]);
 
   const handleSubmit = form.handleSubmit(async (values) => {
     const expertId = profileQuery.data?.id?.trim();
@@ -154,6 +169,10 @@ export function ExpertCaseEditPage() {
           suggestedDiagnosis: values.suggestedDiagnosis.trim(),
           reflectiveQuestions: values.reflectiveQuestions.trim(),
           keyFindings: values.keyFindings.trim(),
+          tagIds: values.tagIds,
+          anatomySite: values.anatomySite,
+          pathologyGroup: resolveExpertPathologyGroupForSubmit(values.categoryId, categories),
+          modality: values.modality,
         },
       });
       appToast.success('Case updated successfully.');
@@ -165,43 +184,45 @@ export function ExpertCaseEditPage() {
     }
   });
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDicomChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-
-    if (file.size > MAX_IMAGE_BYTES) {
-      appToast.error('Image must be 100 MB or smaller.');
+    const validationError = validateExpertStudyArchive(file);
+    if (validationError) {
+      appToast.error(validationError);
       return;
     }
-
-    setUploadingImage(true);
-    const modality = uploadModality || form.getValues('modality');
-
+    setDicomIngestBusy(true);
     try {
-      await appToast.promise(
-        (async () => {
-          await uploadExpertWorkbenchImage(file);
-          await createExpertCaseImage(id, file, modality);
-        })(),
-        {
-          loading: 'Uploading medical image…',
-          success: 'Image added to case successfully.',
-          error: 'Image upload failed.',
-        },
-      );
-
+      const ingestPromise = uploadExpertCaseDicomArchive(file, {
+        caseId: id,
+        diagnosisText: form.getValues('description') || undefined,
+        skipApiToast: true,
+      });
+      void appToast.promise(ingestPromise, {
+        loading: 'Ingesting DICOM archive…',
+        success: 'DICOM archive ingested — images and metadata updated.',
+        error: 'DICOM ingest failed.',
+      });
+      const ingest = await ingestPromise;
+      if (ingest.dicomMetadata) setExtractedMetadata(ingest.dicomMetadata);
       void queryClient.invalidateQueries({ queryKey: queryKeys.expert.caseDetail(id) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.expert.cases() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.expert.cases() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.expert.dashboard() });
-
-      setUploadModality('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch {
       /* toast handled */
     } finally {
-      setUploadingImage(false);
+      setDicomIngestBusy(false);
     }
+  };
+
+  const toggleTag = (tagId: string) => {
+    const current = form.getValues('tagIds') ?? [];
+    const next = current.includes(tagId)
+      ? current.filter((tid) => tid !== tagId)
+      : [...current, tagId];
+    form.setValue('tagIds', next, { shouldDirty: true });
   };
 
   const handleDeleteImage = async () => {
@@ -220,8 +241,7 @@ export function ExpertCaseEditPage() {
   };
 
   const loading = caseQuery.isPending || metaQuery.isPending || profileQuery.isPending;
-  const categories = metaQuery.data?.categories ?? [];
-  const busy = updateMutation.isPending || uploadingImage || deleteImageId !== null;
+  const busy = updateMutation.isPending || dicomIngestBusy || deleteImageId !== null;
   const caseData: ExpertCase | undefined = caseQuery.data;
   const errorMsg =
     caseQuery.error instanceof Error ? caseQuery.error.message : 'Could not load case.';
@@ -297,60 +317,22 @@ export function ExpertCaseEditPage() {
                     </div>
                   )}
 
-                  {/* Upload New Image Section */}
                   <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
-                    <p className="text-sm font-medium text-card-foreground">Add New Image</p>
-
-                    {/* Modality Selector */}
-                    <div>
-                      <label className="mb-1 block text-xs text-muted-foreground">Modality (optional)</label>
-                      <Select value={uploadModality} onValueChange={setUploadModality} disabled={busy}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select modality for upload" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {EXPERT_IMAGE_MODALITIES.map((m) => (
-                            <SelectItem key={m} value={m}>
-                              {m}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* File Input & Upload Button */}
+                    <p className="text-sm font-medium text-card-foreground">Replace / add DICOM archive</p>
                     <input
-                      ref={fileInputRef}
+                      ref={dicomInputRef}
                       type="file"
-                      accept="image/*"
+                      accept=".zip,.rar"
                       disabled={busy}
-                      onChange={handleImageChange}
-                      className="hidden"
+                      onChange={(e) => void handleDicomChange(e)}
+                      className="w-full text-sm"
                     />
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full gap-2"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={busy}
-                    >
-                      {uploadingImage ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-4 w-4" />
-                          Upload Image
-                        </>
-                      )}
-                    </Button>
-
-                    <p className="text-xs text-muted-foreground text-center">
-                      Supported: PNG, JPG, GIF (max 100MB)
+                    <p className="text-xs text-muted-foreground">
+                      Upload a .zip or .rar study archive. Metadata will refresh anatomy site and modality.
                     </p>
+                    {extractedMetadata ? (
+                      <DicomMetadataSummary metadata={extractedMetadata} compact />
+                    ) : null}
                   </div>
                 </div>
 
@@ -379,9 +361,9 @@ export function ExpertCaseEditPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Category</p>
+                      <p className="text-xs text-muted-foreground">Pathology group</p>
                       <p className="mt-1 font-medium text-card-foreground">
-                        {caseData?.categoryName || 'Uncategorized'}
+                        {caseData?.pathologyGroup || caseData?.categoryName || 'Uncategorized'}
                       </p>
                     </div>
                     <div>
@@ -592,6 +574,32 @@ export function ExpertCaseEditPage() {
                       )}
                     />
 
+                    {tags.length > 0 ? (
+                      <div>
+                        <p className="mb-2 text-sm font-medium">Tags (optional)</p>
+                        <div className="flex flex-wrap gap-2">
+                          {tags.map((t) => {
+                            const selected = (form.watch('tagIds') ?? []).includes(t.id);
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                disabled={busy}
+                                onClick={() => toggleTag(t.id)}
+                                className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                                  selected
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-border bg-card text-muted-foreground'
+                                }`}
+                              >
+                                {t.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
                     <p className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs text-emerald-900">
                       Saved changes are published immediately to your case library and to students in your supported
                       classes.
@@ -620,7 +628,7 @@ export function ExpertCaseEditPage() {
                 {busy ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {uploadingImage ? 'Uploading image…' : 'Saving changes…'}
+                    {dicomIngestBusy ? 'Ingesting DICOM…' : 'Saving changes…'}
                   </>
                 ) : (
                   'Save Changes'

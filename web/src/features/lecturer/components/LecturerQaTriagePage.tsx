@@ -77,6 +77,7 @@ import {
   triageHistoryStatusLabel,
 } from '@/lib/lecturer/triage-display';
 import { formatReviewFeedbackDisplay } from '@/lib/student/visual-qa-feedback';
+import { WorkspaceRagSources } from '@/features/visual-qa/components/WorkspaceRagSources';
 
 function scoreLabel(score: number | null | undefined) {
   if (score == null || Number.isNaN(score)) {
@@ -324,6 +325,28 @@ function TriageStructuredField({
   );
 }
 
+function TriageReferencesField({
+  turn,
+  row,
+}: {
+  turn: VisualQaTurn | null;
+  row: LectStudentQuestionDto;
+}) {
+  const citations = turn?.citations ?? [];
+  const fallbackText = formatTriageReferences(turn, row);
+  if (citations.length > 0) {
+    return (
+      <div className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          References & citations
+        </p>
+        <WorkspaceRagSources citations={citations} className="mt-2 border-t-0 pt-0" defaultExpanded />
+      </div>
+    );
+  }
+  return <TriageStructuredField title="References & citations" text={fallbackText} />;
+}
+
 function TriageStructuredAnswerPanel({
   turn,
   row,
@@ -342,7 +365,6 @@ function TriageStructuredAnswerPanel({
   const keyImaging = turn?.keyImagingFindings?.trim() ?? '';
   const reflective =
     turn?.reflectiveQuestions?.filter((item) => item.trim()).join('\n') ?? '';
-  const references = formatTriageReferences(turn, row);
 
   return (
     <div className="mt-4 space-y-3">
@@ -350,7 +372,7 @@ function TriageStructuredAnswerPanel({
       <TriageStructuredField title="Differential diagnoses" items={differential} />
       <TriageStructuredField title="Key imaging findings" text={keyImaging} />
       <TriageStructuredField title="Reflective questions" text={reflective} />
-      <TriageStructuredField title="References & citations" text={references} />
+      <TriageReferencesField turn={turn} row={row} />
     </div>
   );
 }
@@ -528,6 +550,10 @@ export function LecturerQaTriagePage() {
   };
 
   const openEscalateDialog = (item: LectStudentQuestionDto) => {
+    if (hasClassExpert) {
+      void handleEscalate(item, null);
+      return;
+    }
     setPendingEscalationItem(item);
     escalateForm.reset({ specialtyId: '' });
     setEscalateConfirmOpen(true);
@@ -1067,7 +1093,7 @@ export function LecturerQaTriagePage() {
                           }
                           isLoading={escalateMutation.isPending}
                           variant="primary"
-                          className="pointer-events-auto rounded-2xl !border-red-700 !bg-red-600 px-5 font-semibold !text-white shadow-[0_12px_28px_rgba(220,38,38,0.24)] hover:!bg-red-700 focus-visible:!ring-red-500"
+                          className="pointer-events-auto rounded-2xl !border-indigo-700 !bg-indigo-600 px-5 font-semibold !text-white shadow-[0_12px_28px_rgba(79,70,229,0.24)] hover:!bg-indigo-700 focus-visible:!ring-indigo-500"
                           onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
@@ -1104,44 +1130,48 @@ export function LecturerQaTriagePage() {
           <AlertDialogHeader className="border-b border-slate-200/70 px-6 py-5">
             <AlertDialogTitle>Escalate to expert?</AlertDialogTitle>
             <AlertDialogDescription>
-              Choose a target specialty before routing this case to expert review.
+              {hasClassExpert
+                ? 'This class has a single assigned expert — escalation will route directly to them.'
+                : 'Choose a target specialty before routing this case to expert review.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Form {...escalateForm}>
             <form onSubmit={handleEscalateSubmit} className="space-y-4 px-6 py-5">
-              <FormField
-                control={escalateForm.control}
-                name="specialtyId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Target Expert Specialty</FormLabel>
-                    <Select
-                      value={field.value || undefined}
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        if (escalateForm.formState.errors.specialtyId) {
-                          escalateForm.clearErrors('specialtyId');
-                        }
-                      }}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="mt-2 h-12 rounded-2xl border-slate-200/70 bg-white shadow-sm">
-                          <SelectValue placeholder="Choose specialty routing" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="auto">Auto-route / General expert pool</SelectItem>
-                        {specialties.map((specialty) => (
-                          <SelectItem key={specialty.id} value={specialty.id}>
-                            {specialty.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {!hasClassExpert ? (
+                <FormField
+                  control={escalateForm.control}
+                  name="specialtyId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Target Expert Specialty</FormLabel>
+                      <Select
+                        value={field.value || undefined}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          if (escalateForm.formState.errors.specialtyId) {
+                            escalateForm.clearErrors('specialtyId');
+                          }
+                        }}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="mt-2 h-12 rounded-2xl border-slate-200/70 bg-white shadow-sm">
+                            <SelectValue placeholder="Choose specialty routing" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="auto">Auto-route / General expert pool</SelectItem>
+                          {specialties.map((specialty) => (
+                            <SelectItem key={specialty.id} value={specialty.id}>
+                              {specialty.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : null}
               <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
                 {selectedSpecialtyId === 'auto'
                   ? 'Auto-route leaves the final expert assignment to backend routing rules.'
@@ -1171,7 +1201,7 @@ export function LecturerQaTriagePage() {
                 <Button
                   type="submit"
                   disabled={escalateMutation.isPending}
-                  className="rounded-2xl border-danger bg-danger text-white hover:bg-danger/90"
+                  className="rounded-2xl border-indigo-700 bg-indigo-600 text-white hover:bg-indigo-700"
                 >
                   {escalateMutation.isPending ? 'Escalating…' : 'Confirm escalation'}
                 </Button>

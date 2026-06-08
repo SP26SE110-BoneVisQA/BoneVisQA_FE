@@ -268,19 +268,23 @@ export default function ExpertCaseDetailPage() {
               </div>
               <div className="p-4 space-y-4">
                 <div className="flex justify-between items-start border-b border-border/50 pb-3 last:border-0">
-                  <span className="text-xs font-medium text-muted-foreground">Bone / Region</span>
+                  <span className="text-xs font-medium text-muted-foreground">Anatomy site</span>
                   <span className="text-sm text-right max-w-[60%] text-card-foreground">
-                    {caseRow.boneLocation === '—' ? 'Not specified' : caseRow.boneLocation}
+                    {(caseRow.anatomySite || caseRow.boneLocation) === '—'
+                      ? 'Not specified'
+                      : caseRow.anatomySite || caseRow.boneLocation}
                   </span>
                 </div>
                 <div className="flex justify-between items-start border-b border-border/50 pb-3">
-                  <span className="text-xs font-medium text-muted-foreground">Category</span>
-                  <span className="text-sm text-right max-w-[60%] text-card-foreground">{caseRow.categoryName}</span>
+                  <span className="text-xs font-medium text-muted-foreground">Pathology group</span>
+                  <span className="text-sm text-right max-w-[60%] text-card-foreground">
+                    {caseRow.pathologyGroup || caseRow.categoryName}
+                  </span>
                 </div>
                 <div className="flex justify-between items-start border-b border-border/50 pb-3">
                   <span className="text-xs font-medium text-muted-foreground">Expert</span>
                   <span className="text-sm text-right max-w-[60%] text-card-foreground">
-                    {caseRow.expertName === '—' ? 'Not assigned' : caseRow.expertName}
+                    {caseRow.expertName?.trim() || caseRow.addedBy?.trim() || 'Not assigned'}
                   </span>
                 </div>
                 <div className="flex justify-between items-start border-b border-border/50 pb-3">

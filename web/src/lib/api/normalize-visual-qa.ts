@@ -517,6 +517,11 @@ export function normalizeVisualQaSessionReport(raw: unknown): VisualQaSessionRep
               (capabilitiesRaw as { reviewRoute?: unknown }).reviewRoute ??
                 (capabilitiesRaw as { review_route?: unknown }).review_route,
             ).trim() || undefined,
+          studyMode:
+            asString(
+              (capabilitiesRaw as { studyMode?: unknown }).studyMode ??
+                (capabilitiesRaw as { study_mode?: unknown }).study_mode,
+            ).trim() || undefined,
         }
       : undefined;
   const systemNoticeRaw = pick(o, ['systemNotice', 'system_notice']);

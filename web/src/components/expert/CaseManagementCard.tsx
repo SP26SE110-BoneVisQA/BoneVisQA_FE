@@ -77,8 +77,11 @@ export default function CaseManagementCard({
   const originInfo = originConfig[caseOrigin];
   const OriginIcon = originInfo.icon;
   const dateLabel = formatCaseDateForDisplay(addedDate);
-  const locLabel = boneLocation === '—' ? 'Not specified' : boneLocation;
-  const catLabel = lesionType === '—' ? 'Uncategorized' : lesionType;
+  const locLabel = boneLocation === '—' || boneLocation === 'General' ? 'Not specified' : boneLocation;
+  const catLabel =
+    lesionType === '—' || lesionType === 'General' || lesionType === 'Uncategorized'
+      ? 'Uncategorized'
+      : lesionType;
   const thumbSrc = thumbnailUrl?.trim() ? resolveApiAssetUrl(thumbnailUrl.trim()) : null;
   const showImage = thumbSrc && !imgError;
 

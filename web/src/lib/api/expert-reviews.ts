@@ -3,7 +3,13 @@ import { http, getApiErrorMessage } from './client';
 import type { ExpertPendingReview } from './expert-dashboard';
 import { fetchExpertPendingReviews } from './expert-dashboard';
 import { normalizeVisualQaReport, normalizeVisualQaSessionReport } from './normalize-visual-qa';
-import type { Citation, ExpertReviewItem, VisualQaReport, VisualQaTurn } from './types';
+import type {
+  Citation,
+  ExpertReviewItem,
+  ExpertReviewSavedDraft,
+  VisualQaReport,
+  VisualQaTurn,
+} from './types';
 import {
   isValidNormalizedBoundingBox,
   parseCustomPolygon,
@@ -386,6 +392,10 @@ function mapExpertItem(row: unknown): ExpertReviewItem | null {
     r.SubmittedAt ??
     '';
 
+  const draftFromDetail = parseExpertReviewDraftPayload(
+    r.draft ?? r.savedDraft ?? r.reviewDraft ?? r.Draft ?? r.reviewNoteDraft,
+  );
+
   return {
     sessionId,
     answerId: answerIdRaw || null,
@@ -429,6 +439,7 @@ function mapExpertItem(row: unknown): ExpertReviewItem | null {
     keyImagingFindings: report.keyImagingFindings ?? null,
     reflectiveQuestions: reflectiveQuestionsToNullableString(report.reflectiveQuestions),
     queueSource: 'queue',
+    savedDraft: draftFromDetail ?? undefined,
   };
 }
 
@@ -639,10 +650,156 @@ const reviewSubmitBody = (payload: ExpertReviewUpdatePayload) => {
   };
 };
 
-export interface ExpertReviewDraftPayload {
-  reviewNote?: string;
-  correctedRoiBoundingBox?: number[];
+export type ExpertReviewDraftPayload = ExpertReviewSavedDraft;
+
+function parseDraftDifferentialList(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((x) => String(x).trim()).filter(Boolean);
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.map((x) => String(x).trim()).filter(Boolean);
+      }
+    } catch {
+      return raw
+        .split(/[\n;]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+  return [];
 }
+
+function parseDraftRoi(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw) || raw.length < 4) return undefined;
+  const nums = raw.slice(0, 4).map((n) => Number(n));
+  if (nums.every((n) => Number.isFinite(n))) return nums;
+  return undefined;
+}
+
+/** Normalizes GET /draft or embedded draft JSON from review detail. */
+export function parseExpertReviewDraftPayload(raw: unknown): ExpertReviewDraftPayload | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      return parseExpertReviewDraftPayload(JSON.parse(raw));
+    } catch {
+      return raw.trim() ? { reviewNote: raw.trim() } : null;
+    }
+  }
+  if (typeof raw !== 'object') return null;
+
+  const root = raw as Record<string, unknown>;
+  const row = (root.data ?? root.draft ?? root.result ?? root.savedDraft ?? root) as Record<
+    string,
+    unknown
+  >;
+
+  const structuredDiagnosis = String(
+    row.structuredDiagnosis ?? row.StructuredDiagnosis ?? '',
+  ).trim();
+  const keyImagingFindingsRaw = row.keyImagingFindings ?? row.KeyImagingFindings;
+  const reflectiveQuestionsRaw = row.reflectiveQuestions ?? row.ReflectiveQuestions;
+  const reviewNote = String(row.reviewNote ?? row.ReviewNote ?? '').trim();
+  const answerText = String(row.answerText ?? row.AnswerText ?? '').trim();
+  const differentialDiagnoses = parseDraftDifferentialList(
+    row.differentialDiagnoses ?? row.DifferentialDiagnoses,
+  );
+  const correctedRoiBoundingBox = parseDraftRoi(
+    row.correctedRoiBoundingBox ?? row.CorrectedRoiBoundingBox,
+  );
+  const libraryTitle = String(row.libraryTitle ?? row.LibraryTitle ?? '').trim();
+  const libraryCategoryId = String(row.libraryCategoryId ?? row.LibraryCategoryId ?? '').trim();
+  const libraryDifficulty = String(row.libraryDifficulty ?? row.LibraryDifficulty ?? '').trim();
+  const libraryClinicalDescription = String(
+    row.libraryClinicalDescription ?? row.LibraryClinicalDescription ?? '',
+  ).trim();
+  const libraryAnatomySite = String(row.libraryAnatomySite ?? row.LibraryAnatomySite ?? '').trim();
+  const tagIdsRaw = row.libraryTagIds ?? row.LibraryTagIds ?? row.tagIds ?? row.TagIds;
+  const libraryTagIds = Array.isArray(tagIdsRaw)
+    ? tagIdsRaw.map((id) => String(id).trim()).filter(Boolean)
+    : [];
+
+  const hasContent =
+    Boolean(structuredDiagnosis) ||
+    Boolean(answerText) ||
+    differentialDiagnoses.length > 0 ||
+    Boolean(keyImagingFindingsRaw) ||
+    Boolean(reflectiveQuestionsRaw) ||
+    Boolean(reviewNote) ||
+    Boolean(correctedRoiBoundingBox) ||
+    Boolean(libraryTitle) ||
+    Boolean(libraryClinicalDescription);
+
+  if (!hasContent) return null;
+
+  return {
+    ...(answerText ? { answerText } : {}),
+    ...(structuredDiagnosis ? { structuredDiagnosis } : {}),
+    ...(differentialDiagnoses.length > 0 ? { differentialDiagnoses } : {}),
+    ...(keyImagingFindingsRaw != null
+      ? { keyImagingFindings: String(keyImagingFindingsRaw).trim() || null }
+      : {}),
+    ...(reflectiveQuestionsRaw != null
+      ? { reflectiveQuestions: String(reflectiveQuestionsRaw).trim() || null }
+      : {}),
+    ...(reviewNote ? { reviewNote } : {}),
+    ...(correctedRoiBoundingBox ? { correctedRoiBoundingBox } : {}),
+    ...(libraryTitle ? { libraryTitle } : {}),
+    ...(libraryCategoryId ? { libraryCategoryId } : {}),
+    ...(libraryDifficulty ? { libraryDifficulty } : {}),
+    ...(libraryTagIds.length > 0 ? { libraryTagIds } : {}),
+    ...(libraryClinicalDescription ? { libraryClinicalDescription } : {}),
+    ...(libraryAnatomySite ? { libraryAnatomySite } : {}),
+  };
+}
+
+export async function fetchExpertReviewDraft(
+  sessionId: string,
+): Promise<ExpertReviewDraftPayload | null> {
+  const id = String(sessionId ?? '').trim();
+  if (!id) return null;
+  try {
+    const { data } = await http.get<unknown>(
+      `/api/expert/reviews/${encodeURIComponent(id)}/draft`,
+      { skipApiToast: true },
+    );
+    return parseExpertReviewDraftPayload(data);
+  } catch (e) {
+    if (axios.isAxiosError(e) && e.response?.status === 404) return null;
+    return null;
+  }
+}
+
+const reviewDraftBody = (payload: ExpertReviewSavedDraft): Record<string, unknown> => {
+  const body: Record<string, unknown> = {};
+  if (payload.answerText !== undefined) body.answerText = payload.answerText;
+  if (payload.structuredDiagnosis !== undefined) body.structuredDiagnosis = payload.structuredDiagnosis;
+  if (payload.differentialDiagnoses !== undefined) {
+    body.differentialDiagnoses =
+      payload.differentialDiagnoses.length > 0
+        ? JSON.stringify(payload.differentialDiagnoses)
+        : null;
+  }
+  if (payload.keyImagingFindings !== undefined) body.keyImagingFindings = payload.keyImagingFindings;
+  if (payload.reflectiveQuestions !== undefined) body.reflectiveQuestions = payload.reflectiveQuestions;
+  if (payload.reviewNote !== undefined) body.reviewNote = payload.reviewNote;
+  if (payload.libraryTitle !== undefined) body.libraryTitle = payload.libraryTitle;
+  if (payload.libraryCategoryId !== undefined) body.libraryCategoryId = payload.libraryCategoryId;
+  if (payload.libraryDifficulty !== undefined) body.libraryDifficulty = payload.libraryDifficulty;
+  if (payload.libraryClinicalDescription !== undefined) {
+    body.libraryClinicalDescription = payload.libraryClinicalDescription;
+  }
+  if (payload.libraryAnatomySite !== undefined) body.libraryAnatomySite = payload.libraryAnatomySite;
+  if (payload.libraryTagIds !== undefined) body.libraryTagIds = payload.libraryTagIds;
+  const roi = payload.correctedRoiBoundingBox;
+  if (Array.isArray(roi) && roi.length >= 4 && roi.slice(0, 4).every((n) => Number.isFinite(n))) {
+    body.correctedRoiBoundingBox = roi.slice(0, 4);
+  }
+  return body;
+};
 
 export async function putExpertReviewDraft(
   sessionId: string,
@@ -650,12 +807,7 @@ export async function putExpertReviewDraft(
 ): Promise<void> {
   const id = String(sessionId ?? '').trim();
   if (!id) throw new Error('Session id is required.');
-  const body: Record<string, unknown> = {};
-  if (payload.reviewNote !== undefined) body.reviewNote = payload.reviewNote;
-  const roi = payload.correctedRoiBoundingBox;
-  if (Array.isArray(roi) && roi.length >= 4 && roi.slice(0, 4).every((n) => Number.isFinite(n))) {
-    body.correctedRoiBoundingBox = roi.slice(0, 4);
-  }
+  const body = reviewDraftBody(payload);
   try {
     await http.put(`/api/expert/reviews/${encodeURIComponent(id)}/draft`, body, {
       headers: { 'Content-Type': 'application/json' },
@@ -757,6 +909,9 @@ export interface PromoteExpertReviewPayload {
   reflectiveQuestions: string;
   studentQuestion?: string;
   referencesAndCitations?: string;
+  anatomySite?: string;
+  boneLocation?: string;
+  pathologyGroup?: string;
   /** ROI / annotation theo từng turn (JSON tuỳ BE). */
   turnAnnotations?: Array<Record<string, unknown>>;
 }
@@ -806,6 +961,13 @@ export async function promoteExpertReview(
     TagIds: tagIds,
     TagNames: tagNames.length > 0 ? tagNames : undefined,
   };
+  const anatomy = payload.anatomySite?.trim() || payload.boneLocation?.trim();
+  if (anatomy) {
+    body.anatomySite = anatomy;
+    body.boneLocation = anatomy;
+  }
+  const pathologyGroup = payload.pathologyGroup?.trim();
+  if (pathologyGroup) body.pathologyGroup = pathologyGroup;
   if (Array.isArray(payload.turnAnnotations) && payload.turnAnnotations.length > 0) {
     body.turnAnnotations = payload.turnAnnotations;
   }

@@ -11,6 +11,17 @@ import {
 } from '@/lib/api/errors/toast-messages.en';
 import { appToast } from '@/lib/api/errors/app-toast';
 
+const VALIDATION_HINT =
+  /required|invalid|must|please|check your|missing|cannot be empty|too (short|long)|at least|select|enter|provide|validation/i;
+
+function isLikelyValidationError(status: number | undefined, message: string): boolean {
+  if (status !== 400 && status !== 422) return false;
+  const text = message.trim();
+  if (!text) return true;
+  if (VALIDATION_HINT.test(text)) return true;
+  return text.length <= 200 && !looksLikeTechnicalErrorMessage(text);
+}
+
 function resolveUserSafeMessage(err: AxiosError, status: number | undefined): string {
   const parsed = parseApiErrorBody(err.response?.data, status);
   const raw = parsed.message.trim();
@@ -50,7 +61,9 @@ export function showApiErrorToast(err: unknown): void {
 
   const userMessage = resolveUserSafeMessage(err, status);
   const spec = getToastSpecForHttpStatus(status, userMessage || null);
-  appToast.fromVariant(spec.variant, spec.message);
+  const variant =
+    isLikelyValidationError(status, spec.message) && spec.variant === 'error' ? 'warning' : spec.variant;
+  appToast.fromVariant(variant, spec.message);
 }
 
 export function showAccessDeniedWithoutLogoutToast(): void {

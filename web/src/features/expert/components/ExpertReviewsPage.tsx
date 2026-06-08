@@ -20,16 +20,18 @@ import {
   approveExpertReview,
   deleteExpertReviewDraft,
   fetchExpertReviewDetail,
+  fetchExpertReviewDraft,
   hasExpertReviewSelectedPairMismatch,
   putExpertReviewDraft,
   REVIEW_WORKFLOW_CONFLICT,
+  type ExpertReviewDraftPayload,
   type ExpertReviewUpdatePayload,
   type PromoteExpertReviewPayload,
   promoteExpertReview,
   resolveExpertReview,
 } from '@/lib/api/expert-reviews';
 import { fetchExpertCategories, fetchExpertTags, type ExpertCategory, type ExpertTag } from '@/lib/api/expert-cases';
-import type { ExpertReviewItem } from '@/lib/api/types';
+import type { ExpertReviewItem, ExpertReviewSavedDraft } from '@/lib/api/types';
 import { getWorkflowStatusMeta, normalizeWorkflowStatus } from '@/lib/visual-qa-workflow';
 import { toast as sonnerToast } from 'sonner';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
@@ -131,11 +133,19 @@ function structuredDiagnosisForPromote(item: ExpertReviewItem, diag: string, use
   );
 }
 
-function collectTurnAnnotationsForPromote(item: ExpertReviewItem): Array<Record<string, unknown>> {
+function collectTurnAnnotationsForPromote(
+  item: ExpertReviewItem,
+  correctedRoi?: number[] | null,
+): Array<Record<string, unknown>> {
   const turns = item.turns ?? [];
   const out: Array<Record<string, unknown>> = [];
-  for (const t of turns) {
-    const roi = t.roiBoundingBox ?? t.questionCoordinates ?? null;
+  const expertRoi =
+    Array.isArray(correctedRoi) && correctedRoi.length >= 4 ? correctedRoi.slice(0, 4) : null;
+
+  for (let i = 0; i < turns.length; i++) {
+    const t = turns[i];
+    const studentRoi = t.roiBoundingBox ?? t.questionCoordinates ?? null;
+    const roi = i === 0 && expertRoi ? expertRoi : studentRoi;
     if (!roi) continue;
     out.push({
       turnIndex: t.turnIndex,
@@ -143,9 +153,107 @@ function collectTurnAnnotationsForPromote(item: ExpertReviewItem): Array<Record<
       userMessageId: t.userMessageId,
       assistantMessageId: t.assistantMessageId,
       roiBoundingBox: roi,
+      ...(i === 0 && expertRoi ? { source: 'expert_corrected' } : {}),
     });
   }
+
+  if (out.length === 0 && expertRoi) {
+    const first = turns[0];
+    out.push({
+      turnIndex: first?.turnIndex ?? 0,
+      turnId: first?.turnId,
+      userMessageId: first?.userMessageId,
+      assistantMessageId: first?.assistantMessageId,
+      roiBoundingBox: expertRoi,
+      source: 'expert_corrected',
+    });
+  }
+
   return out;
+}
+
+function buildExpertReviewDraftPayload(
+  item: ExpertReviewItem,
+  ctx: {
+    diag: string;
+    keyText: string;
+    keyImagingEdit: string;
+    reflectiveEdit: string;
+    libraryTitle: string;
+    libraryCategoryId: string;
+    libraryDifficulty: string;
+    libraryTagIds: string[];
+    libraryAnatomySite: string;
+    libraryClinicalDescription: string;
+    categories: ExpertCategory[];
+    roi?: number[] | null;
+    explicitNote?: string;
+  },
+): ExpertReviewDraftPayload {
+  const differentialLines = ctx.keyText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const reviewNote =
+    ctx.explicitNote?.trim() ||
+    buildExpertReviewDraftNote({
+      diag: ctx.diag,
+      keyText: ctx.keyText,
+      keyImagingEdit: ctx.keyImagingEdit,
+      reflectiveEdit: ctx.reflectiveEdit,
+      libraryTitle: ctx.libraryTitle,
+      libraryCategoryId: ctx.libraryCategoryId,
+      libraryClinicalDescription: ctx.libraryClinicalDescription,
+      categories: ctx.categories,
+    });
+
+  return {
+    answerText: item.report.answerText || '',
+    structuredDiagnosis: ctx.diag.trim() || item.report.suggestedDiagnosis || '',
+    differentialDiagnoses:
+      differentialLines.length > 0 ? differentialLines : item.report.differentialDiagnoses,
+    keyImagingFindings: ctx.keyImagingEdit.trim() || item.report.keyImagingFindings || null,
+    reflectiveQuestions:
+      ctx.reflectiveEdit.trim() ||
+      reflectiveQuestionsToEditText(item.report, item.reflectiveQuestions) ||
+      null,
+    reviewNote,
+    ...(Array.isArray(ctx.roi) && ctx.roi.length >= 4
+      ? { correctedRoiBoundingBox: ctx.roi.slice(0, 4) }
+      : {}),
+    ...(ctx.libraryTitle.trim() ? { libraryTitle: ctx.libraryTitle.trim() } : {}),
+    ...(ctx.libraryCategoryId.trim() ? { libraryCategoryId: ctx.libraryCategoryId.trim() } : {}),
+    ...(ctx.libraryDifficulty.trim() ? { libraryDifficulty: ctx.libraryDifficulty.trim() } : {}),
+    ...(ctx.libraryClinicalDescription.trim()
+      ? { libraryClinicalDescription: ctx.libraryClinicalDescription.trim() }
+      : {}),
+    ...(ctx.libraryAnatomySite?.trim() ? { libraryAnatomySite: ctx.libraryAnatomySite.trim() } : {}),
+    ...(ctx.libraryTagIds.length > 0 ? { libraryTagIds: ctx.libraryTagIds } : {}),
+  };
+}
+
+function buildExpertReviewDraftNote(ctx: {
+  diag: string;
+  keyText: string;
+  keyImagingEdit: string;
+  reflectiveEdit: string;
+  libraryTitle: string;
+  libraryCategoryId: string;
+  libraryClinicalDescription: string;
+  categories: ExpertCategory[];
+}): string {
+  const parts: string[] = [];
+  if (ctx.diag.trim()) parts.push(`Suggested diagnosis: ${ctx.diag.trim()}`);
+  if (ctx.keyText.trim()) parts.push(`Differential diagnoses:\n${ctx.keyText.trim()}`);
+  if (ctx.keyImagingEdit.trim()) parts.push(`Key imaging findings:\n${ctx.keyImagingEdit.trim()}`);
+  if (ctx.reflectiveEdit.trim()) parts.push(`Reflective questions:\n${ctx.reflectiveEdit.trim()}`);
+  if (ctx.libraryTitle.trim()) parts.push(`Library title: ${ctx.libraryTitle.trim()}`);
+  if (ctx.libraryClinicalDescription.trim()) {
+    parts.push(`Clinical description: ${ctx.libraryClinicalDescription.trim()}`);
+  }
+  const cat = ctx.categories.find((c) => c.id === ctx.libraryCategoryId.trim());
+  if (cat?.name) parts.push(`Pathology group: ${cat.name}`);
+  return parts.length > 0 ? parts.join('\n\n') : 'Expert review draft saved.';
 }
 
 function prefillClinicalFieldsFromItem(
@@ -173,6 +281,59 @@ function prefillClinicalFieldsFromItem(
     item.report.keyImagingFindings?.trim() ?? item.keyImagingFindings?.trim() ?? '',
   );
   setters.setReflectiveEdit(reflectiveQuestionsToEditText(item.report, item.reflectiveQuestions));
+}
+
+async function resolveExpertReviewSavedDraft(
+  item: ExpertReviewItem,
+): Promise<ExpertReviewSavedDraft | null> {
+  if (item.savedDraft) return item.savedDraft;
+  if (getWorkflowStatusMeta(item.status).terminal) return null;
+  return fetchExpertReviewDraft(item.sessionId);
+}
+
+function applyExpertReviewSavedDraft(
+  sessionId: string,
+  draft: ExpertReviewSavedDraft,
+  setters: {
+    setDiag: (v: string) => void;
+    setKeyText: (v: string) => void;
+    setKeyImagingEdit: (v: string) => void;
+    setReflectiveEdit: (v: string) => void;
+    setLibraryTitle: (v: string) => void;
+    setLibraryCategoryId: (v: string) => void;
+    setLibraryDifficulty: (v: string) => void;
+    setLibraryTagIds: (v: string[]) => void;
+    setLibraryAnatomySite: (v: string) => void;
+    setLibraryClinicalDescription: (v: string) => void;
+    setReplyDraft: (sid: string, note: string) => void;
+  },
+): number[] | undefined {
+  if (draft.structuredDiagnosis?.trim()) {
+    setters.setDiag(draft.structuredDiagnosis.trim());
+  }
+  if (draft.differentialDiagnoses?.length) {
+    setters.setKeyText(
+      draft.differentialDiagnoses.map((s) => String(s).trim()).filter(Boolean).join('\n'),
+    );
+  }
+  if (draft.keyImagingFindings != null && String(draft.keyImagingFindings).trim()) {
+    setters.setKeyImagingEdit(String(draft.keyImagingFindings).trim());
+  }
+  if (draft.reflectiveQuestions != null && String(draft.reflectiveQuestions).trim()) {
+    setters.setReflectiveEdit(String(draft.reflectiveQuestions).trim());
+  }
+  if (draft.libraryTitle?.trim()) setters.setLibraryTitle(draft.libraryTitle.trim());
+  if (draft.libraryCategoryId?.trim()) setters.setLibraryCategoryId(draft.libraryCategoryId.trim());
+  if (draft.libraryDifficulty?.trim()) setters.setLibraryDifficulty(draft.libraryDifficulty.trim());
+  if (draft.libraryTagIds?.length) {
+    setters.setLibraryTagIds(draft.libraryTagIds.map((id) => String(id).trim()).filter(Boolean));
+  }
+  if (draft.libraryAnatomySite?.trim()) setters.setLibraryAnatomySite(draft.libraryAnatomySite.trim());
+  if (draft.libraryClinicalDescription?.trim()) {
+    setters.setLibraryClinicalDescription(draft.libraryClinicalDescription.trim());
+  }
+  if (draft.reviewNote?.trim()) setters.setReplyDraft(sessionId, draft.reviewNote.trim());
+  return draft.correctedRoiBoundingBox;
 }
 
 function prefillLibraryFieldsFromItem(
@@ -259,8 +420,10 @@ function buildPromotePayload(
     libraryDifficulty: string;
     libraryTagIds: string[];
     libraryClinicalDescription: string;
+    libraryAnatomySite?: string;
     categories: ExpertCategory[];
     tags: ExpertTag[];
+    correctedRoi?: number[] | null;
   },
 ): PromoteExpertReviewPayload {
   const catId = ctx.libraryCategoryId.trim();
@@ -300,7 +463,11 @@ function buildPromotePayload(
     reflectiveQuestions,
     studentQuestion: item.question?.trim() || firstStudentQuestion(item) || undefined,
     referencesAndCitations: formatReferencesFromReviewItem(item) || undefined,
-    turnAnnotations: collectTurnAnnotationsForPromote(item),
+    anatomySite: ctx.libraryAnatomySite?.trim() || undefined,
+    boneLocation: ctx.libraryAnatomySite?.trim() || undefined,
+    pathologyGroup:
+      ctx.categories.find((c) => c.id === ctx.libraryCategoryId.trim())?.name || undefined,
+    turnAnnotations: collectTurnAnnotationsForPromote(item, ctx.correctedRoi),
   };
 }
 
@@ -321,16 +488,9 @@ function validatePromotePayload(payload: PromoteExpertReviewPayload): string | n
 
 async function saveReviewDraftIfNeeded(
   sessionId: string,
-  note: string | undefined,
-  roi: number[] | null | undefined,
+  payload: ExpertReviewDraftPayload,
 ): Promise<void> {
-  const hasNote = Boolean(note?.trim());
-  const hasRoi = Array.isArray(roi) && roi.length >= 4;
-  if (!hasNote && !hasRoi) return;
-  await putExpertReviewDraft(sessionId, {
-    ...(hasNote ? { reviewNote: note!.trim() } : {}),
-    ...(hasRoi ? { correctedRoiBoundingBox: roi!.slice(0, 4) } : {}),
-  });
+  await putExpertReviewDraft(sessionId, payload);
 }
 
 export function ExpertReviewsPage() {
@@ -351,6 +511,7 @@ export function ExpertReviewsPage() {
   const [saving, setSaving] = useState(false);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [roiClearEpochBySession, setRoiClearEpochBySession] = useState<Record<string, number>>({});
+  const [draftRoiBySession, setDraftRoiBySession] = useState<Record<string, number[] | undefined>>({});
   const [rejectModalItem, setRejectModalItem] = useState<ExpertReviewItem | null>(null);
   const [rejectModalNote, setRejectModalNote] = useState('');
   const openedFocusRef = useRef<string | null>(null);
@@ -396,81 +557,102 @@ export function ExpertReviewsPage() {
     if (categoriesQuery.data) setExpertCategories(categoriesQuery.data);
   }, [categoriesQuery.data]);
 
-  /** Bổ sung citations/turns đầy đủ khi BE chỉ trả tóm tắt trên queue list. */
-  useEffect(() => {
-    if (!active?.sessionId) return;
-    let cancelled = false;
-    void (async () => {
-      const detail = await fetchExpertReviewDetail(active.sessionId);
-      if (cancelled || !detail) return;
-      setItems((prev) =>
-        prev.map((i) => {
-          if (i.sessionId !== active.sessionId) return i;
-          const dc = detail.citations ?? [];
-          const ic = i.citations ?? [];
-          const cite =
-            dc.length > ic.length ? dc : dc.length > 0 && ic.length === 0 ? dc : ic;
-          const dt = detail.turns ?? [];
-          const it = i.turns ?? [];
-          const turns =
-            dt.length > it.length ? dt : dt.length > 0 && it.length === 0 ? dt : it;
-          return { ...i, citations: cite, turns };
-        }),
-      );
-      setActive((prev) => {
-        if (!prev || prev.sessionId !== active.sessionId) return prev;
-        const dc = detail.citations ?? [];
-        const ic = prev.citations ?? [];
-        const cite =
-          dc.length > ic.length ? dc : dc.length > 0 && ic.length === 0 ? dc : ic;
-        const dt = detail.turns ?? [];
-        const it = prev.turns ?? [];
-        const turns =
-          dt.length > it.length ? dt : dt.length > 0 && it.length === 0 ? dt : it;
-        const merged = {
-          ...prev,
-          ...detail,
-          report: detail.report ?? prev.report,
-          citations: cite,
-          turns,
-        };
-        prefillClinicalFieldsFromItem(merged, {
-          setDiag,
-          setKeyText,
-          setKeyImagingEdit,
-          setReflectiveEdit,
-        });
-        return merged;
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [active?.sessionId]);
-
-  const openEdit = useCallback((item: ExpertReviewItem) => {
-    setActive(item);
-    prefillClinicalFieldsFromItem(item, {
-      setDiag,
-      setKeyText,
-      setKeyImagingEdit,
-      setReflectiveEdit,
-    });
-    setExpanded(item.id);
-    prefillLibraryFieldsFromItem(
-      item,
-      {
+  const applySavedDraftForItem = useCallback(
+    async (item: ExpertReviewItem, merged?: ExpertReviewItem) => {
+      const source = merged ?? item;
+      const draft = await resolveExpertReviewSavedDraft(source);
+      if (!draft) return;
+      const roi = applyExpertReviewSavedDraft(source.sessionId, draft, {
+        setDiag,
+        setKeyText,
+        setKeyImagingEdit,
+        setReflectiveEdit,
         setLibraryTitle,
         setLibraryCategoryId,
         setLibraryDifficulty,
         setLibraryTagIds,
         setLibraryAnatomySite,
-        setLibraryModality,
         setLibraryClinicalDescription,
-      },
-      expertTags,
-    );
-  }, [expertTags]);
+        setReplyDraft: (sid, note) =>
+          setReplyDrafts((prev) => (prev[sid] === note ? prev : { ...prev, [sid]: note })),
+      });
+      if (roi?.length === 4) {
+        setDraftRoiBySession((prev) => ({ ...prev, [source.sessionId]: roi }));
+      }
+    },
+    [],
+  );
+
+  /** Bổ sung citations/turns đầy đủ khi BE chỉ trả tóm tắt trên queue list. */
+  useEffect(() => {
+    if (!active?.sessionId) return;
+    let cancelled = false;
+    const sessionId = active.sessionId;
+    void (async () => {
+      const detail = await fetchExpertReviewDetail(sessionId);
+      if (cancelled) return;
+      let merged = active;
+      if (detail) {
+        const dc = detail.citations ?? [];
+        const ic = active.citations ?? [];
+        const cite =
+          dc.length > ic.length ? dc : dc.length > 0 && ic.length === 0 ? dc : ic;
+        const dt = detail.turns ?? [];
+        const it = active.turns ?? [];
+        const turns =
+          dt.length > it.length ? dt : dt.length > 0 && it.length === 0 ? dt : it;
+        merged = {
+          ...active,
+          ...detail,
+          report: detail.report ?? active.report,
+          citations: cite,
+          turns,
+          savedDraft: detail.savedDraft ?? active.savedDraft,
+        };
+        setItems((prev) =>
+          prev.map((i) => (i.sessionId !== sessionId ? i : { ...i, ...merged })),
+        );
+        setActive(merged);
+      }
+      prefillClinicalFieldsFromItem(merged, {
+        setDiag,
+        setKeyText,
+        setKeyImagingEdit,
+        setReflectiveEdit,
+      });
+      prefillLibraryFieldsFromItem(
+        merged,
+        {
+          setLibraryTitle,
+          setLibraryCategoryId,
+          setLibraryDifficulty,
+          setLibraryTagIds,
+          setLibraryAnatomySite,
+          setLibraryModality,
+          setLibraryClinicalDescription,
+        },
+        expertTags,
+      );
+      await applySavedDraftForItem(merged, merged);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the opened session changes
+  }, [active?.sessionId]);
+
+  const openEdit = useCallback(
+    (item: ExpertReviewItem) => {
+      setActive(item);
+      setDraftRoiBySession((prev) => {
+        const next = { ...prev };
+        delete next[item.sessionId];
+        return next;
+      });
+      setExpanded(item.id);
+    },
+    [],
+  );
 
   useEffect(() => {
     const focus = searchParams.get('focus')?.trim();
@@ -483,21 +665,40 @@ export function ExpertReviewsPage() {
     }
   }, [items, searchParams, openEdit]);
 
-  const saveDraftForItem = async (item: ExpertReviewItem, roi?: number[] | null) => {
+  const saveDraftForItem = async (
+    item: ExpertReviewItem,
+    roi?: number[] | null,
+    options?: { silent?: boolean },
+  ) => {
     if (hasExpertReviewSelectedPairMismatch(item)) {
       toast.error('Selected pair mismatch. Refresh the queue and open this case again.');
       return;
     }
     setSaving(true);
     try {
-      const note = replyDrafts[item.sessionId]?.trim();
-      await putExpertReviewDraft(item.sessionId, {
-        ...(note ? { reviewNote: note } : {}),
-        ...(Array.isArray(roi) && roi.length >= 4 ? { correctedRoiBoundingBox: roi.slice(0, 4) } : {}),
-      });
-      toast.success('Draft saved.');
+      await putExpertReviewDraft(
+        item.sessionId,
+        buildExpertReviewDraftPayload(item, {
+          diag,
+          keyText,
+          keyImagingEdit,
+          reflectiveEdit,
+          libraryTitle,
+          libraryCategoryId,
+          libraryDifficulty,
+          libraryTagIds,
+          libraryAnatomySite,
+          libraryClinicalDescription,
+          categories: expertCategories,
+          roi,
+          explicitNote: replyDrafts[item.sessionId],
+        }),
+      );
+      if (!options?.silent) toast.success('Draft saved.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to save draft');
+      if (!options?.silent) {
+        toast.error(e instanceof Error ? e.message : 'Failed to save draft');
+      }
     } finally {
       setSaving(false);
     }
@@ -533,8 +734,10 @@ export function ExpertReviewsPage() {
       libraryDifficulty,
       libraryTagIds: effectiveLibraryTagIds,
       libraryClinicalDescription,
+      libraryAnatomySite,
       categories: expertCategories,
       tags: expertTags,
+      correctedRoi: roi,
     });
     const validationError = validatePromotePayload(promotePayload);
     if (validationError) {
@@ -544,8 +747,24 @@ export function ExpertReviewsPage() {
     setSaving(true);
     let approved = false;
     try {
-      const note = replyDrafts[item.sessionId]?.trim();
-      await saveReviewDraftIfNeeded(item.sessionId, note, roi);
+      await saveReviewDraftIfNeeded(
+        item.sessionId,
+        buildExpertReviewDraftPayload(item, {
+          diag,
+          keyText,
+          keyImagingEdit,
+          reflectiveEdit,
+          libraryTitle,
+          libraryCategoryId,
+          libraryDifficulty,
+          libraryTagIds,
+          libraryAnatomySite,
+          libraryClinicalDescription,
+          categories: expertCategories,
+          roi,
+          explicitNote: replyDrafts[item.sessionId],
+        }),
+      );
       await approveExpertReview(item.sessionId);
       approved = true;
       await promoteExpertReview(item.sessionId, promotePayload);
@@ -554,6 +773,11 @@ export function ExpertReviewsPage() {
         ...prev,
         [item.sessionId]: (prev[item.sessionId] ?? 0) + 1,
       }));
+      setDraftRoiBySession((prev) => {
+        const next = { ...prev };
+        delete next[item.sessionId];
+        return next;
+      });
       setReplyDrafts((prev) => {
         const next = { ...prev };
         delete next[item.sessionId];
@@ -628,6 +852,11 @@ export function ExpertReviewsPage() {
         ...prev,
         [item.sessionId]: (prev[item.sessionId] ?? 0) + 1,
       }));
+      setDraftRoiBySession((prev) => {
+        const next = { ...prev };
+        delete next[item.sessionId];
+        return next;
+      });
       const jid = item.id;
       setItems((prev) => prev.filter((i) => i.id !== jid));
       setExpanded((e) => (e === jid ? null : e));
@@ -676,8 +905,9 @@ export function ExpertReviewsPage() {
       onKeyImagingChange={setKeyImagingEdit}
       onReflectiveChange={setReflectiveEdit}
       roiClearEpoch={roiClearEpochBySession[item.sessionId] ?? 0}
+      initialCorrectedRoiBoundingBox={draftRoiBySession[item.sessionId]}
       onOpenEdit={() => openEdit(item)}
-      onSaveDraft={(roi) => void saveDraftForItem(item, roi)}
+      onSaveDraft={(roi, opts) => void saveDraftForItem(item, roi, opts)}
       onApproveAndPromote={(roi) => void approveAndPromoteForItem(item, roi)}
       onRejectRequest={() => openRejectModal(item)}
       saving={saving}

@@ -945,6 +945,22 @@ export interface NormalizedImageBoundingBox {
   height: number;
 }
 
+export interface ExpertReviewSavedDraft {
+  answerText?: string;
+  structuredDiagnosis?: string;
+  differentialDiagnoses?: string[];
+  keyImagingFindings?: string | null;
+  reflectiveQuestions?: string | null;
+  reviewNote?: string;
+  correctedRoiBoundingBox?: number[];
+  libraryTitle?: string;
+  libraryCategoryId?: string;
+  libraryDifficulty?: string;
+  libraryTagIds?: string[];
+  libraryClinicalDescription?: string;
+  libraryAnatomySite?: string;
+}
+
 export interface ExpertReviewItem {
   sessionId: string;
   answerId?: string | null;
@@ -986,6 +1002,8 @@ export interface ExpertReviewItem {
    * `dashboard-summary`: row từ fallback `/expert/dashboard/pending-reviews` (không đủ ảnh/citations như queue chính).
    */
   queueSource?: 'queue' | 'dashboard-summary';
+  /** Server-persisted draft from PUT /draft or embedded in GET detail. */
+  savedDraft?: ExpertReviewSavedDraft;
 }
 
 export interface Citation {

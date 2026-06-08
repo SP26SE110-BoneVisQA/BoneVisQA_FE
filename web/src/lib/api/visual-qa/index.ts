@@ -29,6 +29,8 @@ export { formatVisualQaUploadError } from '@/lib/api/visual-qa/upload-errors';
 export {
   fetchVisualQaThread,
   fetchVisualQaCaseHistory,
+  fetchVisualQaCaseHistoryNormalized,
+  fetchVisualQaCombinedHistory,
   fetchVisualQaPersonalHistory,
 } from '@/lib/api/visual-qa/history';
 
@@ -45,5 +47,6 @@ export type {
   VisualQaHistoryListParams,
   VisualQaSessionHistoryItem,
   VisualQaPersonalHistoryResult,
+  VisualQaStudyMode,
   VisualQaLocale,
 } from '@/lib/api/visual-qa/types';

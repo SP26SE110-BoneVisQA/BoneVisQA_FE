@@ -7,6 +7,8 @@ import type { ExpertSupportUiState } from '@/lib/student/visual-qa-expert-suppor
 import type { VisualQaCapabilities } from '@/lib/api/visual-qa/types';
 import type { VisualQaTurn } from '@/lib/api/types';
 import type { WorkspaceAnswerVariant } from '@/features/visual-qa/components/WorkspaceStructuredAnswer';
+import { isCatalogCaseStudyMode } from '@/lib/student/visual-qa-study-mode';
+import type { VisualQaFlow } from '@/features/visual-qa/store/visual-qa-store';
 
 type WorkspaceChatPanelProps = {
   turns: VisualQaTurn[];
@@ -20,6 +22,7 @@ type WorkspaceChatPanelProps = {
   onSend: (text: string) => void | Promise<void>;
   onClear: () => void;
   answerVariant?: WorkspaceAnswerVariant;
+  flow?: VisualQaFlow;
 };
 
 export function WorkspaceChatPanel({
@@ -34,21 +37,24 @@ export function WorkspaceChatPanel({
   onSend,
   onClear,
   answerVariant = 'full',
+  flow = null,
 }: WorkspaceChatPanelProps) {
   const [draft, setDraft] = useState('');
 
   const composerLocked = composerDisabled;
 
+  const isCatalogFlow = isCatalogCaseStudyMode(capabilities, flow) || answerVariant === 'catalog';
+
   const sessionCapabilities = useMemo(
     () => ({
       canAskNext: capabilities?.canAskNext ?? true,
-      canRequestReview: capabilities?.canRequestReview ?? false,
+      canRequestReview: isCatalogFlow ? false : (capabilities?.canRequestReview ?? false),
       isReadOnly: capabilities?.isReadOnly ?? false,
       turnsUsed: capabilities?.turnsUsed,
       turnLimit: capabilities?.turnLimit ?? undefined,
       reason: capabilities?.reason ?? capabilities?.blockingReason ?? undefined,
     }),
-    [capabilities],
+    [capabilities, isCatalogFlow],
   );
 
   const handleSubmit = useCallback(async () => {
@@ -81,7 +87,9 @@ export function WorkspaceChatPanel({
         canRequestReview={sessionCapabilities.canRequestReview}
         requestingExpertSupportForAssistantId={requestingExpertSupportForAssistantId}
         expertSupportByAssistantId={expertSupportByAssistantId}
-        onRequestExpertSupport={(turn) => void onRequestExpertSupport?.(turn)}
+        onRequestExpertSupport={
+          isCatalogFlow ? undefined : (turn) => void onRequestExpertSupport?.(turn)
+        }
         onSendMessage={handleRetryFromConversation}
         onClear={onClear}
         answerVariant={answerVariant}
@@ -95,9 +103,9 @@ export function WorkspaceChatPanel({
           disabled={composerLocked}
           isLoading={isAsking}
           placeholder={
-            answerVariant === 'catalog'
-              ? 'Ask a short question about this teaching case…'
-              : 'Ask a question about the X-ray image…'
+            isCatalogFlow
+              ? 'Ask a question about this teaching case…'
+              : 'Ask a question about this study image or marked region…'
           }
         />
       </div>

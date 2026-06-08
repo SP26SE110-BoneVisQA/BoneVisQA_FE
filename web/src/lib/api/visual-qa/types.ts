@@ -7,6 +7,8 @@ import type {
 } from '@/lib/api/types';
 import type { VisualQaDicomMetadata } from '@/lib/api/visual-qa/dicom-metadata';
 
+export type VisualQaStudyMode = 'catalog_case_study' | 'personal_dicom';
+
 /** BE `VisualQaCapabilitiesDto` — mirrored on session/thread/ask-json responses. */
 export interface VisualQaCapabilities {
   canAskNext?: boolean;
@@ -15,6 +17,7 @@ export interface VisualQaCapabilities {
   turnsUsed?: number;
   turnLimit?: number | null;
   reviewRoute?: 'lecturer' | 'none' | string;
+  studyMode?: VisualQaStudyMode | string | null;
   blockingReason?: string | null;
   reason?: string | null;
 }
@@ -74,6 +77,7 @@ export interface VisualQaSessionHistoryItem {
   reviewState?: string | null;
   lastResponderRole?: string | null;
   rejectionReason?: string | null;
+  studyMode?: VisualQaStudyMode | string | null;
 }
 
 export interface VisualQaPersonalHistoryResult {

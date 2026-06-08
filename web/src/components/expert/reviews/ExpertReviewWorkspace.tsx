@@ -17,8 +17,21 @@ import type {
 } from '@/lib/api/types';
 import type { ExpertCategory, ExpertTag } from '@/lib/api/expert-cases';
 import { resolveApiAssetUrl } from '@/lib/api/client';
-import { putExpertReviewDraft } from '@/lib/api/expert-reviews';
 import { isValidNormalizedBoundingBox } from '@/lib/utils/annotations';
+
+function roiArrayToNormalizedBox(raw: number[] | undefined | null): NormalizedImageBoundingBox | null {
+  if (!Array.isArray(raw) || raw.length < 4) return null;
+  const nums = raw.slice(0, 4).map((n) => Number(n));
+  if (!nums.every((n) => Number.isFinite(n))) return null;
+  const scalePct = (n: number) => (n > 1 && n <= 100 ? n / 100 : n);
+  const candidate: NormalizedImageBoundingBox = {
+    x: scalePct(nums[0]),
+    y: scalePct(nums[1]),
+    width: scalePct(nums[2]),
+    height: scalePct(nums[3]),
+  };
+  return isValidNormalizedBoundingBox(candidate) ? candidate : null;
+}
 import { withPageAnchor } from '@/components/student/VisualQaRichAnswer';
 import { splitLearningBullets } from '@/lib/utils/learning-text';
 import { getWorkflowStatusMeta, normalizeWorkflowStatus, type WorkflowStatusTone } from '@/lib/visual-qa-workflow';
@@ -442,8 +455,12 @@ export type ExpertReviewWorkspaceProps = {
   onKeyImagingChange: (v: string) => void;
   onReflectiveChange: (v: string) => void;
   roiClearEpoch?: number;
+  initialCorrectedRoiBoundingBox?: number[];
   onOpenEdit: () => void;
-  onSaveDraft: (correctedRoiBoundingBox?: number[] | null) => void;
+  onSaveDraft: (
+    correctedRoiBoundingBox?: number[] | null,
+    options?: { silent?: boolean },
+  ) => void;
   onApproveAndPromote: (correctedRoiBoundingBox?: number[] | null) => void;
   onRejectRequest: () => void;
   saving: boolean;
@@ -483,6 +500,7 @@ export function ExpertReviewWorkspace({
   onKeyImagingChange,
   onReflectiveChange,
   roiClearEpoch,
+  initialCorrectedRoiBoundingBox,
   onOpenEdit,
   onSaveDraft,
   onApproveAndPromote,
@@ -507,7 +525,13 @@ export function ExpertReviewWorkspace({
   onLibraryTagIdsChange,
   onLibraryClinicalDescriptionChange,
 }: ExpertReviewWorkspaceProps) {
-  const [correctedRoi, setCorrectedRoi] = useState<NormalizedImageBoundingBox | null>(null);
+  const [correctedRoi, setCorrectedRoi] = useState<NormalizedImageBoundingBox | null>(() =>
+    roiArrayToNormalizedBox(initialCorrectedRoiBoundingBox),
+  );
+
+  useEffect(() => {
+    setCorrectedRoi(roiArrayToNormalizedBox(initialCorrectedRoiBoundingBox));
+  }, [item.sessionId, initialCorrectedRoiBoundingBox, roiClearEpoch]);
 
   const toggleLibraryTag = (tagId: string) => {
     const next = libraryTagIds.includes(tagId)
@@ -533,12 +557,10 @@ export function ExpertReviewWorkspace({
         correctedRoi !== null && isValidNormalizedBoundingBox(correctedRoi)
           ? [correctedRoi.x, correctedRoi.y, correctedRoi.width, correctedRoi.height]
           : undefined;
-      void putExpertReviewDraft(sid, {
-        ...(roiPayload ? { correctedRoiBoundingBox: roiPayload } : {}),
-      }).catch(() => {});
+      onSaveDraft(roiPayload ?? null, { silent: true });
     }, 1600);
     return () => window.clearTimeout(timer);
-  }, [correctedRoi, item.sessionId, pairMismatch, saving]);
+  }, [correctedRoi, item.sessionId, onSaveDraft, pairMismatch, saving]);
 
   const statusMeta = getWorkflowStatusMeta(item.status);
   const catalogCase = item.caseId != null && String(item.caseId).trim() !== '';
@@ -631,7 +653,7 @@ export function ExpertReviewWorkspace({
                   alt="Study radiograph"
                   readOnly={pairMismatch}
                   compact
-                  initialAnnotation={rectRoi}
+                  initialAnnotation={correctedRoi ?? rectRoi}
                   onAnnotationComplete={setCorrectedRoi}
                   extraOverlay={
                     useLegacyExpertOverlays ? <ExpertImagingOverlays item={item} /> : null

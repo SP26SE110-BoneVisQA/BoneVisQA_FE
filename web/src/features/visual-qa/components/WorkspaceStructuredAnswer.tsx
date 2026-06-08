@@ -74,14 +74,25 @@ type StructuredSectionCardProps = {
   items: string[];
 };
 
+const STRUCTURED_EMPTY_DEFAULTS = {
+  differential: 'No differential diagnoses were returned — compare your own list against the main diagnosis.',
+  keyImaging:
+    'No specific imaging signs were returned — review cortical integrity, joint alignment, and soft-tissue contours.',
+  reflective:
+    'What finding would most change your working diagnosis if it were present or absent on this study?',
+  references: 'No references were returned for this turn — consult your course materials or standard radiology texts.',
+} as const;
+
 function StructuredSectionCard({
   step,
   title,
   toneClass,
   icon: Icon,
   items,
-}: StructuredSectionCardProps) {
-  if (items.length === 0) return null;
+  emptyFallback,
+}: StructuredSectionCardProps & { emptyFallback?: string }) {
+  const displayItems = items.length > 0 ? items : emptyFallback ? [emptyFallback] : [];
+  if (displayItems.length === 0) return null;
   return (
     <section className={cn('rounded-xl border px-4 py-3 shadow-sm', toneClass)}>
       <div className="flex items-center gap-2">
@@ -93,8 +104,13 @@ function StructuredSectionCard({
           {title}
         </p>
       </div>
-      <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm font-medium leading-relaxed text-slate-900">
-        {items.map((item, index) => (
+      <ul
+        className={cn(
+          'mt-3 space-y-1.5 text-sm leading-relaxed text-slate-900',
+          items.length > 0 ? 'list-disc pl-5 font-medium' : 'list-none pl-0 text-slate-600 italic',
+        )}
+      >
+        {displayItems.map((item, index) => (
           <li key={`${title}-${index}`}>{item}</li>
         ))}
       </ul>
@@ -231,6 +247,7 @@ export function WorkspaceStructuredAnswer({
           toneClass="border-amber-300/80 bg-amber-50/80 text-amber-950"
           icon={TriangleAlert}
           items={uniqueLines(differentialDiagnoses)}
+          emptyFallback={STRUCTURED_EMPTY_DEFAULTS.differential}
         />
         <StructuredSectionCard
           step="03"
@@ -238,6 +255,7 @@ export function WorkspaceStructuredAnswer({
           toneClass="border-sky-300/80 bg-sky-50/80 text-sky-950"
           icon={SearchCheck}
           items={keyImagingSigns}
+          emptyFallback={STRUCTURED_EMPTY_DEFAULTS.keyImaging}
         />
         <StructuredSectionCard
           step="04"
@@ -245,20 +263,25 @@ export function WorkspaceStructuredAnswer({
           toneClass="border-violet-300/80 bg-violet-50/80 text-violet-950"
           icon={BookOpen}
           items={uniqueLines(reflectiveQuestions)}
+          emptyFallback={STRUCTURED_EMPTY_DEFAULTS.reflective}
         />
       </div>
 
-      {citations.length > 0 ? (
-        <div className="rounded-[1.1rem] border border-emerald-200/70 bg-emerald-50/70 px-3 py-3 shadow-sm">
-          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-emerald-950">
-            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-emerald-300/70 bg-white/80 px-2 text-[10px]">
-              05
-            </span>
-            References & citations
-          </p>
+      <div className="rounded-[1.1rem] border border-emerald-200/70 bg-emerald-50/70 px-3 py-3 shadow-sm">
+        <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-emerald-950">
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-emerald-300/70 bg-white/80 px-2 text-[10px]">
+            05
+          </span>
+          References & citations
+        </p>
+        {citations.length > 0 ? (
           <WorkspaceRagSources citations={citations} className="mt-0 border-t-0 pt-0" defaultExpanded />
-        </div>
-      ) : null}
+        ) : (
+          <p className="text-sm italic leading-relaxed text-emerald-900/80">
+            {STRUCTURED_EMPTY_DEFAULTS.references}
+          </p>
+        )}
+      </div>
 
       {educatorFeedbackEntries.length > 0 ? (
         <EducatorFeedbackSection entries={educatorFeedbackEntries} />

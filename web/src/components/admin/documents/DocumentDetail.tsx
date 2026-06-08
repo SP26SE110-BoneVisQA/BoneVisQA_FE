@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchDocumentStatus,
   getDocuments,
@@ -100,6 +100,20 @@ function mergeIngestionFields(
   };
 }
 
+function bumpDocumentVersion(
+  prev: AdminDocumentDetail | null,
+  fetched: AdminDocumentDetail,
+): AdminDocumentDetail {
+  if (!prev) return { ...fetched, isOutdated: false };
+  const prevVer = Number(prev.version);
+  const fetchedVer = Number(fetched.version);
+  const nextVersion =
+    Number.isFinite(prevVer) && (!Number.isFinite(fetchedVer) || fetchedVer <= prevVer)
+      ? String(prevVer + 1)
+      : fetched.version;
+  return { ...fetched, version: nextVersion, isOutdated: false };
+}
+
 export default function DocumentDetail({ id }: { id: string }) {
   const [doc, setDoc] = useState<AdminDocumentDetail | null>(null);
   const [liveStatus, setLiveStatus] = useState<IngestionSnapshot | null>(null);
@@ -110,6 +124,7 @@ export default function DocumentDetail({ id }: { id: string }) {
   const [replaceModalAction, setReplaceModalAction] = useState<'replace' | 'reindex'>('replace');
   const [retryBusy, setRetryBusy] = useState(false);
   const [reindexConfirmOpen, setReindexConfirmOpen] = useState(false);
+  const prevIndexingStatusRef = useRef<NormalizedIndexingStatus>('unknown');
 
   const applyIngestionSnapshot = useCallback(
     (next: Omit<IngestionSnapshot, 'source'> & { source: IngestionSnapshot['source'] }) => {
@@ -275,6 +290,15 @@ export default function DocumentDetail({ id }: { id: string }) {
   }, [applyIngestionSnapshot, doc, id, normalizedStatus]);
 
   useEffect(() => {
+    const prev = prevIndexingStatusRef.current;
+    prevIndexingStatusRef.current = normalizedStatus;
+    if (prev === normalizedStatus || normalizedStatus !== 'completed') return;
+    void getAdminDocumentById(id).then((data) => {
+      setDoc((prevDoc) => bumpDocumentVersion(prevDoc, data));
+    });
+  }, [id, normalizedStatus]);
+
+  useEffect(() => {
     const onRealtimeProgress = (event: Event) => {
       const custom = event as CustomEvent<DocumentIngestionStatusDto>;
       const payload = custom.detail;
@@ -392,7 +416,7 @@ export default function DocumentDetail({ id }: { id: string }) {
             getAdminDocumentById(id),
             fetchDocumentStatus(id),
           ]);
-          setDoc(data);
+          setDoc((prevDoc) => bumpDocumentVersion(prevDoc, data));
           applyIngestionSnapshot({
             source: 'rest',
             status: status.status || data.indexingStatus,
@@ -748,6 +772,11 @@ export default function DocumentDetail({ id }: { id: string }) {
                   indexingStatus: nextStatus,
                   currentPageIndexing: 0,
                   totalPages: prev.totalPages,
+                  version:
+                    replaceModalAction === 'reindex' && prev.version != null
+                      ? String(Number(prev.version) + 1)
+                      : prev.version,
+                  isOutdated: false,
                 }
               : prev,
           );
@@ -762,7 +791,7 @@ export default function DocumentDetail({ id }: { id: string }) {
           });
           void (async () => {
             const [data, status] = await Promise.all([getAdminDocumentById(id), fetchDocumentStatus(id)]);
-            setDoc(data);
+            setDoc((prevDoc) => bumpDocumentVersion(prevDoc, data));
           applyIngestionSnapshot({
             source: 'rest',
             status: status.status || data.indexingStatus,

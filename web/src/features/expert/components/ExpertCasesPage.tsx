@@ -11,6 +11,7 @@ import CreateExpertCaseModal from '@/components/expert/cases/CreateExpertCaseMod
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useExpertCaseLibrary, type ExpertCaseLibraryResponse } from '@/features/expert/queries/use-expert-cases';
+import { useExpertProfile } from '@/features/expert/queries/use-expert-profile';
 import type { ExpertCaseOrigin } from '@/lib/api/expert-cases';
 import { queryKeys } from '@/lib/query-keys';
 import { getQueryErrorMessage } from '@/lib/query-utils';
@@ -25,6 +26,9 @@ export function ExpertCasesPage() {
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
   const casesQuery = useExpertCaseLibrary({ pageIndex: 1, pageSize: EXPERT_CASES_PAGE_SIZE });
+  const profileQuery = useExpertProfile();
+  const profileName = profileQuery.data?.fullName?.trim() || '';
+  const profileId = profileQuery.data?.id?.trim() || '';
   const [activeTab, setActiveTab] = useState<OriginTab>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [assetsCaseId, setAssetsCaseId] = useState<string | null>(null);
@@ -158,8 +162,8 @@ export function ExpertCasesPage() {
                   key={item.id}
                   id={item.id}
                   title={item.title}
-                  boneLocation={item.boneLocation}
-                  lesionType={item.categoryName}
+                  boneLocation={item.anatomySite || item.boneLocation}
+                  lesionType={item.pathologyGroup || item.categoryName}
                   difficulty={
                     item.difficulty === 'Hard'
                       ? 'advanced'
@@ -168,7 +172,11 @@ export function ExpertCasesPage() {
                         : 'basic'
                   }
                   caseOrigin={item.caseOrigin}
-                  addedBy={item.addedBy || item.expertName || ''}
+                  addedBy={
+                    item.addedBy ||
+                    item.expertName ||
+                    (profileId && item.createdByExpertId === profileId ? profileName : '')
+                  }
                   addedDate={item.addedDate}
                   thumbnailUrl={item.thumbnailUrl}
                 />

@@ -75,6 +75,33 @@ export function resolveExpertCategoryIdForSubmit(
   return sanitizeNullableGuid(trimmed);
 }
 
+/** Resolves pathology group label for BE `pathologyGroup` field from form `categoryId`. */
+export function resolveExpertPathologyGroupForSubmit(
+  rawCategoryId: string | null | undefined,
+  categories: ExpertCategory[],
+): string | null {
+  const trimmed = rawCategoryId?.trim() ?? '';
+  if (!trimmed) return null;
+
+  for (const category of categories) {
+    const id = category.id?.trim();
+    const name = category.name?.trim();
+    if (!name) continue;
+    if (id && id === trimmed) return name;
+    if (pathologyGroupToCategoryId(name) === trimmed.toLowerCase()) return name;
+  }
+
+  if (!isValidGuid(trimmed)) {
+    const ontologyMatch = EXPERT_PATHOLOGY_GROUPS.find(
+      (group) => pathologyGroupToCategoryId(group) === trimmed.toLowerCase(),
+    );
+    if (ontologyMatch) return ontologyMatch;
+    return trimmed;
+  }
+
+  return null;
+}
+
 /** Standardized anatomy sites for expert case ontology (English system UI). */
 export const EXPERT_ANATOMY_SITES = [
   'Skull & Face',

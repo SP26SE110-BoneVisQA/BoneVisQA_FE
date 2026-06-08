@@ -31,6 +31,7 @@ import {
   EXPERT_DIFFICULTY_OPTIONS,
   EXPERT_IMAGE_MODALITIES,
   resolveExpertCategoryIdForSubmit,
+  resolveExpertPathologyGroupForSubmit,
 } from '@/features/expert/lib/expert-ontology';
 import { sanitizeGuidList } from '@/lib/api/sanitize-guids';
 import {
@@ -154,6 +155,7 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
       (values.description.includes(values.anatomySite) ? '' : `\n\n${anatomyNote}`);
 
     const categoryId = resolveExpertCategoryIdForSubmit(values.categoryId, categories);
+    const pathologyGroup = resolveExpertPathologyGroupForSubmit(values.categoryId, categories);
     const tagIds = sanitizeGuidList(values.tagIds);
 
     const payload: CreateExpertCaseJsonInput = {
@@ -161,6 +163,9 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
       description,
       difficulty: values.difficulty,
       categoryId,
+      anatomySite: values.anatomySite,
+      pathologyGroup,
+      modality: values.modality,
       suggestedDiagnosis: values.suggestedDiagnosis.trim() || null,
       reflectiveQuestions: values.reflectiveQuestions.trim() || null,
       keyFindings: values.keyFindings.trim() || null,
@@ -186,6 +191,9 @@ export function CreateExpertCaseForm({ onCreated, onCancel }: Props) {
           reflectiveQuestions: payload.reflectiveQuestions ?? '',
           keyFindings: payload.keyFindings ?? '',
           tagIds: tagIds.length > 0 ? tagIds : null,
+          anatomySite: values.anatomySite,
+          pathologyGroup,
+          modality: values.modality,
         },
       });
       return { payload, caseId: existingCaseId };

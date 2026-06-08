@@ -30,6 +30,11 @@ import { WorkspaceSessionLoadingOverlay } from '@/features/visual-qa/components/
 import { useDashboardHeader } from '@/components/layouts/dashboard-header-context';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import {
+  buildWorkspaceHrefForHistoryItem,
+  isCatalogCaseStudyMode,
+} from '@/lib/student/visual-qa-study-mode';
+import type { VisualQaHistorySelectOptions } from '@/components/student/VisualQaSessionHistorySidebar';
 
 function resolveCatalogImageUrl(detail: StudentCaseCatalogDetail): string | null {
   const candidates = [
@@ -103,11 +108,16 @@ export function WorkspacePageClient() {
     setHistoryRefreshNonce((n) => n + 1);
   }, []);
 
+  const isCatalogFlow =
+    isCatalogCaseStudyMode(capabilities, flow) ||
+    flow === 'catalog' ||
+    queryFlow === 'catalog';
+
   const {
     expertSupportByAssistantId,
     requestingExpertSupportForAssistantId,
     requestExpertSupport,
-  } = useVisualQAExpertSupport(effectiveSessionId || sessionId, turns, {
+  } = useVisualQAExpertSupport(isCatalogFlow ? null : effectiveSessionId || sessionId, turns, {
     onReviewRequested: handleReviewRequested,
   });
 
@@ -261,7 +271,6 @@ export function WorkspacePageClient() {
   }, [caseDetail, previewImageUrl]);
 
   const title = headerTitle;
-  const isCatalogFlow = flow === 'catalog' || queryFlow === 'catalog';
   const answerVariant = isCatalogFlow ? 'catalog' : 'full';
 
   const handleUploadSuccess = useCallback(
@@ -290,9 +299,12 @@ export function WorkspacePageClient() {
   );
 
   const handleSelectHistorySession = useCallback(
-    (targetSessionId: string) => {
+    (targetSessionId: string, options?: VisualQaHistorySelectOptions) => {
       const sid = targetSessionId.trim();
       if (!sid || sid === effectiveSessionId) return;
+      const isCatalog =
+        options?.studyMode === 'catalog_case_study' ||
+        Boolean(options?.caseId?.trim());
       setAwaitingNewSession(false);
       setEmptyLandingHistoryOpen(false);
       setSessionLoadError(null);
@@ -304,18 +316,27 @@ export function WorkspacePageClient() {
       if (resolvedPrefill) {
         useVisualQaStore.getState().setPreviewImageUrl(resolvedPrefill);
       }
-      setFlow('personal');
-      setPersonalMeta((prev) => ({
-        ...prev,
+      if (isCatalog) {
+        setFlow('catalog');
+        setPersonalMeta(null);
+        const caseId = options?.caseId?.trim();
+        if (caseId) setCaseContext(caseId, resolvedPrefill ?? null);
+      } else {
+        setFlow('personal');
+        setPersonalMeta((prev) => ({
+          ...prev,
+          sessionId: sid,
+          uploadedAt: prev?.uploadedAt,
+        }));
+      }
+      const href = buildWorkspaceHrefForHistoryItem({
         sessionId: sid,
-        uploadedAt: prev?.uploadedAt,
-      }));
-      router.replace(
-        `/student/visual-qa/workspace?sessionId=${encodeURIComponent(sid)}&flow=personal`,
-        { scroll: false },
-      );
+        caseId: options?.caseId,
+        studyMode: options?.studyMode,
+      });
+      router.replace(href, { scroll: false });
     },
-    [effectiveSessionId, router, setFlow],
+    [effectiveSessionId, router, setCaseContext, setFlow],
   );
 
   const handleRetrySessionLoad = useCallback(async () => {
@@ -513,10 +534,11 @@ export function WorkspacePageClient() {
                 composerDisabled={composerDisabled}
                 requestingExpertSupportForAssistantId={requestingExpertSupportForAssistantId}
                 expertSupportByAssistantId={expertSupportByAssistantId}
-                onRequestExpertSupport={requestExpertSupport}
+                onRequestExpertSupport={isCatalogFlow ? undefined : requestExpertSupport}
                 onSend={handleSend}
                 onClear={handleNewSession}
                 answerVariant={answerVariant}
+                flow={flow}
               />
             }
           />

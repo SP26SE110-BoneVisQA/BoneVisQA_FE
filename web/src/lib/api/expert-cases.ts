@@ -15,6 +15,7 @@ import {
   normalizeIngestJobStatus,
   pollUntilIngestComplete,
 } from '@/lib/api/ingest-job-poll';
+import { parseAnatomySiteFromDescription } from '@/features/expert/lib/expert-ontology';
 import { inferCaseLibraryOrigin, type CaseLibraryOrigin } from '@/lib/case-origin';
 import { http, getApiErrorMessage } from './client';
 
@@ -49,7 +50,11 @@ export interface ExpertCase {
   addedBy: string;
   expertName: string | null;
   addedDate: string;
+  /** Alias of anatomy site for legacy clients. */
   boneLocation: string;
+  anatomySite: string;
+  /** Ontology pathology group from BE (`pathologyGroup`). */
+  pathologyGroup: string;
   description: string;
   suggestedDiagnosis: string;
   reflectiveQuestions: string;
@@ -101,6 +106,12 @@ interface ExpertCaseApiRow {
   keyFindings?: unknown;
   boneLocation?: unknown;
   BoneLocation?: unknown;
+  anatomySite?: unknown;
+  AnatomySite?: unknown;
+  pathologyGroup?: unknown;
+  PathologyGroup?: unknown;
+  createdByExpertName?: unknown;
+  expertFullName?: unknown;
   status?: unknown;
   Status?: unknown;
   medicalImages?: unknown;
@@ -294,31 +305,56 @@ export function mapCase(row: unknown): ExpertCase | null {
     categoryFromNestedId ??
     record.categoryId;
 
+  const pathologyGroupRaw = pickOptionalString(
+    item.pathologyGroup,
+    item.PathologyGroup,
+    record.pathologyGroup,
+    record.PathologyGroup,
+  );
+
   const categoryNameRaw =
-    item.categoryName ??
-    item.category_name ??
-    categoryFromNested?.name ??
-    categoryFromNested?.title ??
-    (categoryFromNested as Record<string, unknown> | null | undefined)?.categoryName ??
-    (categoryFromNested as Record<string, unknown> | null | undefined)?.category_name ??
-    categoryFromNestedName ??
-    (record as Record<string, unknown>).CategoryName ??
-    (record as Record<string, unknown>).categoryName ??
-    record.categoryName ??
-    'General';
+    pathologyGroupRaw ||
+    pickOptionalString(
+      item.categoryName,
+      item.category_name,
+      categoryFromNested?.name,
+      categoryFromNested?.title,
+      (categoryFromNested as Record<string, unknown> | null | undefined)?.categoryName,
+      (categoryFromNested as Record<string, unknown> | null | undefined)?.category_name,
+      categoryFromNestedName,
+      (record as Record<string, unknown>).CategoryName,
+      (record as Record<string, unknown>).categoryName,
+      record.categoryName,
+    );
 
   const expertNameRaw = pickOptionalString(
     item.expertName,
     record.expertName,
     record.ExpertName,
+    record.createdByExpertName,
+    record.CreatedByExpertName,
+    record.expertFullName,
+    record.ExpertFullName,
     record.addedBy,
     record.AddedBy,
   );
   const addedByDisplay = expertNameRaw || '—';
 
-  const boneRaw = String(
-    item.boneLocation ?? item.BoneLocation ?? record.boneLocation ?? record.BoneLocation ?? '',
-  ).trim();
+  const descriptionRaw = String(item.description ?? record.description ?? record.Description ?? '');
+  const boneRaw = pickOptionalString(
+    item.anatomySite,
+    item.AnatomySite,
+    record.anatomySite,
+    record.AnatomySite,
+    item.boneLocation,
+    item.BoneLocation,
+    record.boneLocation,
+    record.BoneLocation,
+  );
+  const resolvedBone =
+    boneRaw ||
+    (descriptionRaw.trim() ? parseAnatomySiteFromDescription(descriptionRaw) : '') ||
+    '';
 
   const createdRaw = String(
     item.createdAt ?? item.created_at ?? record.CreatedAt ?? record.createdAt ?? record.addedDate ?? '',
@@ -347,7 +383,7 @@ export function mapCase(row: unknown): ExpertCase | null {
     ),
     categoryId: String(categoryIdRaw ?? ''),
     title: resolveCaseDisplayTitle(item, record),
-    categoryName: String(categoryNameRaw),
+    categoryName: String(categoryNameRaw).trim() || 'Uncategorized',
     difficulty: mapDifficulty(item.difficulty ?? record.caseDifficulty ?? record.difficulty ?? record.Difficulty),
     status: mapCaseListStatus(item, record),
     caseOrigin: inferCaseLibraryOrigin(record),
@@ -356,8 +392,10 @@ export function mapCase(row: unknown): ExpertCase | null {
     addedBy: addedByDisplay === '—' ? '' : addedByDisplay,
     expertName: expertNameRaw || null,
     addedDate: createdRaw,
-    boneLocation: boneRaw || '—',
-    description: String(item.description ?? ''),
+    boneLocation: resolvedBone || '—',
+    anatomySite: resolvedBone || '—',
+    pathologyGroup: pathologyGroupRaw || String(categoryNameRaw).trim() || 'Uncategorized',
+    description: descriptionRaw,
     suggestedDiagnosis: String(item.suggestedDiagnosis ?? record.suggested_diagnosis ?? record.SuggestedDiagnosis ?? ''),
     reflectiveQuestions: String(
       item.reflectiveQuestions ?? record.reflective_questions ?? record.ReflectiveQuestions ?? '',
@@ -460,6 +498,9 @@ export interface SaveExpertCaseInput {
   keyFindings: string;
   /** When set, replaces tags on the case (same idea as create). */
   tagIds?: string[] | null;
+  anatomySite?: string | null;
+  pathologyGroup?: string | null;
+  modality?: string | null;
 }
 
 /** Backend `CreateExpertMedicalCaseJsonRequest` — JSON POST /api/expert/cases (expert from JWT). */
@@ -483,11 +524,29 @@ export interface CreateExpertCaseJsonInput {
   description: string;
   difficulty?: string | null;
   categoryId?: string | null;
+  anatomySite?: string | null;
+  pathologyGroup?: string | null;
+  modality?: string | null;
   suggestedDiagnosis?: string | null;
   reflectiveQuestions?: string | null;
   keyFindings?: string | null;
   tagIds?: string[] | null;
   medicalImages?: ExpertCaseMedicalImageJson[] | null;
+}
+
+function appendCaseOntologyFields(
+  body: Record<string, unknown>,
+  input: { anatomySite?: string | null; pathologyGroup?: string | null; modality?: string | null },
+): void {
+  const anatomy = input.anatomySite?.trim();
+  if (anatomy) {
+    body.anatomySite = anatomy;
+    body.boneLocation = anatomy;
+  }
+  const pathologyGroup = input.pathologyGroup?.trim();
+  if (pathologyGroup) body.pathologyGroup = pathologyGroup;
+  const modality = input.modality?.trim();
+  if (modality) body.modality = modality;
 }
 
 function parseCreatedCaseId(data: unknown): string | undefined {
@@ -530,6 +589,7 @@ export async function createExpertCase(input: CreateExpertCaseJsonInput): Promis
     if (input.tagIds != null && input.tagIds.length > 0) {
       body.tagIds = input.tagIds;
     }
+    appendCaseOntologyFields(body, input);
     const { data } = await http.post<unknown>('/api/expert/cases', body, {
       headers: { 'Content-Type': 'application/json' },
     });
@@ -571,6 +631,7 @@ export async function updateExpertCase(id: string, input: SaveExpertCaseInput): 
     if (input.tagIds !== undefined) {
       body.tagIds = input.tagIds;
     }
+    appendCaseOntologyFields(body, input);
     await http.request({
       method: 'PUT',
       url: `/api/expert/cases/${encodeURIComponent(trimmedId)}`,

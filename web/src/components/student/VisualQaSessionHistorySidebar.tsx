@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ImageOff, Loader2, MessageSquare, RefreshCw } from 'lucide-react';
 import {
-  fetchVisualQaPersonalHistory,
+  fetchVisualQaCombinedHistory,
   resolveStudyImageSrc,
   type VisualQaSessionHistoryItem,
+  type VisualQaStudyMode,
 } from '@/lib/api/visual-qa';
+import {
+  inferStudyModeFromHistoryItem,
+  studyModeBadgeClass,
+  studyModeShortLabel,
+} from '@/lib/student/visual-qa-study-mode';
 import { formatRelativeTime } from '@/lib/format-relative-time';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -51,9 +57,14 @@ export function clearSessionPrefillImages() {
   }
 }
 
+export type VisualQaHistorySelectOptions = {
+  studyMode: VisualQaStudyMode;
+  caseId?: string | null;
+};
+
 type Props = {
   selectedSessionId: string | null;
-  onSelectSession: (sessionId: string) => void;
+  onSelectSession: (sessionId: string, options?: VisualQaHistorySelectOptions) => void;
   /** Bump sau khi tạo phiên chat mới để refetch danh sách không cần reload trang. */
   refreshNonce?: number;
   className?: string;
@@ -103,8 +114,8 @@ export function VisualQaSessionHistorySidebar({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchVisualQaPersonalHistory({ limit: 20, offset: 0 });
-      setItems(res.items);
+      const rows = await fetchVisualQaCombinedHistory({ limit: 20, offset: 0 });
+      setItems(rows);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load session history.');
     } finally {
@@ -140,7 +151,7 @@ export function VisualQaSessionHistorySidebar({
     >
       <div className="shrink-0 border-b border-slate-200/70 px-4 py-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Study history</p>
-        <p className="mt-1 text-xs text-slate-500">Personal Visual QA sessions</p>
+        <p className="mt-1 text-xs text-slate-500">DICOM uploads and case-library Q&amp;A sessions</p>
       </div>
       <div className="app-scroll-y min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {loading ? (
@@ -164,7 +175,7 @@ export function VisualQaSessionHistorySidebar({
           </div>
         ) : sorted.length === 0 ? (
           <p className="px-3 py-6 text-center text-xs text-slate-500">
-            No sessions yet. Upload a DICOM study or open a case from the library.
+            No sessions yet. Upload a DICOM study or ask questions about a teaching case.
           </p>
         ) : (
           <ul className="space-y-2">
@@ -173,13 +184,14 @@ export function VisualQaSessionHistorySidebar({
               const title = row.questionSnippet?.trim() || 'Study session';
               const rel = formatRelativeTime(row.updatedAt ?? null);
               const active = selectedSessionId?.trim() === sid;
+              const studyMode = inferStudyModeFromHistoryItem(row);
               return (
                 <li key={sid}>
                   <button
                     type="button"
                     onClick={() => {
                       stashSessionPrefillImage(sid, row.imageUrl);
-                      onSelectSession(sid);
+                      onSelectSession(sid, { studyMode, caseId: row.caseId });
                     }}
                     className={cn(
                       'flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left text-sm transition-all',
@@ -190,6 +202,11 @@ export function VisualQaSessionHistorySidebar({
                   >
                     <SessionThumbnail imageUrl={row.imageUrl} />
                     <span className="min-w-0 flex-1">
+                      <span
+                        className={`mb-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${studyModeBadgeClass(studyMode)}`}
+                      >
+                        {studyModeShortLabel(studyMode)}
+                      </span>
                       <span className="line-clamp-2 font-medium leading-snug">{title}</span>
                       {rel ? (
                         <span className="mt-1 block text-[10px] uppercase tracking-[0.18em] text-slate-400">

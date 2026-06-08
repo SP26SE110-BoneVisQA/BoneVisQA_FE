@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { http, getApiErrorMessage } from '@/lib/api/client';
 import { normalizeVisualQaSessionReport } from '@/lib/api/normalize-visual-qa';
+import { normalizeVisualQaStudyMode } from '@/lib/student/visual-qa-study-mode';
 import type {
   VisualQaThreadResponse,
   VisualQaHistoryListParams,
@@ -85,6 +86,8 @@ function normalizeHistoryItem(raw: unknown): VisualQaSessionHistoryItem | null {
     typeof rejectionReasonRaw === 'string' && rejectionReasonRaw.trim()
       ? rejectionReasonRaw.trim()
       : null;
+  const studyModeRaw = pick(['studyMode', 'StudyMode', 'study_mode', 'sessionFlow', 'flow']);
+  const studyMode = normalizeVisualQaStudyMode(studyModeRaw) ?? undefined;
 
   return {
     sessionId,
@@ -97,6 +100,7 @@ function normalizeHistoryItem(raw: unknown): VisualQaSessionHistoryItem | null {
     reviewState,
     lastResponderRole,
     rejectionReason,
+    studyMode,
   };
 }
 
@@ -125,5 +129,64 @@ export async function fetchVisualQaPersonalHistory(
     },
     skipApiToast: true,
   });
-  return normalizePersonalHistoryList(data);
+  const result = normalizePersonalHistoryList(data);
+  return {
+    ...result,
+    items: result.items.map((row) => ({
+      ...row,
+      studyMode: row.studyMode ?? 'personal_dicom',
+    })),
+  };
+}
+
+function normalizeCaseHistoryList(raw: unknown): VisualQaPersonalHistoryResult {
+  const result = normalizePersonalHistoryList(raw);
+  return {
+    ...result,
+    items: result.items.map((row) => ({
+      ...row,
+      studyMode: row.studyMode ?? 'catalog_case_study',
+    })),
+  };
+}
+
+export async function fetchVisualQaCaseHistoryNormalized(
+  params: VisualQaHistoryListParams = {},
+): Promise<VisualQaPersonalHistoryResult> {
+  const { data } = await http.get<unknown>('/api/student/visual-qa/history/cases', {
+    params: {
+      limit: params.limit ?? 20,
+      offset: params.offset ?? 0,
+    },
+    skipApiToast: true,
+  });
+  return normalizeCaseHistoryList(data);
+}
+
+/** Merges personal DICOM sessions and catalog case-study sessions for workspace sidebar. */
+export async function fetchVisualQaCombinedHistory(
+  params: VisualQaHistoryListParams = {},
+): Promise<VisualQaSessionHistoryItem[]> {
+  const [personal, catalog] = await Promise.all([
+    fetchVisualQaPersonalHistory(params),
+    fetchVisualQaCaseHistoryNormalized(params),
+  ]);
+  const bySession = new Map<string, VisualQaSessionHistoryItem>();
+  for (const row of [...personal.items, ...catalog.items]) {
+    const sid = row.sessionId.trim();
+    if (!sid) continue;
+    const existing = bySession.get(sid);
+    if (!existing) {
+      bySession.set(sid, row);
+      continue;
+    }
+    const existingTime = Date.parse(existing.updatedAt ?? '') || 0;
+    const rowTime = Date.parse(row.updatedAt ?? '') || 0;
+    if (rowTime >= existingTime) bySession.set(sid, { ...existing, ...row });
+  }
+  return Array.from(bySession.values()).sort((a, b) => {
+    const ta = Date.parse(a.updatedAt ?? '') || 0;
+    const tb = Date.parse(b.updatedAt ?? '') || 0;
+    return tb - ta;
+  });
 }
